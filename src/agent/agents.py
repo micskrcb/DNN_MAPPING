@@ -62,19 +62,27 @@ class PPOAgent:
         best_reward = 1e12
 
         epoch = 1
-        while True:
+        while epoch <= 100 and best_reward > 768 :
             self.reset_buffer()
             for _ in range(self.batch_size):
                 # reward sampling
                 with torch.no_grad():
                     action, log_prob = self.policy()
-                reward = self.env.step(action)
+                reward, current_grid = self.env.step(action)
 
                 # store episodes
                 self.save_epiosde(action, log_prob, reward)
+                if(reward<best_reward):
+                    best_grid=current_grid
                 best_reward = min(-reward, -best_reward)
             
             print(f"# of epochs: {epoch}, reward_mean: {-np.mean(self.rewards):.2f} ({best_reward:.2f})")
+
+            if best_grid is not None and(epoch == 500 or best_reward == 768):
+                print("--- Current Best Layout ---")
+                print(best_grid)
+                print("---------------------------")
+
             self.update_policy()
 
             epoch += 1

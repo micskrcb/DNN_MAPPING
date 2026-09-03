@@ -68,7 +68,7 @@ class CoreMapper:
                 placement_map[tempy, tempx] = idx + 1
                 x_vec[idx], y_vec[idx] = tempx, tempy
         
-        return -self.calculate_reward(x_vec, y_vec)                
+        return -self.calculate_reward(x_vec, y_vec), placement_map           
 
     def detect_circle(self, distance, tempx, tempy, placement_map):
         """Detect a vacant node in a round."""

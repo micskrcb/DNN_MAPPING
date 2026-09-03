@@ -38,7 +38,7 @@ def simulated_annealing(
     temp_threshold: float,
 ) -> float:
     """Do simulated annealing algorithm once."""
-    random_order = np.linspace(0, len(x_vec) - 1, len(x_vec), dtype=np.int)
+    random_order = np.linspace(0, len(x_vec) - 1, len(x_vec), dtype=int)
     random.shuffle(random_order)
     x_vec, y_vec = x_vec[random_order], y_vec[random_order]
 

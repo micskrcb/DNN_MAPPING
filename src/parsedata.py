@@ -44,7 +44,7 @@ class DataCollector:
             if not os.path.exists(filepath):
                 NotImplementedError(f"{filepath} does not exist ...")
         lut_info = np.loadtxt(filepath)
-        lut_info = np.array(lut_info, dtype=np.int)
+        lut_info = np.array(lut_info, dtype=int)
 
         # get basic info of lut
         n_logic_cores = lut_info.shape[1]

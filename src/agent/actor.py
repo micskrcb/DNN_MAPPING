@@ -126,5 +126,5 @@ class Actor(nn.Module):
         node_features = [list(nodes[i].get_features()) for i in nodes]
         node_features = np.transpose(node_features)
         for idx, features in enumerate(node_features):
-            node_features[idx] /= features.max()
+            node_features[idx] /= (features.max() + 1e-8)
         return node_features.T
