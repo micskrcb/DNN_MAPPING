@@ -247,18 +247,33 @@ class MultiChipCoreMapper:
         return self._occ_map()
 
     def _occ_map(self) -> np.ndarray:
-        # State: Occupancy Map + Current Task Comm Volumes
+        # PAPER FIX (Sec 3.2, 'Representation of Core Placements'): occupied
+        # cores are encoded by the INDEX of their assigned logic core, not a
+        # bare 0/1 flag -- otherwise the agent can never tell WHERE an
+        # already-placed predecessor task ended up, which is exactly the
+        # information needed to minimize communication cost to it.
         m = np.zeros(self.total_rows * self.total_cols, dtype=np.float32)
-        for c in self._occupied:
-            m[c] = 1.0
-            
-        task_comm = np.zeros(self.num_tasks, dtype=np.float32)
+        for t, c in enumerate(self._placement):
+            if c >= 0:
+                m[c] = (t + 1) / self.num_tasks  # +1 so task 0 != "empty" (0.0)
+
+        # PAPER FIX: expose BOTH directions of communication volume for the
+        # current task -- outgoing (to successors, still useful once they
+        # get placed) AND incoming (from already-placed predecessors, which
+        # is what's actually decision-relevant right now). The original
+        # code only exposed the outgoing row, which for a sequential chain
+        # workload is volume to an unplaced task -- not yet actionable.
         if self._task_ptr < self.num_tasks:
-            task_comm = self.env.task_graph[self._task_ptr].copy()
-            max_vol = task_comm.max()
-            if max_vol > 0:
-                task_comm /= max_vol
-                
+            outgoing = self.env.task_graph[self._task_ptr].copy()
+            incoming = self.env.task_graph[:, self._task_ptr].copy()
+            task_comm = outgoing + incoming
+        else:
+            task_comm = np.zeros(self.num_tasks, dtype=np.float32)
+
+        max_vol = task_comm.max()
+        if max_vol > 0:
+            task_comm = task_comm / max_vol
+
         return np.concatenate([m, task_comm])
 
     def step(self, action):
@@ -363,8 +378,13 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     best_placement = None
     best_grid = None
 
-    noise_scale = 1.0    
-    noise_decay = 0.995  
+    noise_scale = 1.0
+    # Decay so noise_scale reaches ~0.01 by 80% of training, regardless of
+    # n_episodes -- a fixed 0.995 barely decays (~8% remaining) over a
+    # 500-1000 episode run, which was masking whether the policy had
+    # actually converged versus still being exploration-noise-dominated.
+    target_episode = max(1, int(0.8 * n_episodes))
+    noise_decay = 0.01 ** (1.0 / target_episode)
 
     for ep in range(1, n_episodes + 1):
         state = mapper.reset()
