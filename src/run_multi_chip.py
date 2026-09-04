@@ -148,6 +148,7 @@ if HAS_TORCH:
 
     class DDPGAgent:
         def __init__(self, state_dim, action_dim=2, lr_actor=1e-4, lr_critic=1e-3, gamma=0.99, tau=0.005):
+            self.action_dim = action_dim
             self.actor = Actor(state_dim, action_dim)
             self.actor_target = Actor(state_dim, action_dim)
             self.actor_target.load_state_dict(self.actor.state_dict())
@@ -168,7 +169,7 @@ if HAS_TORCH:
                 action = self.actor(state).squeeze(0).numpy()
             self.actor.train()
             # Add exploration noise
-            action += noise_scale * np.random.randn(2)
+            action += noise_scale * np.random.randn(self.action_dim)
             return np.clip(action, -1.0, 1.0)
 
         def train(self, replay_buffer, batch_size=64):
@@ -215,7 +216,7 @@ if HAS_TORCH:
 # ---------------------------------------------------------------------------
 
 class MultiChipCoreMapper:
-    def __init__(self, env: MultiChipEnvironment, baseline_latency: float = None):
+    def __init__(self, env: MultiChipEnvironment, baseline_latency: float = None, batch_z: int = 3):
         """
         Args:
             baseline_latency: B in the paper's reward r_t = sqrt(B) - sqrt(L(P))
@@ -224,12 +225,19 @@ class MultiChipCoreMapper:
                 None, the reward falls back to -sqrt(L(P)) (unnormalized)
                 and a one-time warning is printed, since this is NOT what
                 the paper specifies.
+            batch_z: number of unplaced logic cores assigned per action,
+                per the paper's action representation [x1,y1,...,xz,yz]
+                (Sec 3.2, 'Representation of Assigning Placements'). The
+                paper doesn't fix a specific z; pick one that divides
+                reasonably into num_tasks, or leave the remainder-batch
+                handling (below) to place fewer than z on the final step.
         """
         self.env = env
         topo = env.topo
         self.total_cols = topo.cols_per_chip * topo.num_chips_x
         self.total_rows = topo.rows_per_chip * topo.num_chips_y
         self.num_tasks  = env.num_tasks
+        self.batch_z    = max(1, batch_z)
         self._placement = np.full(self.num_tasks, -1, dtype=np.int32)
         self._occupied  = set()
         self._task_ptr  = 0
@@ -257,18 +265,16 @@ class MultiChipCoreMapper:
             if c >= 0:
                 m[c] = (t + 1) / self.num_tasks  # +1 so task 0 != "empty" (0.0)
 
-        # PAPER FIX: expose BOTH directions of communication volume for the
-        # current task -- outgoing (to successors, still useful once they
-        # get placed) AND incoming (from already-placed predecessors, which
-        # is what's actually decision-relevant right now). The original
-        # code only exposed the outgoing row, which for a sequential chain
-        # workload is volume to an unplaced task -- not yet actionable.
-        if self._task_ptr < self.num_tasks:
-            outgoing = self.env.task_graph[self._task_ptr].copy()
-            incoming = self.env.task_graph[:, self._task_ptr].copy()
-            task_comm = outgoing + incoming
-        else:
-            task_comm = np.zeros(self.num_tasks, dtype=np.float32)
+        # PAPER FIX: expose BOTH directions of communication volume,
+        # aggregated over the WHOLE upcoming batch of up to batch_z tasks
+        # (not just a single "current task"), since one action now assigns
+        # all of them at once.
+        remaining = self.num_tasks - self._task_ptr
+        n_batch = min(self.batch_z, remaining) if remaining > 0 else 0
+        task_comm = np.zeros(self.num_tasks, dtype=np.float32)
+        for k in range(n_batch):
+            idx = self._task_ptr + k
+            task_comm += self.env.task_graph[idx] + self.env.task_graph[:, idx]
 
         max_vol = task_comm.max()
         if max_vol > 0:
@@ -276,18 +282,13 @@ class MultiChipCoreMapper:
 
         return np.concatenate([m, task_comm])
 
-    def step(self, action):
-        ax, ay = action[0], action[1]
-        target_x = ((ax + 1.0) / 2.0) * (self.total_cols - 1)
-        target_y = ((ay + 1.0) / 2.0) * (self.total_rows - 1)
-
-        # PAPER IMPLEMENTATION (Sec 3.2, p.11-12): floor the continuous actor
-        # output to get the intended integer grid position. If that core is
-        # free, place there directly -- no search needed. Only on an actual
-        # "contradiction" (core already occupied) do we search, and then by
-        # MINIMUM MANHATTAN DISTANCE to the ORIGINAL intended position (not
-        # Euclidean, not re-scanned against the current action every step).
-        # Ties broken by first-found in core-index order, per the paper text.
+    def _place_one(self, target_x: float, target_y: float):
+        """Place the task at self._task_ptr onto a core, given a single
+        (target_x, target_y) intended position. PAPER IMPLEMENTATION (Sec
+        3.2, p.11-12): floor the continuous target to get the intended
+        integer grid position; place there directly if free; on an actual
+        collision, search by MINIMUM MANHATTAN DISTANCE to the ORIGINAL
+        intended position, ties broken by first-found (core-index order)."""
         intended_x = int(math.floor(target_x))
         intended_y = int(math.floor(target_y))
         intended_x = min(max(intended_x, 0), self.total_cols - 1)
@@ -313,7 +314,23 @@ class MultiChipCoreMapper:
         self._placement[self._task_ptr] = core_id
         self._occupied.add(core_id)
 
-        self._task_ptr += 1
+    def step(self, action):
+        """Place up to `batch_z` unplaced logic cores per call, from a
+        batched action [x1,y1,x2,y2,...,xz,yz] (paper Sec 3.2). If fewer
+        than batch_z tasks remain (num_tasks not evenly divisible by z),
+        only the first `remaining` (x,y) pairs of the action are used --
+        the actor's output is still fixed-size 2*batch_z, the extras are
+        simply ignored on the final, partial batch."""
+        remaining = self.num_tasks - self._task_ptr
+        n_this_step = min(self.batch_z, remaining)
+
+        for k in range(n_this_step):
+            ax, ay = action[2 * k], action[2 * k + 1]
+            target_x = ((ax + 1.0) / 2.0) * (self.total_cols - 1)
+            target_y = ((ay + 1.0) / 2.0) * (self.total_rows - 1)
+            self._place_one(target_x, target_y)
+            self._task_ptr += 1
+
         done = (self._task_ptr >= self.num_tasks)
 
         # PAPER IMPLEMENTATION: sparse reward, r_t = 0 for every non-terminal
@@ -352,7 +369,7 @@ class MultiChipCoreMapper:
 # ---------------------------------------------------------------------------
 
 def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int = 64,
-             baseline_trials: int = 1000) -> float:
+             baseline_trials: int = 1000, batch_z: int = 3) -> float:
     if not HAS_TORCH:
         print("[DDPG] torch not installed — falling back to random search")
         return run_random(env)
@@ -370,9 +387,16 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     cols  = topo.cols_per_chip * topo.num_chips_x
     state_dim = (rows * cols) + env.num_tasks
 
-    agent = DDPGAgent(state_dim=state_dim, action_dim=2)
+    # PAPER (Sec 3.2, 'Representation of Assigning Placements'): one action
+    # assigns a batch of z unplaced logic cores at once -> action_dim = 2*z.
+    batch_z = max(1, min(batch_z, env.num_tasks))
+    action_dim = 2 * batch_z
+    print(f"[DDPG] Batched action: placing {batch_z} logic core(s) per step "
+          f"(action_dim={action_dim})")
+
+    agent = DDPGAgent(state_dim=state_dim, action_dim=action_dim)
     replay_buffer = ReplayBuffer()
-    mapper = MultiChipCoreMapper(env, baseline_latency=baseline_latency)
+    mapper = MultiChipCoreMapper(env, baseline_latency=baseline_latency, batch_z=batch_z)
 
     best_cost = float('inf')
     best_placement = None
@@ -474,10 +498,28 @@ def main():
     parser.add_argument("--off_lat", type=float, default=5.0, help="Off-chip link latency (hierarchical penalty)")
     parser.add_argument("--iters", type=int, default=5000, help="SA/random iterations")
     parser.add_argument("--epochs", type=int, default=1000, help="DDPG training epochs")
+    parser.add_argument("--batch_z", type=int, default=3,
+                         help="Number of logic cores placed per DDPG action, "
+                              "per the paper's batched action [x1,y1,...,xz,yz] "
+                              "(Sec 3.2). Clamped to num_tasks if larger.")
     
     # NEW ARGUMENT: Flag to use the real CNN workload
     parser.add_argument("--use_cnn", action="store_true", help="Use real CNN workload instead of random")
+    parser.add_argument("--seed", type=int, default=None,
+                         help="Seed for random/numpy/torch RNGs. Not fixed by default -- "
+                              "the paper itself (Sec 4.5, Fig 20) runs 5 different seeds "
+                              "and averages results rather than using one fixed seed, so "
+                              "pass this explicitly per-run when you want either a single "
+                              "reproducible run or a multi-seed comparison.")
     args = parser.parse_args()
+
+    if args.seed is not None:
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        if HAS_TORCH:
+            torch.manual_seed(args.seed)
+        print(f">> Seeded RNGs with --seed {args.seed} (random search baseline B "
+              f"and DDPG exploration noise are now reproducible for this run)\n")
 
     # 1. Determine which workload to use
     real_task_graph = None
@@ -504,7 +546,7 @@ def main():
 
     # 3. Run the algorithms
     if args.algo == "ddpg":
-        cost = run_ddpg(env, n_episodes=args.epochs)
+        cost = run_ddpg(env, n_episodes=args.epochs, batch_z=args.batch_z)
     elif args.algo == "sa":
         cost = run_sa(env, n_iter=args.iters)
     else:
