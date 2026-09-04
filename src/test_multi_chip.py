@@ -89,7 +89,7 @@ def test_collision_resolution():
     ay = (1.0 / 3.0) * 2 - 1.0
 
     # Case 1: intended core free -> placed exactly there
-    mapper = rm.MultiChipCoreMapper(env, baseline_latency=100.0)
+    mapper = rm.MultiChipCoreMapper(env, baseline_latency=100.0, batch_z=1)
     mapper.reset()
     mapper.step(np.array([ax, ay]))
     assert mapper._placement[0] == 5, "should place at the intended core when free"
@@ -101,7 +101,7 @@ def test_collision_resolution():
     assert abs(cx - 1) + abs(cy - 1) == 1, "should resolve to a Manhattan-adjacent core on collision"
 
     # Case 3: tie-break = first found (lowest core index among equal-distance candidates)
-    mapper2 = rm.MultiChipCoreMapper(env, baseline_latency=100.0)
+    mapper2 = rm.MultiChipCoreMapper(env, baseline_latency=100.0, batch_z=1)
     mapper2.reset()
     mapper2._occupied = {5, 1, 4}  # intended + two dist-1 neighbors occupied; 6 and 9 free at dist 1
     mapper2._task_ptr = 0
@@ -109,6 +109,36 @@ def test_collision_resolution():
     assert mapper2._placement[0] == 6, "ties should break to the lowest core index found first"
 
     print("✓ collision resolution tests passed")
+
+
+def test_batched_actions():
+    """Regression test for the paper's batched action [x1,y1,...,xz,yz]
+    (Sec 3.2): one step should place up to batch_z tasks, with a partial
+    final batch handled correctly when num_tasks isn't divisible by z."""
+    import run_multi_chip as rm
+
+    tg = np.zeros((7, 7), dtype=np.float32)
+    for i in range(6):
+        tg[i, i + 1] = (i + 1) * 10
+    env = MultiChipEnvironment(2, 2, 2, 2, task_graph=tg, num_tasks=7)  # 4x4 grid
+
+    mapper = rm.MultiChipCoreMapper(env, baseline_latency=100.0, batch_z=3)
+    mapper.reset()
+    action_dim = 2 * 3
+    step_count = 0
+    done = False
+    while not done:
+        step_count += 1
+        action = np.array([((k % 3) / 3.0) * 2 - 1.0 for k in range(action_dim)])
+        r, done, grid, fc = mapper.step(action)
+        if not done:
+            assert r == 0.0, "non-terminal batched steps must still be sparse (reward 0)"
+
+    assert step_count == 3, f"expected ceil(7/3)=3 steps, got {step_count}"
+    assert all(c >= 0 for c in mapper._placement), "all 7 tasks should end up placed"
+    assert len(set(mapper._placement.tolist())) == 7, "no duplicate core assignments"
+
+    print("✓ batched action tests passed")
 
 
 def test_sa_improves_random():
@@ -138,5 +168,6 @@ if __name__ == "__main__":
     test_environment_reset_step()
     test_pipeline_stages_and_latency()
     test_collision_resolution()
+    test_batched_actions()
     test_sa_improves_random()
     print("\nAll tests passed.")
