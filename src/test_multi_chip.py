@@ -141,6 +141,37 @@ def test_batched_actions():
     print("✓ batched action tests passed")
 
 
+def test_cnn_workload_partitioning():
+    """Regression test for channel-partitioned CNN extraction (Sec 3.1.1).
+    Skips gracefully if torch isn't installed in this environment."""
+    try:
+        import torch  # noqa: F401
+    except ImportError:
+        print("~ skipping test_cnn_workload_partitioning (torch not installed)")
+        return
+
+    import run_multi_chip as rm
+
+    tg, num_tasks, labels = rm.extract_cnn_task_graph(channels_per_partition=8)
+    assert num_tasks > 100, \
+        f"channel partitioning should produce far more than 15 tasks, got {num_tasks}"
+    assert len(labels) == num_tasks
+    assert tg.shape == (num_tasks, num_tasks)
+
+    # Must still be a valid DAG usable by pipeline_stages()
+    env = MultiChipEnvironment(4, 4, 16, 16, task_graph=tg, num_tasks=num_tasks)  # 1024 cores
+    stages = env.pipeline_stages()
+    all_staged = set(t for stage in stages for t in stage)
+    assert all_staged == set(range(num_tasks)), "every task should appear in exactly one stage"
+
+    # Legacy mode should still work and match the old ~15-task granularity
+    tg_legacy, n_legacy, labels_legacy = rm.extract_cnn_task_graph(channels_per_partition=0)
+    assert n_legacy < 20, f"legacy mode should be whole-layer granularity, got {n_legacy} tasks"
+
+    print(f"✓ CNN workload partitioning tests passed ({num_tasks} logic cores at "
+          f"channels_per_partition=8, {n_legacy} in legacy mode)")
+
+
 def test_sa_improves_random():
     import random, math
     env = MultiChipEnvironment(2, 2, 4, 4)
@@ -169,5 +200,6 @@ if __name__ == "__main__":
     test_pipeline_stages_and_latency()
     test_collision_resolution()
     test_batched_actions()
+    test_cnn_workload_partitioning()
     test_sa_improves_random()
     print("\nAll tests passed.")

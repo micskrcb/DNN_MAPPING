@@ -63,32 +63,122 @@ if HAS_TORCH:
         def forward(self, x):
             return self.features(x)
 
-    def extract_cnn_task_graph():
-        """Passes dummy data through the CNN to build the communication matrix."""
-        model = SimpleCNN()
-        dummy_input = torch.randn(1, 3, 32, 32) # Standard 32x32 image
-        layer_output_sizes = []
+    def extract_cnn_task_graph(channels_per_partition: int = 8):
+        """
+        PAPER FIX (Sec 3.1.1, Fig. 5-6): partition each CONV/FC layer's
+        weights along the input channel C and output channel K into a grid
+        of VMM (vector-matrix-multiply) cores, each feeding a VVA (vector-
+        vector-accumulation) core that reduces the partial sums for its
+        output-channel group. This replaces the old "one task per whole
+        layer" model, which produced only ~15 tasks for this demo CNN --
+        nowhere near the paper's reported ~900-1900 logic cores for real
+        networks (Fig. 6).
 
-        def hook_fn(module, input, output):
-            layer_output_sizes.append(output.numel())
+        Activation (ReLU) and pooling are NOT separate tasks: per the
+        paper's core architecture (Sec 2.2), these run inside each core's
+        transformation unit, so only Conv2d/Linear layers are partitioned.
+
+        Args:
+            channels_per_partition: max output channels per partition group
+                (smaller -> more, finer-grained logic cores, closer to the
+                paper's per-model core counts in Fig. 6). Set to 0 to
+                restore the old unpartitioned one-task-per-layer behavior
+                (useful for quick smoke tests).
+
+        Returns:
+            task_graph: directed volume matrix, task_graph[i, j] = elements
+                sent from logic core i to logic core j.
+            num_tasks: total logic core count.
+            labels: human-readable label per task index, for debugging.
+        """
+        model = SimpleCNN()
+        dummy_input = torch.randn(1, 3, 32, 32)
+
+        # Capture shape info only for Conv2d/Linear -- the only layers
+        # actually partitioned into logic cores (see docstring above).
+        captured = []  # list of (kind, C_in, C_out, H, W)
+
+        def make_hook(kind):
+            def hook_fn(module, inp, out):
+                if kind == "conv":
+                    _, C_out, H, W = out.shape
+                    C_in = module.in_channels
+                else:  # linear
+                    C_out = module.out_features
+                    C_in = module.in_features
+                    H = W = 1
+                captured.append((kind, C_in, C_out, H, W))
+            return hook_fn
 
         hooks = []
         for layer in model.features:
-            hooks.append(layer.register_forward_hook(hook_fn))
+            if isinstance(layer, nn.Conv2d):
+                hooks.append(layer.register_forward_hook(make_hook("conv")))
+            elif isinstance(layer, nn.Linear):
+                hooks.append(layer.register_forward_hook(make_hook("linear")))
 
         model(dummy_input)
-
         for h in hooks:
             h.remove()
 
-        num_tasks = len(layer_output_sizes)
+        if channels_per_partition <= 0:
+            # Legacy behavior: one task per Conv2d/Linear layer (activation/
+            # pooling layers are no longer separately counted, unlike the
+            # very first version of this extractor).
+            num_tasks = len(captured)
+            task_graph = np.zeros((num_tasks, num_tasks), dtype=np.float32)
+            labels = []
+            for i, (kind, C_in, C_out, H, W) in enumerate(captured):
+                labels.append(f"L{i}_{kind}")
+                if i < num_tasks - 1:
+                    task_graph[i, i + 1] = C_out * H * W
+            return task_graph, num_tasks, labels
+
+        # --- Channel-partitioned extraction (paper Sec 3.1.1) ---
+        layer_meta = []   # (vmm_ids[M][N], vva_ids[M], M, N, partial_vol)
+        labels = []
+        edges = []        # (src_id, dst_id, volume)
+        next_id = 0
+        prev_M = 1         # first layer's few input channels aren't split
+
+        for L, (kind, C_in, C_out, H, W) in enumerate(captured):
+            M = max(1, math.ceil(C_out / channels_per_partition))
+            N = prev_M
+
+            vmm_ids = [[None] * N for _ in range(M)]
+            vva_ids = [None] * M
+            out_per_group = math.ceil(C_out / M)
+            partial_vol = out_per_group * H * W  # VMM/VVA output size for this group
+
+            for m in range(M):
+                for n in range(N):
+                    vmm_ids[m][n] = next_id
+                    labels.append(f"L{L}_{kind}_VMM_m{m}_n{n}")
+                    next_id += 1
+                vva_ids[m] = next_id
+                labels.append(f"L{L}_{kind}_VVA_m{m}")
+                next_id += 1
+                for n in range(N):
+                    edges.append((vmm_ids[m][n], vva_ids[m], partial_vol))
+
+            layer_meta.append((vmm_ids, vva_ids, M, N, partial_vol))
+            prev_M = M
+
+        # VVA(L, m) broadcasts its accumulated output-channel-group slice to
+        # every VMM(L+1, m', n'=m) that consumes it as an input-channel group.
+        for L in range(len(layer_meta) - 1):
+            _, vva_ids, M, _, partial_vol = layer_meta[L]
+            vmm_next, _, M_next, _, _ = layer_meta[L + 1]
+            for m in range(M):
+                for m_next in range(M_next):
+                    edges.append((vva_ids[m], vmm_next[m_next][m], partial_vol))
+
+        num_tasks = next_id
         task_graph = np.zeros((num_tasks, num_tasks), dtype=np.float32)
+        for src, dst, vol in edges:
+            task_graph[src, dst] += vol
 
-        # Sequential communication: Layer i sends data only to Layer i+1
-        for i in range(num_tasks - 1):
-            task_graph[i, i + 1] = layer_output_sizes[i]
-
-        return task_graph, num_tasks
+        return task_graph, num_tasks, labels
 
 
 # ---------------------------------------------------------------------------
@@ -505,6 +595,12 @@ def main():
     
     # NEW ARGUMENT: Flag to use the real CNN workload
     parser.add_argument("--use_cnn", action="store_true", help="Use real CNN workload instead of random")
+    parser.add_argument("--channels_per_partition", type=int, default=8,
+                         help="Max output channels per VMM/VVA partition group when "
+                              "--use_cnn is set (paper Sec 3.1.1, Fig 5-6). Smaller = "
+                              "more, finer-grained logic cores (closer to the paper's "
+                              "per-model core counts in Fig 6). Set to 0 for the old "
+                              "one-task-per-layer behavior.")
     parser.add_argument("--seed", type=int, default=None,
                          help="Seed for random/numpy/torch RNGs. Not fixed by default -- "
                               "the paper itself (Sec 4.5, Fig 20) runs 5 different seeds "
@@ -524,11 +620,29 @@ def main():
     # 1. Determine which workload to use
     real_task_graph = None
     num_tasks = None
-    
+
     if args.use_cnn and HAS_TORCH:
         print(">> Extracting Real CNN Workload via PyTorch Hooks...")
-        real_task_graph, num_tasks = extract_cnn_task_graph()
-        print(f">> Successfully extracted {num_tasks} layers/tasks from CNN.\n")
+        real_task_graph, num_tasks, task_labels = extract_cnn_task_graph(
+            channels_per_partition=args.channels_per_partition
+        )
+        print(f">> Channel partitioning: channels_per_partition={args.channels_per_partition} "
+              f"-> {num_tasks} logic cores (VMM+VVA)\n" if args.channels_per_partition > 0 else
+              f">> Legacy mode (channels_per_partition=0): {num_tasks} whole-layer tasks\n")
+
+    # Pre-flight check: partitioning can produce far more logic cores than a
+    # small default grid has room for. Fail clearly here rather than deep
+    # inside placement code with a confusing index error.
+    total_cores_requested = args.chips_x * args.chips_y * args.rows * args.cols
+    if num_tasks is not None and num_tasks > total_cores_requested:
+        print(f"ERROR: {num_tasks} logic cores requested but the grid only has "
+              f"{total_cores_requested} cores ({args.chips_x}x{args.chips_y} chips x "
+              f"{args.rows}x{args.cols} cores/chip).")
+        print("Fix by either:")
+        print(f"  1. Increasing grid size, e.g. --chips_x 4 --chips_y 4 --rows 16 --cols 16 "
+              f"(paper's 1024-core config)")
+        print(f"  2. Increasing --channels_per_partition (fewer, coarser logic cores)")
+        sys.exit(1)
 
     # 2. Build the Environment
     env = MultiChipEnvironment(
