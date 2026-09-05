@@ -16,6 +16,8 @@ import math
 import random
 import sys
 import os
+import time
+from datetime import timedelta
 import numpy as np
 
 # Make sure the original src/ is on the path
@@ -237,15 +239,25 @@ if HAS_TORCH:
             return len(self.buffer)
 
     class DDPGAgent:
-        def __init__(self, state_dim, action_dim=2, lr_actor=1e-4, lr_critic=1e-3, gamma=0.99, tau=0.005):
+        def __init__(self, state_dim, action_dim=2, lr_actor=1e-4, lr_critic=1e-3,
+                     gamma=0.99, tau=0.005, device=None):
+            # PERF FIX: this agent previously never checked for a GPU, even
+            # if one was available -- for a partitioned CNN workload the
+            # state vector is total_cores + num_tasks (e.g. 4096+906=5002
+            # dims), so the first Linear layer alone has ~1.3M parameters.
+            # On a CUDA GPU this is dramatically faster per training step.
+            if device is None:
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            self.device = torch.device(device)
+
             self.action_dim = action_dim
-            self.actor = Actor(state_dim, action_dim)
-            self.actor_target = Actor(state_dim, action_dim)
+            self.actor = Actor(state_dim, action_dim).to(self.device)
+            self.actor_target = Actor(state_dim, action_dim).to(self.device)
             self.actor_target.load_state_dict(self.actor.state_dict())
             self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=lr_actor)
 
-            self.critic = Critic(state_dim, action_dim)
-            self.critic_target = Critic(state_dim, action_dim)
+            self.critic = Critic(state_dim, action_dim).to(self.device)
+            self.critic_target = Critic(state_dim, action_dim).to(self.device)
             self.critic_target.load_state_dict(self.critic.state_dict())
             self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=lr_critic)
 
@@ -253,10 +265,10 @@ if HAS_TORCH:
             self.tau = tau
 
         def select_action(self, state, noise_scale=0.1):
-            state = torch.FloatTensor(state).unsqueeze(0)
+            state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
             self.actor.eval()
             with torch.no_grad():
-                action = self.actor(state).squeeze(0).numpy()
+                action = self.actor(state).squeeze(0).cpu().numpy()
             self.actor.train()
             # Add exploration noise
             action += noise_scale * np.random.randn(self.action_dim)
@@ -268,11 +280,11 @@ if HAS_TORCH:
 
             states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
 
-            states = torch.FloatTensor(states)
-            actions = torch.FloatTensor(actions)
-            rewards = torch.FloatTensor(rewards).unsqueeze(1)
-            next_states = torch.FloatTensor(next_states)
-            dones = torch.FloatTensor(dones).unsqueeze(1)
+            states = torch.FloatTensor(states).to(self.device)
+            actions = torch.FloatTensor(actions).to(self.device)
+            rewards = torch.FloatTensor(rewards).unsqueeze(1).to(self.device)
+            next_states = torch.FloatTensor(next_states).to(self.device)
+            dones = torch.FloatTensor(dones).unsqueeze(1).to(self.device)
 
             # Critic Update
             with torch.no_grad():
@@ -459,7 +471,8 @@ class MultiChipCoreMapper:
 # ---------------------------------------------------------------------------
 
 def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int = 64,
-             baseline_trials: int = 1000, batch_z: int = 3) -> float:
+             baseline_trials: int = 1000, batch_z: int = 3, train_every: int = 5,
+             device: str = None) -> float:
     if not HAS_TORCH:
         print("[DDPG] torch not installed — falling back to random search")
         return run_random(env)
@@ -484,7 +497,8 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     print(f"[DDPG] Batched action: placing {batch_z} logic core(s) per step "
           f"(action_dim={action_dim})")
 
-    agent = DDPGAgent(state_dim=state_dim, action_dim=action_dim)
+    agent = DDPGAgent(state_dim=state_dim, action_dim=action_dim, device=device)
+    print(f"[DDPG] Using device: {agent.device}")
     replay_buffer = ReplayBuffer()
     mapper = MultiChipCoreMapper(env, baseline_latency=baseline_latency, batch_z=batch_z)
 
@@ -500,17 +514,28 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     target_episode = max(1, int(0.8 * n_episodes))
     noise_decay = 0.01 ** (1.0 / target_episode)
 
+    # PERF FIX: agent.train() previously ran on EVERY environment step
+    # (num_tasks/batch_z steps per episode -- e.g. 302 for a 906-task
+    # workload at batch_z=3), each a full actor+critic forward/backward
+    # pass. train_every spaces these out; replay_buffer.add() still runs
+    # every step so no experience is lost, just the gradient-update
+    # frequency is reduced.
+    global_step = 0
+    start_time = time.time()
+
     for ep in range(1, n_episodes + 1):
         state = mapper.reset()
         done = False
-        
+
         while not done:
             action = agent.select_action(state, noise_scale=noise_scale)
             reward, done, grid, final_cost = mapper.step(action)
             next_state = mapper._occ_map()
-            
+
             replay_buffer.add(state, action, reward, next_state, done)
-            agent.train(replay_buffer, batch_size)
+            global_step += 1
+            if global_step % train_every == 0:
+                agent.train(replay_buffer, batch_size)
             state = next_state
 
         noise_scale = max(0.01, noise_scale * noise_decay)
@@ -521,7 +546,12 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
             best_placement = mapper.get_placement()
 
         if ep % 10 == 0 or ep == n_episodes:
-             print(f"# of epochs: {ep:4d} | Current Cost: {final_cost:.2f} | Best Cost: {best_cost:.2f}")
+            elapsed = time.time() - start_time
+            per_ep = elapsed / ep
+            eta_sec = per_ep * (n_episodes - ep)
+            eta_str = str(timedelta(seconds=int(eta_sec)))
+            print(f"# of epochs: {ep:4d} | Current Cost: {final_cost:.2f} | "
+                  f"Best Cost: {best_cost:.2f} | {per_ep:.2f}s/ep | ETA: {eta_str}")
 
     if best_grid:
         print("--- Current Best Layout ---")
@@ -592,6 +622,17 @@ def main():
                          help="Number of logic cores placed per DDPG action, "
                               "per the paper's batched action [x1,y1,...,xz,yz] "
                               "(Sec 3.2). Clamped to num_tasks if larger.")
+    parser.add_argument("--train_every", type=int, default=5,
+                         help="Run one DDPG gradient update every N environment "
+                              "steps instead of every step. Experience is still "
+                              "recorded every step via the replay buffer -- this "
+                              "only spaces out the (expensive) actor/critic "
+                              "forward+backward passes. Set to 1 to train on "
+                              "every step (original behavior, much slower at "
+                              "large task counts).")
+    parser.add_argument("--device", type=str, default=None, choices=["cpu", "cuda"],
+                         help="Force a specific device for DDPG. Default: auto-detect "
+                              "CUDA if available, else CPU.")
     
     # NEW ARGUMENT: Flag to use the real CNN workload
     parser.add_argument("--use_cnn", action="store_true", help="Use real CNN workload instead of random")
@@ -660,7 +701,9 @@ def main():
 
     # 3. Run the algorithms
     if args.algo == "ddpg":
-        cost = run_ddpg(env, n_episodes=args.epochs, batch_z=args.batch_z)
+        cost = run_ddpg(env, n_episodes=args.epochs, batch_z=args.batch_z,
+                         baseline_trials=args.baseline_trials,
+                         train_every=args.train_every, device=args.device)
     elif args.algo == "sa":
         cost = run_sa(env, n_iter=args.iters)
     else:

@@ -93,10 +93,17 @@ class MultiChipEnvironment:
         self.state_dim = self.total_cores + self.num_tasks
         self.action_dim = 2
 
-        # Cached once per placement change; pipeline_stages() only depends
-        # on task_graph structure (not on placement), so compute it lazily
-        # and reuse across evaluate() calls within a run.
+        # Cached once per environment construction; both depend only on
+        # task_graph structure (not on placement), so build lazily and
+        # reuse across every evaluate() call within a run. Fixed in the
+        # PERF FIX below: pipeline_latency() used to re-scan the full
+        # task_graph row (O(num_tasks)) for every task on every call --
+        # fine for a 15-task chain, but for a partitioned CNN workload
+        # (hundreds to thousands of sparse VMM/VVA tasks) this made
+        # evaluate() cost O(num_tasks^2) per call when the real graph only
+        # has O(num_tasks) actual edges. A sparse adjacency list fixes this.
         self._stages_cache: Optional[List[List[int]]] = None
+        self._succ_cache: Optional[List[List[tuple]]] = None
 
     def reset(self) -> np.ndarray:
         self.placement[:] = -1
@@ -145,18 +152,31 @@ class MultiChipEnvironment:
         undirected graph was passed in), the unresolved tasks are dumped
         into one trailing stage rather than silently mis-measuring -- check
         `make_dag=True` if you hit this.
+
+        PERF FIX: also builds `self._succ_cache`, a sparse adjacency list of
+        (successor, volume) pairs per task, computed once via np.nonzero
+        instead of a dense O(num_tasks^2) scan. For a partitioned CNN
+        workload (hundreds to thousands of tasks with only a few real edges
+        each), this is the difference between ~10^3 edges and ~10^6 dense
+        cells checked on every single evaluate() call.
         """
         if self._stages_cache is not None:
             return self._stages_cache
 
         n = self.num_tasks
         succ: List[List[int]] = [[] for _ in range(n)]
+        succ_with_vol: List[List[tuple]] = [[] for _ in range(n)]
         indeg = [0] * n
-        for i in range(n):
-            for j in range(n):
-                if i != j and self.task_graph[i, j] > 0:
-                    succ[i].append(j)
-                    indeg[j] += 1
+
+        # Sparse edge extraction via nonzero(), not a dense i,j double loop.
+        rows, cols = np.nonzero(self.task_graph)
+        for i, j in zip(rows.tolist(), cols.tolist()):
+            if i == j:
+                continue
+            vol = float(self.task_graph[i, j])
+            succ[i].append(j)
+            succ_with_vol[i].append((j, vol))
+            indeg[j] += 1
 
         stages: List[List[int]] = []
         remaining = indeg[:]
@@ -178,6 +198,7 @@ class MultiChipEnvironment:
             stages.append(leftover)
 
         self._stages_cache = stages
+        self._succ_cache = succ_with_vol
         return stages
 
     def pipeline_latency(self) -> float:
@@ -188,8 +209,15 @@ class MultiChipEnvironment:
         outputs to its successors' placed cores. Unplaced tasks (-1)
         contribute 0, matching the paper's convention that reward is
         only meaningful for the current (partial or complete) placement.
+
+        PERF FIX: iterates only over each task's real (sparse) successor
+        edges via `self._succ_cache`, instead of scanning the full
+        `range(num_tasks)` row per task -- O(edges) instead of
+        O(num_tasks^2) per call. This is the main cost of every DDPG
+        step's reward computation and every RS/SA trial, so at hundreds to
+        thousands of tasks this was previously the dominant runtime cost.
         """
-        stages = self.pipeline_stages()
+        stages = self.pipeline_stages()  # also populates self._succ_cache
         stage_latencies = []
         for stage in stages:
             task_latencies = []
@@ -199,10 +227,7 @@ class MultiChipEnvironment:
                     task_latencies.append(0.0)
                     continue
                 comm = 0.0
-                for j in range(self.num_tasks):
-                    vol = self.task_graph[i, j]
-                    if vol <= 0:
-                        continue
+                for j, vol in self._succ_cache[i]:
                     cj = self.placement[j]
                     if cj < 0:
                         continue
