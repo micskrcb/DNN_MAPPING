@@ -482,3 +482,229 @@ Final placement cost : 340992.0000
  3730 2487 2550 3795 2613 2676 3860 2739 2802 3925 2865 2928 3990 2991
  3054 2496 3117 3180 4055 3243 3306 2561 3369 3432 2626 3495 3558 2691
  3621 3684 2756 3747 3810 2821 3873 3936 2886 3999]
+
+
+ comparch@15127:~/Desktop/dnn_mapping/Core_Placement_with_Reinforcement_Learning  final (working copy for sem 1 26-27)/src$ python3 run_multi_chip.py --algo ddpg --use_cnn --model alexnet --channels_per_partition 32 \
+    --chips_x 4 --chips_y 4 --rows 16 --cols 16 --epochs 1000 --seed 0 --batch_z 3
+>> Seeded RNGs with --seed 0 (random search baseline B and DDPG exploration noise are now reproducible for this run)
+
+>> Extracting alexnet Workload via PyTorch Hooks...
+>> Channel partitioning: channels_per_partition=32 -> 22074 logic cores (VMM+VVA)
+
+ERROR: 22074 logic cores requested but the grid only has 4096 cores (4x4 chips x 16x16 cores/chip).
+Fix by either:
+  1. Increasing grid size, e.g. --chips_x 4 --chips_y 4 --rows 16 --cols 16 (paper's 1024-core config)
+  2. Increasing --channels_per_partition (fewer, coarser logic cores)
+comparch@15127:~/Desktop/dnn_mapping/Core_Placement_with_Reinforcement_Learning  final (working copy for sem 1 26-27)/src$ python3 run_multi_chip.py --algo ddpg --use_cnn --model alexnet --channels_per_partition 128 \
+    --chips_x 4 --chips_y 4 --rows 16 --cols 16 --epochs 1000 --seed 0 --batch_z 3
+>> Seeded RNGs with --seed 0 (random search baseline B and DDPG exploration noise are now reproducible for this run)
+
+>> Extracting alexnet Workload via PyTorch Hooks...
+>> Channel partitioning: channels_per_partition=128 -> 1445 logic cores (VMM+VVA)
+
+System : MultiChipTopology(4x4 chips, 16x16 cores/chip, total=4096 cores)
+Tasks  : 1445
+Algo   : ddpg
+--------------------------------------------------
+Traceback (most recent call last):
+  File "/home/comparch/Desktop/dnn_mapping/Core_Placement_with_Reinforcement_Learning  final (working copy for sem 1 26-27)/src/run_multi_chip.py", line 825, in <module>
+    main()
+  File "/home/comparch/Desktop/dnn_mapping/Core_Placement_with_Reinforcement_Learning  final (working copy for sem 1 26-27)/src/run_multi_chip.py", line 811, in main
+    baseline_trials=args.baseline_trials,
+AttributeError: 'Namespace' object has no attribute 'baseline_trials'
+comparch@15127:~/Desktop/dnn_mapping/Core_Placement_with_Reinforcement_Learning  final (working copy for sem 1 26-27)/src$ python3 test_multi_chip.py   # confirm 6/7 still pass first
+python3 run_multi_chip.py --algo ddpg --use_cnn --model alexnet --channels_per_partition 128 \
+    --chips_x 4 --chips_y 4 --rows 16 --cols 16 --epochs 1000 --seed 0 --batch_z 3
+✓ topology tests passed
+✓ environment tests passed  (cost=1254.00)
+✓ pipeline_stages/pipeline_latency tests passed
+✓ collision resolution tests passed
+✓ batched action tests passed
+✓ CNN workload partitioning tests passed (906 logic cores at channels_per_partition=8, 6 in legacy mode)
+✓ SA cost=2000.00  random cost=2442.00
+
+All tests passed.
+>> Seeded RNGs with --seed 0 (random search baseline B and DDPG exploration noise are now reproducible for this run)
+
+>> Extracting alexnet Workload via PyTorch Hooks...
+>> Channel partitioning: channels_per_partition=128 -> 1445 logic cores (VMM+VVA)
+
+System : MultiChipTopology(4x4 chips, 16x16 cores/chip, total=4096 cores)
+Tasks  : 1445
+Algo   : ddpg
+--------------------------------------------------
+[DDPG] Computing random-search baseline B (1000 trials)...
+[DDPG] Baseline B = 12697984.0000
+[DDPG] Batched action: placing 3 logic core(s) per step (action_dim=6)
+[DDPG] Using device: cpu (20 CPU threads)
+# of epochs:   10 | Current Cost: 17348864.00 | Best Cost: 14601600.00 | 9.38s/ep | ETA: 2:34:48
+# of epochs:   20 | Current Cost: 23449088.00 | Best Cost: 14601600.00 | 10.44s/ep | ETA: 2:50:30
+# of epochs:   30 | Current Cost: 23708672.00 | Best Cost: 14601600.00 | 10.62s/ep | ETA: 2:51:42
+# of epochs:   40 | Current Cost: 27407744.00 | Best Cost: 14601600.00 | 9.51s/ep | ETA: 2:32:11
+# of epochs:   50 | Current Cost: 24573952.00 | Best Cost: 14601600.00 | 9.08s/ep | ETA: 2:23:49
+# of epochs:   60 | Current Cost: 27818752.00 | Best Cost: 14601600.00 | 9.69s/ep | ETA: 2:31:46
+# of epochs:   70 | Current Cost: 12390400.00 | Best Cost: 12390400.00 | 10.02s/ep | ETA: 2:35:19
+# of epochs:   80 | Current Cost: 15100800.00 | Best Cost: 9950720.00 | 10.01s/ep | ETA: 2:33:30
+# of epochs:   90 | Current Cost: 31388032.00 | Best Cost: 9950720.00 | 9.74s/ep | ETA: 2:27:47
+# of epochs:  100 | Current Cost: 22994816.00 | Best Cost: 9950720.00 | 9.76s/ep | ETA: 2:26:22
+# of epochs:  110 | Current Cost: 28878720.00 | Best Cost: 9950720.00 | 9.52s/ep | ETA: 2:21:10
+# of epochs:  120 | Current Cost: 26866944.00 | Best Cost: 9950720.00 | 9.33s/ep | ETA: 2:16:46
+# of epochs:  130 | Current Cost: 28813824.00 | Best Cost: 9950720.00 | 9.17s/ep | ETA: 2:13:01
+# of epochs:  140 | Current Cost: 29116672.00 | Best Cost: 9950720.00 | 9.09s/ep | ETA: 2:10:17
+# of epochs:  150 | Current Cost: 28965248.00 | Best Cost: 9950720.00 | 8.94s/ep | ETA: 2:06:39
+# of epochs:  160 | Current Cost: 23254400.00 | Best Cost: 9950720.00 | 8.87s/ep | ETA: 2:04:10
+# of epochs:  170 | Current Cost: 27321216.00 | Best Cost: 9950720.00 | 9.16s/ep | ETA: 2:06:46
+# of epochs:  180 | Current Cost: 29744000.00 | Best Cost: 9950720.00 | 9.44s/ep | ETA: 2:08:56
+# of epochs:  190 | Current Cost: 29397888.00 | Best Cost: 9950720.00 | 9.59s/ep | ETA: 2:09:25
+# of epochs:  200 | Current Cost: 29549312.00 | Best Cost: 9950720.00 | 10.07s/ep | ETA: 2:14:15
+# of epochs:  210 | Current Cost: 26282880.00 | Best Cost: 9950720.00 | 10.58s/ep | ETA: 2:19:16
+# of epochs:  220 | Current Cost: 26088192.00 | Best Cost: 9950720.00 | 11.49s/ep | ETA: 2:29:19
+# of epochs:  230 | Current Cost: 11681280.00 | Best Cost: 9323392.00 | 11.94s/ep | ETA: 2:33:16
+# of epochs:  240 | Current Cost: 30090112.00 | Best Cost: 9323392.00 | 12.41s/ep | ETA: 2:37:08
+# of epochs:  250 | Current Cost: 12503296.00 | Best Cost: 9323392.00 | 12.27s/ep | ETA: 2:33:24
+# of epochs:  260 | Current Cost: 14817920.00 | Best Cost: 9323392.00 | 13.07s/ep | ETA: 2:41:11
+# of epochs:  270 | Current Cost: 13164800.00 | Best Cost: 9323392.00 | 13.19s/ep | ETA: 2:40:28
+# of epochs:  280 | Current Cost: 11551488.00 | Best Cost: 9323392.00 | 13.38s/ep | ETA: 2:40:35
+# of epochs:  290 | Current Cost: 17283968.00 | Best Cost: 9323392.00 | 13.38s/ep | ETA: 2:38:18
+# of epochs:  300 | Current Cost: 9099200.00 | Best Cost: 9099200.00 | 13.24s/ep | ETA: 2:34:26
+# of epochs:  310 | Current Cost: 13779584.00 | Best Cost: 9099200.00 | 13.43s/ep | ETA: 2:34:24
+# of epochs:  320 | Current Cost: 17132544.00 | Best Cost: 9099200.00 | 13.67s/ep | ETA: 2:34:56
+# of epochs:  330 | Current Cost: 14536704.00 | Best Cost: 9099200.00 | 13.75s/ep | ETA: 2:33:33
+# of epochs:  340 | Current Cost: 13584896.00 | Best Cost: 6749184.00 | 13.90s/ep | ETA: 2:32:51
+# of epochs:  350 | Current Cost: 8133632.00 | Best Cost: 6749184.00 | 13.98s/ep | ETA: 2:31:24
+# of epochs:  360 | Current Cost: 13520000.00 | Best Cost: 6749184.00 | 14.41s/ep | ETA: 2:33:44
+# of epochs:  370 | Current Cost: 10729472.00 | Best Cost: 6749184.00 | 14.63s/ep | ETA: 2:33:38
+# of epochs:  380 | Current Cost: 9842560.00 | Best Cost: 6749184.00 | 14.65s/ep | ETA: 2:31:24
+# of epochs:  390 | Current Cost: 13520000.00 | Best Cost: 6749184.00 | 14.65s/ep | ETA: 2:28:55
+# of epochs:  400 | Current Cost: 14428544.00 | Best Cost: 6749184.00 | 14.69s/ep | ETA: 2:26:52
+# of epochs:  410 | Current Cost: 13433472.00 | Best Cost: 6749184.00 | 14.82s/ep | ETA: 2:25:45
+# of epochs:  420 | Current Cost: 11551488.00 | Best Cost: 6749184.00 | 14.82s/ep | ETA: 2:23:16
+# of epochs:  430 | Current Cost: 27451008.00 | Best Cost: 6749184.00 | 15.00s/ep | ETA: 2:22:29
+# of epochs:  440 | Current Cost: 31258240.00 | Best Cost: 6749184.00 | 15.00s/ep | ETA: 2:19:59
+# of epochs:  450 | Current Cost: 15423616.00 | Best Cost: 6749184.00 | 15.10s/ep | ETA: 2:18:22
+# of epochs:  460 | Current Cost: 13649792.00 | Best Cost: 6749184.00 | 15.17s/ep | ETA: 2:16:31
+# of epochs:  470 | Current Cost: 13822848.00 | Best Cost: 6749184.00 | 15.41s/ep | ETA: 2:16:06
+# of epochs:  480 | Current Cost: 13411840.00 | Best Cost: 6749184.00 | 15.66s/ep | ETA: 2:15:42
+# of epochs:  490 | Current Cost: 11573120.00 | Best Cost: 6749184.00 | 15.86s/ep | ETA: 2:14:46
+# of epochs:  500 | Current Cost: 12395136.00 | Best Cost: 6749184.00 | 15.89s/ep | ETA: 2:12:24
+# of epochs:  510 | Current Cost: 9042176.00 | Best Cost: 6749184.00 | 15.89s/ep | ETA: 2:09:47
+# of epochs:  520 | Current Cost: 8977280.00 | Best Cost: 6749184.00 | 16.06s/ep | ETA: 2:08:28
+# of epochs:  530 | Current Cost: 11400064.00 | Best Cost: 6749184.00 | 16.10s/ep | ETA: 2:06:07
+# of epochs:  540 | Current Cost: 10816000.00 | Best Cost: 6749184.00 | 16.30s/ep | ETA: 2:04:57
+# of epochs:  550 | Current Cost: 12827776.00 | Best Cost: 6749184.00 | 16.42s/ep | ETA: 2:03:06
+# of epochs:  560 | Current Cost: 12871040.00 | Best Cost: 6749184.00 | 16.51s/ep | ETA: 2:01:05
+# of epochs:  570 | Current Cost: 11183744.00 | Best Cost: 6749184.00 | 16.51s/ep | ETA: 1:58:17
+# of epochs:  580 | Current Cost: 8263424.00 | Best Cost: 6749184.00 | 16.70s/ep | ETA: 1:56:55
+# of epochs:  590 | Current Cost: 13346944.00 | Best Cost: 6749184.00 | 16.71s/ep | ETA: 1:54:09
+# of epochs:  600 | Current Cost: 11313536.00 | Best Cost: 6749184.00 | 16.82s/ep | ETA: 1:52:09
+# of epochs:  610 | Current Cost: 12827776.00 | Best Cost: 6749184.00 | 16.85s/ep | ETA: 1:49:33
+# of epochs:  620 | Current Cost: 12568192.00 | Best Cost: 6749184.00 | 16.77s/ep | ETA: 1:46:11
+# of epochs:  630 | Current Cost: 12568192.00 | Best Cost: 6749184.00 | 16.77s/ep | ETA: 1:43:26
+# of epochs:  640 | Current Cost: 12827776.00 | Best Cost: 6749184.00 | 16.75s/ep | ETA: 1:40:31
+# of epochs:  650 | Current Cost: 12351872.00 | Best Cost: 6749184.00 | 17.07s/ep | ETA: 1:39:34
+# of epochs:  660 | Current Cost: 11140480.00 | Best Cost: 6749184.00 | 17.23s/ep | ETA: 1:37:38
+# of epochs:  670 | Current Cost: 10707840.00 | Best Cost: 6749184.00 | 17.19s/ep | ETA: 1:34:32
+# of epochs:  680 | Current Cost: 12351872.00 | Best Cost: 6749184.00 | 17.28s/ep | ETA: 1:32:10
+# of epochs:  690 | Current Cost: 12049024.00 | Best Cost: 6749184.00 | 17.35s/ep | ETA: 1:29:38
+# of epochs:  700 | Current Cost: 10859264.00 | Best Cost: 6749184.00 | 17.63s/ep | ETA: 1:28:09
+# of epochs:  710 | Current Cost: 11010688.00 | Best Cost: 6749184.00 | 17.71s/ep | ETA: 1:25:35
+# of epochs:  720 | Current Cost: 11140480.00 | Best Cost: 6749184.00 | 17.80s/ep | ETA: 1:23:05
+# of epochs:  730 | Current Cost: 12092288.00 | Best Cost: 6749184.00 | 17.89s/ep | ETA: 1:20:29
+# of epochs:  740 | Current Cost: 12092288.00 | Best Cost: 6749184.00 | 17.86s/ep | ETA: 1:17:22
+# of epochs:  750 | Current Cost: 10707840.00 | Best Cost: 6749184.00 | 17.91s/ep | ETA: 1:14:36
+# of epochs:  760 | Current Cost: 12135552.00 | Best Cost: 6749184.00 | 17.96s/ep | ETA: 1:11:49
+# of epochs:  770 | Current Cost: 12113920.00 | Best Cost: 6749184.00 | 17.90s/ep | ETA: 1:08:36
+# of epochs:  780 | Current Cost: 12113920.00 | Best Cost: 6749184.00 | 18.06s/ep | ETA: 1:06:13
+# of epochs:  790 | Current Cost: 12135552.00 | Best Cost: 6749184.00 | 18.15s/ep | ETA: 1:03:31
+# of epochs:  800 | Current Cost: 16202368.00 | Best Cost: 6749184.00 | 18.12s/ep | ETA: 1:00:23
+# of epochs:  810 | Current Cost: 15856256.00 | Best Cost: 6749184.00 | 18.21s/ep | ETA: 0:57:39
+# of epochs:  820 | Current Cost: 15856256.00 | Best Cost: 6749184.00 | 18.20s/ep | ETA: 0:54:36
+# of epochs:  830 | Current Cost: 12049024.00 | Best Cost: 6749184.00 | 18.42s/ep | ETA: 0:52:10
+# of epochs:  840 | Current Cost: 16202368.00 | Best Cost: 6749184.00 | 18.46s/ep | ETA: 0:49:13
+# of epochs:  850 | Current Cost: 12049024.00 | Best Cost: 6749184.00 | 18.54s/ep | ETA: 0:46:21
+# of epochs:  860 | Current Cost: 12135552.00 | Best Cost: 6749184.00 | 18.56s/ep | ETA: 0:43:18
+# of epochs:  870 | Current Cost: 12092288.00 | Best Cost: 6749184.00 | 18.68s/ep | ETA: 0:40:28
+# of epochs:  880 | Current Cost: 12092288.00 | Best Cost: 6749184.00 | 18.64s/ep | ETA: 0:37:17
+# of epochs:  890 | Current Cost: 16202368.00 | Best Cost: 6749184.00 | 18.56s/ep | ETA: 0:34:01
+# of epochs:  900 | Current Cost: 16548480.00 | Best Cost: 6749184.00 | 18.47s/ep | ETA: 0:30:47
+# of epochs:  910 | Current Cost: 16548480.00 | Best Cost: 6749184.00 | 18.41s/ep | ETA: 0:27:36
+# of epochs:  920 | Current Cost: 11811072.00 | Best Cost: 6749184.00 | 18.32s/ep | ETA: 0:24:25
+# of epochs:  930 | Current Cost: 11832704.00 | Best Cost: 6749184.00 | 18.25s/ep | ETA: 0:21:17
+# of epochs:  940 | Current Cost: 11832704.00 | Best Cost: 6749184.00 | 18.18s/ep | ETA: 0:18:10
+# of epochs:  950 | Current Cost: 11832704.00 | Best Cost: 6749184.00 | 18.14s/ep | ETA: 0:15:07
+# of epochs:  960 | Current Cost: 11832704.00 | Best Cost: 6749184.00 | 18.10s/ep | ETA: 0:12:03
+# of epochs:  970 | Current Cost: 11832704.00 | Best Cost: 6749184.00 | 18.03s/ep | ETA: 0:09:00
+# of epochs:  980 | Current Cost: 9993984.00 | Best Cost: 6749184.00 | 17.95s/ep | ETA: 0:05:58
+# of epochs:  990 | Current Cost: 10123776.00 | Best Cost: 6749184.00 | 17.87s/ep | ETA: 0:02:58
+# of epochs: 1000 | Current Cost: 9993984.00 | Best Cost: 6749184.00 | 17.82s/ep | ETA: 0:00:00
+--- Current Best Layout ---
+1 1 3 4 8 1 5 7 2 1 8 3 1 9 4 7 2 7 2 5 3 3 9 5 6 1 9 7 7 4 2 9 6 4 1 4 . . 3 3 . . . 7 . 3 9 4 6 0 7 1 7 2 4 5 7 9 0 5 6 0 0 4
+1 8 2 3 5 9 0 9 0 2 4 7 0 3 2 9 2 1 8 0 1 2 8 6 7 3 3 0 4 7 0 1 9 2 . . . . . . . . . . . . . 8 4 1 9 5 2 6 0 4 1 3 2 9 8 2 4 6
+5 2 6 7 8 2 5 6 4 6 8 2 2 8 1 8 5 1 6 6 4 1 3 9 1 2 4 3 4 3 7 5 5 . . . . . . . . . . . . . 6 . 2 0 2 0 7 3 0 9 1 4 5 1 3 3 0 1
+0 8 0 6 4 7 9 5 0 3 7 4 2 5 1 8 9 5 9 8 3 4 3 2 7 6 7 8 5 8 8 1 . 4 . 6 . . . . . . . . . . 9 . . 5 8 3 2 8 9 8 2 5 3 3 7 6 1 6
+9 1 9 6 1 0 0 2 0 3 0 3 8 3 1 7 1 7 5 6 7 5 6 0 7 0 0 8 0 1 8 . . . . . . . . . . . . . . . . . . . 5 4 2 2 0 6 2 5 7 6 2 0 4 4
+4 5 8 3 2 1 3 6 5 7 5 9 4 4 2 7 0 0 4 0 6 4 1 9 3 1 2 1 7 4 . . . . . . . . . . . . . . . . . . . . . 1 0 1 3 2 0 5 8 8 9 8 6 8
+5 2 4 6 8 8 1 6 8 4 4 5 4 2 8 2 6 7 2 0 8 3 2 9 3 9 4 2 7 . . . . . . . . . . . . . . . . . . . . . . . 9 2 5 0 1 4 9 1 7 7 1 9
+4 7 5 1 9 4 8 9 6 7 7 5 9 8 6 9 9 3 8 5 4 0 1 4 2 6 4 0 . . . . . . . . . . . . . . . . . . . . . . . . . 4 5 4 9 4 2 9 3 3 2 8
+3 8 3 5 7 9 0 7 0 8 6 3 0 8 0 2 5 9 7 7 3 2 6 4 7 0 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8 0 2 6 6 2 4 5 7
+9 7 2 0 5 3 0 3 0 8 8 3 1 2 3 6 1 8 6 5 4 7 5 9 3 6 . . . . . . . . . . . . . . . . . . 8 . . . . . . . . . 8 . 1 5 5 7 1 7 6 6
+9 5 8 7 5 1 6 6 9 1 6 4 3 5 8 2 0 7 6 5 9 6 3 6 9 . . . . . . . . . . . . . . . . . . . . . . . . . . . 1 . . . . 0 4 5 4 3 8 7
+4 9 8 6 6 0 9 0 4 9 7 3 6 9 4 1 9 8 7 0 7 0 9 2 . . . . . . . . . 1 . . . . . . . . . . . . . . . . . . . . . . . . 8 7 8 8 5 4
+5 1 9 3 5 2 1 5 2 0 5 8 1 5 3 0 9 8 2 1 2 2 7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4 1 8 6 5
+0 2 6 9 0 5 6 5 3 6 9 2 2 4 2 1 0 3 8 9 5 5 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7 3 7 9
+1 6 2 2 2 7 8 4 8 1 4 7 6 3 2 1 5 0 3 8 8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4 . . . 0 6 1
+2 3 8 4 0 4 6 9 2 5 8 7 5 4 3 6 1 5 1 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3 9
+5 9 7 3 5 9 1 4 9 0 9 6 5 4 8 3 6 4 7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+3 0 9 0 2 9 5 7 1 0 8 7 6 9 4 8 7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+5 2 1 3 2 7 8 3 2 9 8 7 1 6 9 0 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+4 3 5 4 8 0 4 5 1 9 9 2 7 1 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+5 1 7 8 5 6 6 2 0 0 4 9 2 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5 . . . . . . . . . 1
+7 0 0 3 7 8 4 1 2 5 0 4 6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+1 1 4 9 9 5 3 3 7 2 5 9 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+9 6 0 1 7 6 5 8 3 7 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 0
+3 2 4 8 9 6 0 5 8 5 . 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+5 5 0 2 8 1 6 0 8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+8 1 5 9 3 8 1 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+3 6 1 4 9 3 4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+8 5 6 2 6 7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 0 . . 7 . .
+1 7 4 7 0 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+6 5 0 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2
+3 7 6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+8 9 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+4 3 1 6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+3 3 0 5 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9 . . . . . .
+6 7 5 5 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+8 8 8 4 6 4 0 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8 . . . . . . . . . . .
+2 1 2 9 6 8 6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+6 5 3 9 0 8 9 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+8 2 1 5 3 1 7 1 7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+9 1 3 3 6 4 2 9 2 9 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+9 5 2 4 9 7 4 3 0 4 0 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6
+1 2 6 9 5 0 8 5 4 2 5 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+5 0 3 7 3 0 4 9 6 5 3 7 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 0
+3 6 8 8 8 1 6 5 0 7 6 5 8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7 . . . . .
+9 5 5 1 0 9 4 7 6 1 8 7 6 0 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+6 1 8 6 3 1 0 6 8 2 4 9 8 8 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3
+4 6 8 7 6 8 3 1 7 9 7 2 0 9 9 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+9 6 9 3 0 7 4 4 2 0 0 8 3 1 0 1 4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+9 1 9 4 9 6 3 6 6 3 5 3 9 4 2 1 2 6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9
+0 4 3 2 7 8 5 7 7 7 4 8 4 0 5 3 2 4 7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9 . . . . 7 3
+2 4 4 7 5 0 2 1 9 9 9 5 9 5 1 6 4 3 5 9 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 0 . .
+1 7 3 0 0 8 3 5 8 0 0 0 6 0 6 2 6 5 4 0 0 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3 . . 0 2
+5 3 3 2 8 3 1 3 8 4 2 2 2 7 1 7 3 7 6 5 7 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6 . 4 6
+1 1 5 9 8 1 6 4 6 1 7 3 3 3 8 2 8 4 8 7 6 8 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9 7 . . . . 0 1 4
+4 3 3 1 2 1 4 9 3 9 6 9 5 5 5 9 3 9 5 0 8 7 0 5 . . . . . 8 . . 3 . . . . . . . . . . . . . . . . . . . . . . . . . 4 3 1 4 4 1
+1 6 6 6 3 8 4 7 6 7 2 7 0 6 1 6 0 4 0 6 1 9 8 1 6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8 7 6 1 6
+0 8 4 9 9 9 7 7 0 2 0 5 9 2 9 6 8 2 5 1 7 2 2 9 3 8 . . . . . 5 . . . . . . . . . . . . . . . . . . . . . . 8 . . . 9 6 5 4 9 2
+2 3 7 7 2 2 8 5 0 3 5 3 1 0 3 1 8 9 3 7 2 8 3 0 1 4 9 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8 6 7 7 5 0 8
+4 0 4 3 5 0 4 1 7 3 6 8 2 4 2 8 2 9 1 4 8 3 2 5 1 2 6 1 . . . . . 1 . . . . . . . . . . . . . . . . . . 2 . . . 7 8 3 0 2 3 4 5
+6 7 8 7 1 1 2 7 1 0 6 2 1 5 7 6 4 4 1 2 5 9 4 9 7 2 4 7 4 . . . . . 5 . . . . . . . . . . . . . . . . . . 3 9 . 9 9 3 8 9 5 6 3
+9 4 2 7 7 7 4 4 6 4 9 1 5 7 8 0 1 0 5 4 3 6 0 6 0 9 4 7 9 7 . . . . . . . . . . . . . . . . . . . . . . . . 5 1 2 2 1 0 8 3 7 6
+9 1 1 7 9 8 3 5 7 0 0 5 2 8 0 1 6 4 4 7 5 4 7 1 7 2 0 5 0 0 8 9 4 . . . . . . . . . . . . . . . . . . 6 . 2 5 5 1 2 3 6 9 0 8 4
+8 5 6 2 4 7 0 8 5 0 5 6 0 5 4 2 7 8 3 6 3 7 9 8 1 8 4 1 6 1 2 0 . . . . . . . . 2 . . 9 . . . . . 2 0 0 . 5 4 4 7 2 1 9 8 5 6 6
+---------------------------
+
+Final placement cost : 6749184.0000
+  On-chip  comm cost : 22260200.0000
+  Off-chip comm cost : 27277207.0000
+  Chip placement     : [  61    1  129 ... 2699 2764  501]

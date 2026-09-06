@@ -400,6 +400,25 @@ if HAS_TORCH:
             for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
                 target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
+        def state_dict(self) -> dict:
+            """Everything needed to exactly resume this agent's networks/optimizers."""
+            return {
+                "actor": self.actor.state_dict(),
+                "actor_target": self.actor_target.state_dict(),
+                "critic": self.critic.state_dict(),
+                "critic_target": self.critic_target.state_dict(),
+                "actor_optimizer": self.actor_optimizer.state_dict(),
+                "critic_optimizer": self.critic_optimizer.state_dict(),
+            }
+
+        def load_state_dict(self, sd: dict) -> None:
+            self.actor.load_state_dict(sd["actor"])
+            self.actor_target.load_state_dict(sd["actor_target"])
+            self.critic.load_state_dict(sd["critic"])
+            self.critic_target.load_state_dict(sd["critic_target"])
+            self.actor_optimizer.load_state_dict(sd["actor_optimizer"])
+            self.critic_optimizer.load_state_dict(sd["critic_optimizer"])
+
 
 # ---------------------------------------------------------------------------
 # MultiChipCoreMapper (Translates continuous actions to discrete grid)
@@ -560,18 +579,35 @@ class MultiChipCoreMapper:
 
 def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int = 64,
              baseline_trials: int = 1000, batch_z: int = 3, train_every: int = 5,
-             device: str = None) -> float:
+             device: str = None, save_checkpoint: str = None, load_checkpoint: str = None,
+             checkpoint_every: int = 100) -> float:
     if not HAS_TORCH:
         print("[DDPG] torch not installed — falling back to random search")
         return run_random(env)
 
-    # Paper Algorithm 1: B is the latency of the best placement found by
-    # random search, computed once up front and held fixed as the reward
-    # normalizer. run_random() leaves env.placement mutated -- harmless,
-    # since every training episode starts with mapper.reset() -> env.reset().
-    print(f"[DDPG] Computing random-search baseline B ({baseline_trials} trials)...")
-    baseline_latency = run_random(env, n_trials=baseline_trials)
-    print(f"[DDPG] Baseline B = {baseline_latency:.4f}")
+    # CHECKPOINTING: if a checkpoint exists at load_checkpoint, resume from it
+    # instead of starting fresh -- restores the trained networks, optimizer
+    # state, best result so far, noise schedule position, and (importantly)
+    # the random-search baseline B, so resuming doesn't need to recompute an
+    # expensive baseline_trials pass or lose the point noise_scale decayed to.
+    checkpoint = None
+    if load_checkpoint is not None and os.path.exists(load_checkpoint):
+        print(f"[DDPG] Loading checkpoint from {load_checkpoint} ...")
+        checkpoint = torch.load(load_checkpoint, map_location="cpu")
+        baseline_latency = checkpoint["baseline_latency"]
+        print(f"[DDPG] Resuming from episode {checkpoint['episode']}, "
+              f"Baseline B = {baseline_latency:.4f} (loaded, not recomputed)")
+    else:
+        if load_checkpoint is not None:
+            print(f"[DDPG] --load_checkpoint {load_checkpoint} not found -- starting fresh "
+                  f"(it will be created at this path once training saves a checkpoint).")
+        # Paper Algorithm 1: B is the latency of the best placement found by
+        # random search, computed once up front and held fixed as the reward
+        # normalizer. run_random() leaves env.placement mutated -- harmless,
+        # since every training episode starts with mapper.reset() -> env.reset().
+        print(f"[DDPG] Computing random-search baseline B ({baseline_trials} trials)...")
+        baseline_latency = run_random(env, n_trials=baseline_trials)
+        print(f"[DDPG] Baseline B = {baseline_latency:.4f}")
 
     topo  = env.topo
     rows  = topo.rows_per_chip * topo.num_chips_y
@@ -591,11 +627,22 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     replay_buffer = ReplayBuffer()
     mapper = MultiChipCoreMapper(env, baseline_latency=baseline_latency, batch_z=batch_z)
 
-    best_cost = float('inf')
-    best_placement = None
-    best_grid = None
+    if checkpoint is not None:
+        agent.load_state_dict(checkpoint["agent"])
+        best_cost = checkpoint["best_cost"]
+        best_placement = checkpoint["best_placement"]
+        best_grid = checkpoint.get("best_grid")
+        noise_scale = checkpoint["noise_scale"]
+        global_step = checkpoint["global_step"]
+        start_episode = checkpoint["episode"]
+    else:
+        best_cost = float('inf')
+        best_placement = None
+        best_grid = None
+        noise_scale = 1.0
+        global_step = 0
+        start_episode = 0
 
-    noise_scale = 1.0
     # Decay so noise_scale reaches ~0.01 by 80% of training, regardless of
     # n_episodes -- a fixed 0.995 barely decays (~8% remaining) over a
     # 500-1000 episode run, which was masking whether the policy had
@@ -603,16 +650,33 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     target_episode = max(1, int(0.8 * n_episodes))
     noise_decay = 0.01 ** (1.0 / target_episode)
 
+    def _save_checkpoint(ep):
+        if save_checkpoint is None:
+            return
+        torch.save({
+            "agent": agent.state_dict(),
+            "best_cost": best_cost,
+            "best_placement": best_placement,
+            "best_grid": best_grid,
+            "noise_scale": noise_scale,
+            "global_step": global_step,
+            "episode": ep,
+            "baseline_latency": baseline_latency,
+        }, save_checkpoint)
+
     # PERF FIX: agent.train() previously ran on EVERY environment step
     # (num_tasks/batch_z steps per episode -- e.g. 302 for a 906-task
     # workload at batch_z=3), each a full actor+critic forward/backward
     # pass. train_every spaces these out; replay_buffer.add() still runs
     # every step so no experience is lost, just the gradient-update
     # frequency is reduced.
-    global_step = 0
     start_time = time.time()
 
-    for ep in range(1, n_episodes + 1):
+    if start_episode >= n_episodes:
+        print(f"[DDPG] Checkpoint episode ({start_episode}) already >= --epochs "
+              f"({n_episodes}) -- nothing to do. Raise --epochs to continue training.")
+
+    for ep in range(start_episode + 1, n_episodes + 1):
         state = mapper.reset()
         done = False
 
@@ -636,11 +700,19 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
 
         if ep % 10 == 0 or ep == n_episodes:
             elapsed = time.time() - start_time
-            per_ep = elapsed / ep
+            per_ep = elapsed / max(1, ep - start_episode)
             eta_sec = per_ep * (n_episodes - ep)
             eta_str = str(timedelta(seconds=int(eta_sec)))
             print(f"# of epochs: {ep:4d} | Current Cost: {final_cost:.2f} | "
                   f"Best Cost: {best_cost:.2f} | {per_ep:.2f}s/ep | ETA: {eta_str}")
+
+        if save_checkpoint is not None and ep % checkpoint_every == 0:
+            _save_checkpoint(ep)
+            print(f"[DDPG] Checkpoint saved to {save_checkpoint} (episode {ep})")
+
+    if save_checkpoint is not None and n_episodes > start_episode:
+        _save_checkpoint(n_episodes)
+        print(f"[DDPG] Final checkpoint saved to {save_checkpoint}")
 
     if best_grid:
         print("--- Current Best Layout ---")
@@ -716,6 +788,23 @@ def main():
                          help="Number of logic cores placed per DDPG action, "
                               "per the paper's batched action [x1,y1,...,xz,yz] "
                               "(Sec 3.2). Clamped to num_tasks if larger.")
+    parser.add_argument("--save_checkpoint", type=str, default=None,
+                         help="Path to save a DDPG checkpoint (networks, optimizer state, "
+                              "best result, noise schedule position, baseline B) every "
+                              "--checkpoint_every episodes and once more at the end. "
+                              "Without this, nothing persists between runs -- each run "
+                              "starts from scratch.")
+    parser.add_argument("--load_checkpoint", type=str, default=None,
+                         help="Path to resume training from a previously saved checkpoint. "
+                              "If the file doesn't exist yet, training starts fresh and "
+                              "will create it (combine with --save_checkpoint pointing to "
+                              "the same path to make a run resumable from itself). Note: "
+                              "the replay buffer is NOT persisted -- resumed training keeps "
+                              "the trained networks and progress, but refills experience "
+                              "from an empty buffer.")
+    parser.add_argument("--checkpoint_every", type=int, default=100,
+                         help="Save a checkpoint every N episodes (only used with "
+                              "--save_checkpoint).")
     parser.add_argument("--train_every", type=int, default=5,
                          help="Run one DDPG gradient update every N environment "
                               "steps instead of every step. Experience is still "
@@ -814,7 +903,10 @@ def main():
     if args.algo == "ddpg":
         cost = run_ddpg(env, n_episodes=args.epochs, batch_z=args.batch_z,
                          baseline_trials=args.baseline_trials,
-                         train_every=args.train_every, device=args.device)
+                         train_every=args.train_every, device=args.device,
+                         save_checkpoint=args.save_checkpoint,
+                         load_checkpoint=args.load_checkpoint,
+                         checkpoint_every=args.checkpoint_every)
     elif args.algo == "sa":
         cost = run_sa(env, n_iter=args.iters)
     else:
