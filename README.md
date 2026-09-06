@@ -1428,406 +1428,347 @@ Evaluate Improvement
 
 ---
 
-# 41. Planned Paper-Faithful Improvements
 
-The remaining reproduction work includes:
+# 41. Planned Paper-Faithful Improvements — Status Update
 
-## 1. Real DNN workloads
+The four items originally listed here have each moved forward, at different paces:
 
-Replace:
+## 1. Real DNN workloads — DONE for AlexNet/VGG16, PARTIAL for ResNet50
 
-```text
-SimpleCNN
-```
-
-with real architectures such as:
+`SimpleCNN` has been replaced by a generalized extractor (`extract_model_task_graph`) that pulls
+real architectures via `torchvision`:
 
 ```text
-AlexNet
-VGG16
-ResNet50
+--model alexnet    # fully accurate — purely sequential, hooks capture true data flow
+--model vgg16      # fully accurate — purely sequential, hooks capture true data flow
+--model resnet50   # RUNS, but topologically approximate (see caveat below)
+--model simple     # original small demo CNN, kept for fast smoke tests
 ```
 
-and generate the corresponding partitioned task graphs.
+Each Conv2d/Linear layer is still partitioned into VMM (vector-matrix-multiply) + VVA
+(vector-vector-accumulation) logic cores per Sec 3.1.1 / Fig. 5-6, not just extracted whole-layer.
+
+**Known caveat — ResNet50's skip connections:** the extractor uses forward hooks, which observe
+Conv2d/Linear *call order* but not the actual `add()` operation that merges a skip branch back into
+the main path. Every real layer and its shape are captured correctly, but the Bottleneck block's
+shortcut edges are currently approximated as if the network were a plain sequential chain. This is
+flagged with an explicit runtime warning whenever `--model resnet50` is used. Fixing this properly
+requires tracing the real computational graph (e.g. via `torch.fx`) instead of relying on hook order
+— not yet implemented.
+
+## 2. Exact paper topology — PARTIAL
+
+The multi-chip grid is fully configurable (`--chips_x`, `--chips_y`, `--rows`, `--cols`), and has been
+run at the paper's actual real-system config: **4×4 chips × 16×16 cores/chip = 4,096 total cores**
+(Table 1). The hierarchical on-chip/off-chip latency model (`comm_cost()`) uses Manhattan routing with
+configurable α (on-chip) / β (off-chip) latencies, matching the paper's Sec 2.2 model conceptually
+with the same default ratio (α=1.0, β=5.0).
+
+**Not yet done:** converting the paper's *measured* bandwidth figures (100 GB/s off-chip, 64 GB/s
+per-core NoC, Table 1) into precise α/β latency values — we're currently using the paper's
+illustrative default ratio, not a value derived from their actual hardware numbers.
+
+## 3. Exact exploration mechanism — NOT DONE
+
+Still uses plain Gaussian exploration noise, not the paper's Ornstein-Uhlenbeck process with a fading
+factor. What *has* been fixed is the decay schedule itself — it's now scaled to reach ~0.01 by 80% of
+training regardless of episode count (previously a fixed `0.995` barely decayed over a short run,
+masking whether the policy had actually converged). That's a correctness fix to the existing
+mechanism, not a replacement of the mechanism itself. Implementing real OU noise is still open.
+
+## 4. Training procedure — PARTIAL
+
+| Paper (Table 1 / Algorithm 1) | Current implementation |
+|---|---|
+| `r_t = √B − √L(P)`, sparse, terminal-only | ✅ Matches exactly (Algorithm 1, line 11) |
+| Minibatch size K=64 | ✅ Matches |
+| `L(P) = max_k T(k|P)` (Eq. 4, bottleneck) | ✅ Matches (was previously a flat sum — fixed) |
+| `α_θ=0.0002, α_w=0.001, γ=0.98` | ⚠️ Currently `1e-4, 1e-3, 0.99` — close, not identical |
+| Action batches z logic cores at once | ✅ Matches (`--batch_z`) |
+| Evaluate DDPG/BS/RS/SA on identical cost fn | ✅ Enforced — see Section 42 |
+| Ornstein-Uhlenbeck + fading factor | ❌ Still plain Gaussian |
+| 5-seed averaging (Sec 4.5, Fig. 20) | ⚠️ `--seed` supported per-run; multi-seed averaging loop not yet automated |
 
 ---
 
-## 2. Exact paper topology
+# 42. Baseline Validation — Status: Enforced
 
-Validate and reproduce the exact:
-
-* Number of chips
-* Cores per chip
-* Inter-chip communication model
-* On-chip communication model
-* Routing assumptions
-
-specified in the paper.
+This principle is now structurally guaranteed, not just aspirational: `DDPGAgent`, `run_sa()`, and
+`run_random()` all call `env.evaluate()`, which resolves to the same `pipeline_latency()` function
+(the paper's Eq. 4 bottleneck objective) regardless of which algorithm is calling it. There is no
+separate cost function per algorithm — comparisons between DDPG/RS/SA are apples-to-apples by
+construction.
 
 ---
 
-## 3. Exact exploration mechanism
+# 43. Paper Performance Validation — Actual Measured Results So Far
 
-Implement the paper's:
+The reference values below remain **paper targets**, not yet reproduced targets — no run so far has
+matched the paper's exact workload, topology-derived latencies, exploration mechanism, and training
+budget simultaneously. What we do have now are real, completed (or in-progress) experimental runs
+that validate the *mechanics* are working correctly:
+
+| Run | Workload | Grid | Episodes | Baseline B (random search) | Best DDPG cost | Result |
+|---|---|---|---|---|---|---|
+| ✅ Completed | SimpleCNN, 906 partitioned logic cores (`channels_per_partition=8`) | 4,096 cores | 10,000 (~8.7 real hrs) | 444,416 | 340,992 | **~23.3% reduction** vs. random-search baseline |
+| 🔄 In progress | AlexNet, 1,445 partitioned logic cores (`channels_per_partition=128`) | 4,096 cores | 1,000 (~2.5 hr ETA) | 12,697,984 | trending down (14.6M best after 10 epochs) | not yet final |
+| ⏳ Extraction validated, not yet trained | VGG16, 1,616 partitioned logic cores (`channels_per_partition=128`) | 4,096 cores | — | — | — | — |
+| ❌ Not yet attempted | ResNet50 | — | — | — | — | blocked on skip-connection caveat above |
+
+The completed SimpleCNN run's ~23% improvement is directionally consistent with the paper's own
+random-search-relative results (paper reports 1.61x/38.4% average improvement over RS across its
+three real workloads), but should be read as **evidence the RL pipeline is mechanically correct and
+learns effectively**, not as a reproduction of any specific paper number — different workload, and
+several Section 41 gaps (exploration mechanism, exact hyperparameters, exact latency values) are
+still open.
 
 ```text
-Ornstein-Uhlenbeck process
+DDPG (paper) : 50.5% latency reduction  ]
+BS   (paper) : 38.4% latency reduction  ]  reference targets, not yet matched
+RS   (paper) : 18.6% latency reduction  ]
 ```
-
-and fading factor.
-
----
-
-## 4. Training procedure
-
-Match the paper's:
-
-* Training budget
-* Batch configuration
-* Learning rates
-* Exploration schedule
-* Reward formulation
-* Evaluation methodology
-
-as closely as possible.
-
----
-
-# 42. Baseline Validation
-
-The final reproduction experiment should compare:
-
-```text
-DDPG
-Random Search
-Simulated Annealing
-```
-
-using exactly the same:
-
-* Workload
-* Hardware
-* Communication model
-* Objective
-* Evaluation procedure
-
-The important principle is:
-
-> Every algorithm must be evaluated using the same cost function.
-
-Otherwise, improvements in the reported numbers cannot be attributed confidently to the placement algorithm.
-
----
-
-# 43. Paper Performance Validation
-
-The paper reports substantial latency improvements for its placement methods.
-
-Previously discussed reference values include approximately:
-
-```text
-DDPG : 50.5% latency reduction
-BS   : 38.4% latency reduction
-RS   : 18.6% latency reduction
-```
-
-These numbers should be treated as **paper reference targets**, not as results reproduced by this repository yet.
-
-The purpose of the reproduction stage is to determine how closely the current implementation can reproduce these trends under the same experimental assumptions.
 
 ---
 
 # 44. Future Research / Genuine Improvements
 
-Once the paper baseline is reproduced, the project can move beyond reproduction.
-
-Potential contributions include:
-
-## Graph-Based RL
-
-Use the complete DNN DAG directly rather than relying primarily on a flattened state.
-
-Possible architecture:
-
-```text
-DNN Task Graph
-      |
-      v
-     GCN
-      |
-      v
-Task Embeddings
-      |
-      v
- Actor / Critic
-      |
-      v
-Core Placement
-```
-
-This direction is particularly relevant because DNN workloads are naturally graph-structured.
+Unchanged in spirit from the original plan — GCN embeddings, attention-based placement,
+topology-generalization, and modern architecture evaluation remain the right next research
+directions once baseline reproduction is solid. One addition worth noting: **graph-structure-aware
+methods (GCN/attention) will have limited demonstrable advantage until the workload graphs
+themselves are structurally accurate** — AlexNet/VGG16 are genuinely sequential chains (a GCN adds
+little over a chain-aware MLP), and ResNet50's *actual* branching structure isn't captured yet (see
+Section 41.1). Item 4 in this section — modern architectures with real branching/attention structure
+— and the graph-based RL direction are therefore linked: fixing ResNet50's extraction is close to a
+prerequisite for meaningfully evaluating GCN-based placement.
 
 ---
 
-## Attention-Based Placement
-
-A possible extension is to use attention mechanisms to determine which tasks and physical regions are most important for the current placement decision.
-
-For example:
-
-```text
-Task Graph
-    |
-    v
-Graph Encoder
-    |
-    v
-Attention
-    |
-    v
-Placement Policy
-```
-
-This could improve over a fixed-size MLP representation.
-
----
-
-## Topology-Generalized Placement
-
-The current project focuses on grid-based multi-chip architectures.
-
-A future extension could investigate:
-
-```text
-2D Mesh
-2D Torus
-HNoC
-Dragonfly
-```
-
-and other interconnect structures.
-
-The objective would be to learn a placement strategy that is not tightly coupled to one topology.
-
----
-
-## Modern DNN Architectures
-
-The project can eventually be evaluated on:
-
-```text
-CNNs
-ResNets
-Transformers
-Modern hybrid architectures
-```
-
-This would test whether the learned placement strategy generalizes beyond the sequential CNN workloads emphasized in the original work.
-
----
-
-# 45. Example Commands
+# 45. Example Commands (Updated, All Currently Working)
 
 ### Run tests
-
 ```bash
 python3 test_multi_chip.py
 ```
+7 checks: topology, environment, pipeline latency/objective, collision resolution, batched actions,
+CNN workload partitioning (torchvision models included), and SA-vs-random sanity check.
 
-### Small DDPG run
-
+### Small smoke test (SimpleCNN, default 64-core grid)
 ```bash
-python3 run_multi_chip.py \
-    --algo ddpg \
-    --use_cnn
+python3 run_multi_chip.py --algo ddpg --use_cnn --epochs 50
 ```
 
-### Legacy layer-level workload
-
+### Legacy whole-layer workload (no partitioning, for quick debugging)
 ```bash
-python3 run_multi_chip.py \
-    --algo ddpg \
-    --use_cnn \
-    --channels_per_partition 0
+python3 run_multi_chip.py --algo ddpg --use_cnn --channels_per_partition 0
 ```
 
-### Partitioned CNN workload
-
+### Partitioned SimpleCNN workload (906 logic cores)
 ```bash
-python3 run_multi_chip.py \
-    --algo ddpg \
-    --use_cnn \
-    --channels_per_partition 8
+python3 run_multi_chip.py --algo ddpg --use_cnn --channels_per_partition 8 \
+    --chips_x 4 --chips_y 4 --rows 16 --cols 16
 ```
 
-### Seeded experiment
-
+### Real AlexNet workload at paper-scale grid (validated, ~9.4s/episode on a 12-core CPU)
 ```bash
-python3 run_multi_chip.py \
-    --algo ddpg \
-    --use_cnn \
-    --seed 0
+python3 run_multi_chip.py --algo ddpg --use_cnn --model alexnet --channels_per_partition 128 \
+    --chips_x 4 --chips_y 4 --rows 16 --cols 16 --epochs 1000 --seed 0 --batch_z 3
 ```
 
-### Current large-scale experiment
-
+### Real VGG16 workload (extraction validated; not yet run to completion)
 ```bash
-python3 run_multi_chip.py \
-    --algo ddpg \
-    --use_cnn \
-    --epochs 10000 \
-    --seed 0 \
-    --batch_z 3 \
-    --chips_x 4 \
-    --chips_y 4 \
-    --rows 16 \
-    --cols 16
+python3 run_multi_chip.py --algo ddpg --use_cnn --model vgg16 --channels_per_partition 128 \
+    --chips_x 4 --chips_y 4 --rows 16 --cols 16 --epochs 1000 --seed 0 --batch_z 3
 ```
 
-**Note:** The large-scale command should currently be considered an experimental command rather than a recommended long-running command until the runtime optimizations are completed.
+### ResNet50 (experimental — sequential-approximation caveat applies, see Sec 41.1)
+```bash
+python3 run_multi_chip.py --algo ddpg --use_cnn --model resnet50 --channels_per_partition 128 \
+    --chips_x 4 --chips_y 4 --rows 16 --cols 16 --epochs 1000 --seed 0 --batch_z 3
+```
+
+### Performance-tuned large-scale run (recommended flags for anything above ~500 tasks)
+```bash
+python3 run_multi_chip.py --algo ddpg --use_cnn --model alexnet --channels_per_partition 128 \
+    --chips_x 4 --chips_y 4 --rows 16 --cols 16 --epochs 10000 --seed 0 \
+    --batch_z 3 --train_every 5 --device cpu
+```
+`--train_every 5` runs one gradient update per 5 environment steps instead of every step (experience
+is still recorded every step) — this was the single biggest lever once the sparse pipeline-latency fix
+was in place. `--device` auto-detects CUDA if available; explicit `cpu`/`cuda` override supported.
+
+### Reproducible single run
+```bash
+python3 run_multi_chip.py --algo ddpg --use_cnn --model alexnet --seed 0
+```
+
+### Multi-seed averaging (matches the paper's own Sec 4.5 / Fig. 20 methodology)
+```bash
+for s in 0 1 2 3 4; do
+    python3 run_multi_chip.py --algo ddpg --use_cnn --model alexnet \
+        --channels_per_partition 128 --chips_x 4 --chips_y 4 --rows 16 --cols 16 \
+        --epochs 1000 --seed $s --batch_z 3 --train_every 5 \
+        | tee "log_seed${s}.txt"
+done
+```
+The paper itself doesn't rely on a single fixed seed — it runs 5 seeds and averages (Fig. 20). This
+loop is the mechanism to do the same; results still need to be aggregated by hand/script afterward.
 
 ---
 
 # 46. Development Status
 
 ### Current stage
-
-**Paper reproduction + scalability engineering**
+**Paper reproduction + scalability engineering** — substantially further along than the previous
+snapshot, with the core RL mechanics now verified paper-faithful and real workloads now supported.
 
 ### Working
+* Core mapping environment, multi-chip topology, DDPG training framework
+* CNN extraction generalized to real `torchvision` models (AlexNet, VGG16 — fully accurate; ResNet50
+  — runs, topologically approximate)
+* Channel-partitioned VMM/VVA logic core generation (Sec 3.1.1, Fig. 5-6)
+* **Paper's exact bottleneck pipeline-latency objective** (Eq. 4) — replaced an earlier
+  total-summed-cost implementation
+* **Sparse, baseline-normalized reward** (`r_t = √B − √L(P)`, Algorithm 1 line 11) — replaced an
+  earlier dense per-step reward
+* **Manhattan-distance collision resolution** with correct floor/intended-core/tie-break logic
+  (Sec 3.2) — replaced an earlier Euclidean whole-grid scan
+* **Batched action placement** (z logic cores per action, Sec 3.2)
+* **Task-identity-encoded state representation** (occupied cores show *which* task, not just
+  occupied/free) plus bidirectional (incoming+outgoing) communication features — this was found to
+  be the root cause of an early training plateau and fixing it produced measurably better
+  convergence
+* Reproducible seeding across random/numpy/torch (`--seed`)
+* Sparse/cached pipeline evaluation — ~19.4x measured speedup over the original dense O(n²) scan
+* Reduced-frequency DDPG training (`--train_every`)
+* GPU auto-detection + CPU thread-count fix for CPU-only machines
+* Live per-episode timing + ETA reporting
+* Pre-flight grid-size/task-count validation (fails fast with a clear fix instead of crashing deep
+  in placement code)
+* Consistent same-cost-function baseline comparison (RS/SA/DDPG) — see Section 42
+* Smoke test suite covering all of the above (7 checks)
 
-* Core mapping environment
-* Multi-chip topology
-* DDPG training framework
-* CNN extraction
-* Channel partitioning
-* VMM/VVA task generation
-* Pipeline objective
-* Collision resolution
-* State representation improvements
-* Baseline algorithms
-* Smoke tests
-
-### Currently being worked on
-
-* Large-scale runtime optimization
-* Efficient pipeline-latency computation
-* GPU/device support
-* Efficient DDPG update scheduling
-* Real DNN workloads
-* Exact paper configuration
-* Full paper-result reproduction
+### Currently being worked on / known next steps
+* **State-construction performance**: `_occ_map()` still has an unvectorized Python loop scaling
+  with `num_tasks`, identified as the likely remaining per-step bottleneck at real-workload scale
+  (e.g. AlexNet's 1,445 tasks) — not yet fixed
+* Ornstein-Uhlenbeck exploration noise + fading factor (paper's exact mechanism)
+* Exact hyperparameter alignment with Table 1 (`α_θ=0.0002, α_w=0.001, γ=0.98`)
+* Completing VGG16 and ResNet50 training runs
+* `torch.fx`-based exact skip-connection graph extraction for ResNet50
+* Converting the paper's measured bandwidth figures into precise α/β latency values
 
 ### Not yet claimed
-
-* Exact reproduction of all paper results
-* Novel RL algorithm
-* State-of-the-art performance
-* Full ResNet50/Transformer evaluation
-* Definitive improvement over the 2020 paper
+* Exact reproduction of the paper's reported percentages (50.5% / 38.4% / 18.6%)
+* A novel RL algorithm or architectural improvement over the paper (actor/critic are still MLPs, not
+  the paper's CNN, and not yet the GCN/attention future-research directions)
+* A topologically-exact ResNet50 evaluation
+* Multi-seed statistical validation in the paper's own style (Fig. 20)
+* GA baseline, topology-agnostic (2D torus/HNoC/dragonfly), or RNN-workload experiments — none
+  implemented yet
 
 ---
 
 # 47. Research Philosophy
 
-The project follows a strict two-stage methodology:
-
-### Reproduce first
-
-```text
-Paper
-  ↓
-Faithful implementation
-  ↓
-Controlled experiments
-  ↓
-Baseline results
-```
-
-### Improve second
+Unchanged — this two-stage methodology remains the right frame, and the project is now solidly
+inside the "faithful implementation → controlled experiments" phase of the reproduce-first stage,
+with real baseline results (Section 43) starting to accumulate.
 
 ```text
-Validated baseline
-       ↓
-Identify limitation
-       ↓
-Propose modification
-       ↓
-Implement modification
-       ↓
-Controlled comparison
-       ↓
-Measure improvement
-```
+Reproduce first
+Paper → Faithful implementation → Controlled experiments → Baseline results
 
-This prevents changes that merely make the implementation different from the paper from being incorrectly presented as research contributions.
+Improve second
+Validated baseline → Identify limitation → Propose modification →
+Implement modification → Controlled comparison → Measure improvement
+```
 
 ---
 
 # 48. Acknowledgement
 
-The project builds upon the original open-source implementation:
-
-**Core Placement with Reinforcement Learning**
-
-and extends it toward a more complete multi-chip DNN mapping framework based on the methodology described in the associated 2020 research work.
-
-The current repository should therefore be viewed as an **ongoing research/reproduction implementation**, rather than a finished reproduction of the original paper.
+Unchanged. The project builds upon the original open-source implementation *Core Placement with
+Reinforcement Learning* and extends it toward a more complete multi-chip DNN mapping framework based
+on the 2020 ACM TODAES paper's methodology. The current repository should be viewed as an ongoing
+research/reproduction implementation, not a finished reproduction.
 
 ---
 
 # 49. Current Experimental Snapshot
 
-The latest validated large-workload extraction produced:
-
 ```text
-CNN workload                 : SimpleCNN
-Partition size               : 8 channels
-Logic cores generated        : 906
-Placement algorithm          : DDPG
-Action batching              : 3 tasks/action
-Random seed                  : 0
-Multi-chip configuration     : 4 × 4 chips
-Cores per chip               : 16 × 16
-Total physical cores         : 4096
+=== Completed run ===
+CNN workload                 : SimpleCNN (channel-partitioned)
+Partition size                : 8 channels/group
+Logic cores generated         : 906
+Placement algorithm           : DDPG
+Action batching                : 3 tasks/action
+Random seed                   : 0
+Multi-chip configuration      : 4 x 4 chips
+Cores per chip                : 16 x 16
+Total physical cores          : 4096
+Training episodes             : 10,000 (completed in ~8.7 real hours, ~3.11s/episode)
+Random-search baseline (B)    : 444,416
+Best DDPG placement cost      : 340,992
+Improvement over baseline     : ~23.3%
+
+=== In-progress run ===
+CNN workload                  : AlexNet (torchvision, channel-partitioned)
+Partition size                 : 128 channels/group
+Logic cores generated          : 1,445
+Multi-chip configuration       : 4 x 4 chips, 16 x 16 cores/chip (4096 cores)
+Training episodes requested    : 1,000 (~2.5 hr ETA at 9.38s/episode)
+Random-search baseline (B)     : 12,697,984
+Status                         : running, best cost trending down (14.6M after 10 epochs)
+
+=== Extraction validated, training not yet run ===
+VGG16 at channels_per_partition=128 -> 1,616 logic cores (fits 4096-core grid)
+ResNet50 workload extraction runs but is topologically approximate (skip connections
+not captured — see Section 41.1)
 ```
 
-The large-scale run successfully reached the training stage and produced a random-search baseline:
-
-```text
-Baseline B = 444416
-```
-
-but training performance was too slow for a practical 10,000-episode run.
-
-Therefore, the **next immediate engineering objective is runtime optimization**, after which the large-scale experiment can be rerun under controlled conditions.
+The immediate next engineering objective is finishing the AlexNet run, then vectorizing the
+remaining `_occ_map()` bottleneck before attempting VGG16/ResNet50 at similar scale, since those
+workloads only get bigger.
 
 ---
 
 # 50. Summary
 
-This project investigates how reinforcement learning can be used to solve the difficult **DNN-to-many-core placement problem**.
-
-The implementation has progressed from a small task-level mapping framework to a much more realistic system containing:
+This project investigates how reinforcement learning can be used to solve the DNN-to-many-core
+placement problem. The implementation has progressed substantially since the last snapshot — from a
+small task-level mapping framework with several silent deviations from the paper's actual algorithm,
+to a validated pipeline that:
 
 ```text
-DNN
- ↓
-CNN extraction
- ↓
-Channel partitioning
- ↓
-VMM/VVA logic cores
- ↓
+Real DNN (AlexNet / VGG16 / [ResNet50, approximate])
+ |
+ v
+Hook-based extraction
+ |
+ v
+Channel partitioning (VMM / VVA logic cores)
+ |
+ v
 Communication DAG
- ↓
-Multi-chip environment
- ↓
-DDPG placement
- ↓
-Pipeline latency evaluation
+ |
+ v
+Multi-chip environment (paper-scale: 4096 cores)
+ |
+ v
+DDPG placement (batched actions, task-identity-aware state)
+ |
+ v
+Pipeline bottleneck-latency evaluation (Eq. 4)
+ |
+ v
+Sparse, baseline-normalized reward (Algorithm 1)
 ```
 
-The current implementation is substantially closer to the 2020 paper than the original starting repository, but the work is still in the **reproduction/validation stage**.
-
-The immediate priority is to make the 906-task experiment computationally practical, then integrate the paper's real workloads and exact configuration, reproduce the reported baselines, and finally introduce and evaluate genuinely novel improvements.
+Every stage of that pipeline has now been individually checked against the paper's text and
+validated with passing tests, and the first full-scale training run produced a real, credible
+improvement over a random-search baseline computed under the identical cost function. The project is
+still in the reproduction/validation stage — the paper's exact reported numbers haven't been matched
+yet, and several concrete, well-understood gaps remain (Section 46) — but it is meaningfully closer
+to a faithful reproduction than a "different implementation that happens to solve a similar problem."

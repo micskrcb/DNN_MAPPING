@@ -1,3 +1,484 @@
-git add .
-git commit -m "made it faster"
-git push
+# of epochs: 6520 | Current Cost: 647168.00 | Best Cost: 372224.00 | 2.95s/ep | ETA: 2:51:21
+# of epochs: 6530 | Current Cost: 557056.00 | Best Cost: 372224.00 | 2.95s/ep | ETA: 2:50:53
+# of epochs: 6540 | Current Cost: 737280.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:50:25
+# of epochs: 6550 | Current Cost: 548864.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:49:58
+# of epochs: 6560 | Current Cost: 524288.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:49:30
+# of epochs: 6570 | Current Cost: 712704.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:49:02
+# of epochs: 6580 | Current Cost: 540672.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:48:35
+# of epochs: 6590 | Current Cost: 671744.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:48:09
+# of epochs: 6600 | Current Cost: 581632.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:47:41
+# of epochs: 6610 | Current Cost: 565248.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:47:13
+# of epochs: 6620 | Current Cost: 581632.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:46:46
+# of epochs: 6630 | Current Cost: 753664.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:46:18
+# of epochs: 6640 | Current Cost: 638976.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:45:50
+# of epochs: 6650 | Current Cost: 753664.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:45:23
+# of epochs: 6660 | Current Cost: 606208.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:44:55
+# of epochs: 6670 | Current Cost: 638976.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:44:27
+# of epochs: 6680 | Current Cost: 614400.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:43:59
+# of epochs: 6690 | Current Cost: 548864.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:43:31
+# of epochs: 6700 | Current Cost: 548864.00 | Best Cost: 372224.00 | 2.96s/ep | ETA: 2:43:03
+# of epochs: 6710 | Current Cost: 540672.00 | Best Cost: 372224.00 | 2.97s/ep | ETA: 2:42:36
+# of epochs: 6720 | Current Cost: 516096.00 | Best Cost: 372224.00 | 2.97s/ep | ETA: 2:42:09
+# of epochs: 6730 | Current Cost: 679936.00 | Best Cost: 372224.00 | 2.97s/ep | ETA: 2:41:42
+# of epochs: 6740 | Current Cost: 598016.00 | Best Cost: 372224.00 | 2.97s/ep | ETA: 2:41:14
+# of epochs: 6750 | Current Cost: 483328.00 | Best Cost: 372224.00 | 2.97s/ep | ETA: 2:40:46
+# of epochs: 6760 | Current Cost: 557056.00 | Best Cost: 372224.00 | 2.97s/ep | ETA: 2:40:20
+# of epochs: 6770 | Current Cost: 712704.00 | Best Cost: 372224.00 | 2.97s/ep | ETA: 2:39:54
+# of epochs: 6780 | Current Cost: 540672.00 | Best Cost: 372224.00 | 2.97s/ep | ETA: 2:39:27
+# of epochs: 6790 | Current Cost: 598016.00 | Best Cost: 372224.00 | 2.97s/ep | ETA: 2:39:00
+# of epochs: 6800 | Current Cost: 679936.00 | Best Cost: 372224.00 | 2.97s/ep | ETA: 2:38:32
+# of epochs: 6810 | Current Cost: 589824.00 | Best Cost: 372224.00 | 2.97s/ep | ETA: 2:38:07
+# of epochs: 6820 | Current Cost: 565248.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:37:40
+# of epochs: 6830 | Current Cost: 638976.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:37:12
+# of epochs: 6840 | Current Cost: 524288.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:36:44
+# of epochs: 6850 | Current Cost: 647168.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:36:17
+# of epochs: 6860 | Current Cost: 704512.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:35:49
+# of epochs: 6870 | Current Cost: 548864.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:35:22
+# of epochs: 6880 | Current Cost: 638976.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:34:55
+# of epochs: 6890 | Current Cost: 663552.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:34:27
+# of epochs: 6900 | Current Cost: 647168.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:33:58
+# of epochs: 6910 | Current Cost: 606208.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:33:30
+# of epochs: 6920 | Current Cost: 786432.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:33:02
+# of epochs: 6930 | Current Cost: 712704.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:32:34
+# of epochs: 6940 | Current Cost: 606208.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:32:05
+# of epochs: 6950 | Current Cost: 655360.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:31:38
+# of epochs: 6960 | Current Cost: 524288.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:31:09
+# of epochs: 6970 | Current Cost: 622592.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:30:41
+# of epochs: 6980 | Current Cost: 712704.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:30:12
+# of epochs: 6990 | Current Cost: 671744.00 | Best Cost: 372224.00 | 2.98s/ep | ETA: 2:29:44
+# of epochs: 7000 | Current Cost: 573440.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:29:16
+# of epochs: 7010 | Current Cost: 540672.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:28:48
+# of epochs: 7020 | Current Cost: 581632.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:28:20
+# of epochs: 7030 | Current Cost: 483328.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:27:51
+# of epochs: 7040 | Current Cost: 638976.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:27:23
+# of epochs: 7050 | Current Cost: 737280.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:26:54
+# of epochs: 7060 | Current Cost: 745472.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:26:27
+# of epochs: 7070 | Current Cost: 606208.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:25:59
+# of epochs: 7080 | Current Cost: 704512.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:25:30
+# of epochs: 7090 | Current Cost: 557056.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:25:02
+# of epochs: 7100 | Current Cost: 589824.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:24:34
+# of epochs: 7110 | Current Cost: 507904.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:24:05
+# of epochs: 7120 | Current Cost: 548864.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:23:37
+# of epochs: 7130 | Current Cost: 671744.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:23:08
+# of epochs: 7140 | Current Cost: 753664.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:22:40
+# of epochs: 7150 | Current Cost: 638976.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:22:12
+# of epochs: 7160 | Current Cost: 663552.00 | Best Cost: 372224.00 | 2.99s/ep | ETA: 2:21:44
+# of epochs: 7170 | Current Cost: 786432.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:21:16
+# of epochs: 7180 | Current Cost: 507904.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:20:47
+# of epochs: 7190 | Current Cost: 606208.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:20:19
+# of epochs: 7200 | Current Cost: 638976.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:19:51
+# of epochs: 7210 | Current Cost: 712704.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:19:24
+# of epochs: 7220 | Current Cost: 638976.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:18:55
+# of epochs: 7230 | Current Cost: 671744.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:18:27
+# of epochs: 7240 | Current Cost: 819200.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:17:58
+# of epochs: 7250 | Current Cost: 524288.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:17:30
+# of epochs: 7260 | Current Cost: 540672.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:17:01
+# of epochs: 7270 | Current Cost: 647168.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:16:33
+# of epochs: 7280 | Current Cost: 638976.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:16:04
+# of epochs: 7290 | Current Cost: 557056.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:15:36
+# of epochs: 7300 | Current Cost: 483328.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:15:07
+# of epochs: 7310 | Current Cost: 737280.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:14:39
+# of epochs: 7320 | Current Cost: 622592.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:14:10
+# of epochs: 7330 | Current Cost: 647168.00 | Best Cost: 372224.00 | 3.00s/ep | ETA: 2:13:42
+# of epochs: 7340 | Current Cost: 638976.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:13:13
+# of epochs: 7350 | Current Cost: 573440.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:12:45
+# of epochs: 7360 | Current Cost: 548864.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:12:16
+# of epochs: 7370 | Current Cost: 499712.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:11:47
+# of epochs: 7380 | Current Cost: 819200.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:11:19
+# of epochs: 7390 | Current Cost: 581632.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:10:51
+# of epochs: 7400 | Current Cost: 573440.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:10:22
+# of epochs: 7410 | Current Cost: 647168.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:09:53
+# of epochs: 7420 | Current Cost: 638976.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:09:25
+# of epochs: 7430 | Current Cost: 598016.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:08:56
+# of epochs: 7440 | Current Cost: 671744.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:08:27
+# of epochs: 7450 | Current Cost: 737280.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:08:00
+# of epochs: 7460 | Current Cost: 499712.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:07:32
+# of epochs: 7470 | Current Cost: 409600.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:07:03
+# of epochs: 7480 | Current Cost: 466944.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:06:34
+# of epochs: 7490 | Current Cost: 589824.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:06:05
+# of epochs: 7500 | Current Cost: 458752.00 | Best Cost: 372224.00 | 3.01s/ep | ETA: 2:05:36
+# of epochs: 7510 | Current Cost: 614400.00 | Best Cost: 372224.00 | 3.02s/ep | ETA: 2:05:07
+# of epochs: 7520 | Current Cost: 589824.00 | Best Cost: 372224.00 | 3.02s/ep | ETA: 2:04:38
+# of epochs: 7530 | Current Cost: 499712.00 | Best Cost: 372224.00 | 3.02s/ep | ETA: 2:04:09
+# of epochs: 7540 | Current Cost: 434176.00 | Best Cost: 372224.00 | 3.02s/ep | ETA: 2:03:40
+# of epochs: 7550 | Current Cost: 589824.00 | Best Cost: 372224.00 | 3.02s/ep | ETA: 2:03:12
+# of epochs: 7560 | Current Cost: 499712.00 | Best Cost: 372224.00 | 3.02s/ep | ETA: 2:02:44
+# of epochs: 7570 | Current Cost: 548864.00 | Best Cost: 372224.00 | 3.02s/ep | ETA: 2:02:15
+# of epochs: 7580 | Current Cost: 598016.00 | Best Cost: 372224.00 | 3.02s/ep | ETA: 2:01:46
+# of epochs: 7590 | Current Cost: 483328.00 | Best Cost: 372224.00 | 3.02s/ep | ETA: 2:01:18
+# of epochs: 7600 | Current Cost: 475136.00 | Best Cost: 372224.00 | 3.02s/ep | ETA: 2:00:48
+# of epochs: 7610 | Current Cost: 647168.00 | Best Cost: 372224.00 | 3.02s/ep | ETA: 2:00:19
+# of epochs: 7620 | Current Cost: 470528.00 | Best Cost: 372224.00 | 3.02s/ep | ETA: 1:59:50
+# of epochs: 7630 | Current Cost: 540672.00 | Best Cost: 372224.00 | 3.02s/ep | ETA: 1:59:21
+# of epochs: 7640 | Current Cost: 376832.00 | Best Cost: 354304.00 | 3.02s/ep | ETA: 1:58:52
+# of epochs: 7650 | Current Cost: 362496.00 | Best Cost: 354304.00 | 3.02s/ep | ETA: 1:58:23
+# of epochs: 7660 | Current Cost: 368640.00 | Best Cost: 340992.00 | 3.02s/ep | ETA: 1:57:53
+# of epochs: 7670 | Current Cost: 417792.00 | Best Cost: 340992.00 | 3.02s/ep | ETA: 1:57:24
+# of epochs: 7680 | Current Cost: 393216.00 | Best Cost: 340992.00 | 3.02s/ep | ETA: 1:56:55
+# of epochs: 7690 | Current Cost: 387072.00 | Best Cost: 340992.00 | 3.02s/ep | ETA: 1:56:26
+# of epochs: 7700 | Current Cost: 489472.00 | Best Cost: 340992.00 | 3.02s/ep | ETA: 1:55:57
+# of epochs: 7710 | Current Cost: 475136.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:55:28
+# of epochs: 7720 | Current Cost: 425984.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:54:58
+# of epochs: 7730 | Current Cost: 458752.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:54:29
+# of epochs: 7740 | Current Cost: 573440.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:54:00
+# of epochs: 7750 | Current Cost: 475136.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:53:30
+# of epochs: 7760 | Current Cost: 565248.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:53:01
+# of epochs: 7770 | Current Cost: 466944.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:52:32
+# of epochs: 7780 | Current Cost: 630784.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:52:02
+# of epochs: 7790 | Current Cost: 393216.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:51:33
+# of epochs: 7800 | Current Cost: 589824.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:51:04
+# of epochs: 7810 | Current Cost: 614400.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:50:34
+# of epochs: 7820 | Current Cost: 475136.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:50:05
+# of epochs: 7830 | Current Cost: 565248.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:49:36
+# of epochs: 7840 | Current Cost: 458752.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:49:06
+# of epochs: 7850 | Current Cost: 425984.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:48:37
+# of epochs: 7860 | Current Cost: 655360.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:48:07
+# of epochs: 7870 | Current Cost: 450560.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:47:38
+# of epochs: 7880 | Current Cost: 442368.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:47:09
+# of epochs: 7890 | Current Cost: 475136.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:46:40
+# of epochs: 7900 | Current Cost: 401408.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:46:10
+# of epochs: 7910 | Current Cost: 466944.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:45:41
+# of epochs: 7920 | Current Cost: 425984.00 | Best Cost: 340992.00 | 3.03s/ep | ETA: 1:45:11
+# of epochs: 7930 | Current Cost: 565248.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:44:42
+# of epochs: 7940 | Current Cost: 663552.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:44:13
+# of epochs: 7950 | Current Cost: 663552.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:43:44
+# of epochs: 7960 | Current Cost: 630784.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:43:14
+# of epochs: 7970 | Current Cost: 573440.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:42:44
+# of epochs: 7980 | Current Cost: 704512.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:42:15
+# of epochs: 7990 | Current Cost: 557056.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:41:45
+# of epochs: 8000 | Current Cost: 540672.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:41:16
+# of epochs: 8010 | Current Cost: 524288.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:40:46
+# of epochs: 8020 | Current Cost: 581632.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:40:16
+# of epochs: 8030 | Current Cost: 540672.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:39:46
+# of epochs: 8040 | Current Cost: 598016.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:39:17
+# of epochs: 8050 | Current Cost: 745472.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:38:47
+# of epochs: 8060 | Current Cost: 581632.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:38:17
+# of epochs: 8070 | Current Cost: 499712.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:37:47
+# of epochs: 8080 | Current Cost: 589824.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:37:18
+# of epochs: 8090 | Current Cost: 598016.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:36:48
+# of epochs: 8100 | Current Cost: 598016.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:36:18
+# of epochs: 8110 | Current Cost: 663552.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:35:48
+# of epochs: 8120 | Current Cost: 720896.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:35:18
+# of epochs: 8130 | Current Cost: 606208.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:34:49
+# of epochs: 8140 | Current Cost: 737280.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:34:19
+# of epochs: 8150 | Current Cost: 491520.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:33:49
+# of epochs: 8160 | Current Cost: 507904.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:33:20
+# of epochs: 8170 | Current Cost: 581632.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:32:50
+# of epochs: 8180 | Current Cost: 516096.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:32:20
+# of epochs: 8190 | Current Cost: 614400.00 | Best Cost: 340992.00 | 3.04s/ep | ETA: 1:31:50
+# of epochs: 8200 | Current Cost: 638976.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:31:21
+# of epochs: 8210 | Current Cost: 614400.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:30:51
+# of epochs: 8220 | Current Cost: 516096.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:30:21
+# of epochs: 8230 | Current Cost: 614400.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:29:51
+# of epochs: 8240 | Current Cost: 581632.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:29:21
+# of epochs: 8250 | Current Cost: 614400.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:28:51
+# of epochs: 8260 | Current Cost: 638976.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:28:22
+# of epochs: 8270 | Current Cost: 565248.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:27:52
+# of epochs: 8280 | Current Cost: 499712.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:27:22
+# of epochs: 8290 | Current Cost: 753664.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:26:53
+# of epochs: 8300 | Current Cost: 606208.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:26:23
+# of epochs: 8310 | Current Cost: 827392.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:25:53
+# of epochs: 8320 | Current Cost: 532480.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:25:23
+# of epochs: 8330 | Current Cost: 606208.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:24:53
+# of epochs: 8340 | Current Cost: 548864.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:24:23
+# of epochs: 8350 | Current Cost: 753664.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:23:53
+# of epochs: 8360 | Current Cost: 557056.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:23:23
+# of epochs: 8370 | Current Cost: 540672.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:22:54
+# of epochs: 8380 | Current Cost: 671744.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:22:24
+# of epochs: 8390 | Current Cost: 499712.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:21:54
+# of epochs: 8400 | Current Cost: 671744.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:21:24
+# of epochs: 8410 | Current Cost: 565248.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:20:54
+# of epochs: 8420 | Current Cost: 565248.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:20:24
+# of epochs: 8430 | Current Cost: 778240.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:19:54
+# of epochs: 8440 | Current Cost: 819200.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:19:24
+# of epochs: 8450 | Current Cost: 663552.00 | Best Cost: 340992.00 | 3.05s/ep | ETA: 1:18:54
+# of epochs: 8460 | Current Cost: 671744.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:18:24
+# of epochs: 8470 | Current Cost: 516096.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:17:55
+# of epochs: 8480 | Current Cost: 540672.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:17:25
+# of epochs: 8490 | Current Cost: 589824.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:16:55
+# of epochs: 8500 | Current Cost: 630784.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:16:25
+# of epochs: 8510 | Current Cost: 524288.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:15:55
+# of epochs: 8520 | Current Cost: 491520.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:15:25
+# of epochs: 8530 | Current Cost: 696320.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:14:55
+# of epochs: 8540 | Current Cost: 540672.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:14:25
+# of epochs: 8550 | Current Cost: 598016.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:13:55
+# of epochs: 8560 | Current Cost: 614400.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:13:25
+# of epochs: 8570 | Current Cost: 614400.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:12:55
+# of epochs: 8580 | Current Cost: 565248.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:12:25
+# of epochs: 8590 | Current Cost: 614400.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:11:54
+# of epochs: 8600 | Current Cost: 573440.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:11:25
+# of epochs: 8610 | Current Cost: 745472.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:10:55
+# of epochs: 8620 | Current Cost: 516096.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:10:25
+# of epochs: 8630 | Current Cost: 589824.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:09:55
+# of epochs: 8640 | Current Cost: 819200.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:09:24
+# of epochs: 8650 | Current Cost: 557056.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:08:54
+# of epochs: 8660 | Current Cost: 483328.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:08:24
+# of epochs: 8670 | Current Cost: 679936.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:07:54
+# of epochs: 8680 | Current Cost: 647168.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:07:24
+# of epochs: 8690 | Current Cost: 581632.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:06:54
+# of epochs: 8700 | Current Cost: 745472.00 | Best Cost: 340992.00 | 3.06s/ep | ETA: 1:06:24
+# of epochs: 8710 | Current Cost: 638976.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 1:05:53
+# of epochs: 8720 | Current Cost: 540672.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 1:05:23
+# of epochs: 8730 | Current Cost: 679936.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 1:04:53
+# of epochs: 8740 | Current Cost: 581632.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 1:04:23
+# of epochs: 8750 | Current Cost: 614400.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 1:03:52
+# of epochs: 8760 | Current Cost: 598016.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 1:03:22
+# of epochs: 8770 | Current Cost: 737280.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 1:02:52
+# of epochs: 8780 | Current Cost: 663552.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 1:02:22
+# of epochs: 8790 | Current Cost: 507904.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 1:01:52
+# of epochs: 8800 | Current Cost: 655360.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 1:01:21
+# of epochs: 8810 | Current Cost: 696320.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 1:00:51
+# of epochs: 8820 | Current Cost: 689664.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 1:00:21
+# of epochs: 8830 | Current Cost: 811008.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 0:59:51
+# of epochs: 8840 | Current Cost: 786432.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 0:59:21
+# of epochs: 8850 | Current Cost: 704512.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 0:58:51
+# of epochs: 8860 | Current Cost: 647168.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 0:58:21
+# of epochs: 8870 | Current Cost: 691200.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 0:57:50
+# of epochs: 8880 | Current Cost: 681984.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 0:57:20
+# of epochs: 8890 | Current Cost: 687104.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 0:56:50
+# of epochs: 8900 | Current Cost: 671744.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 0:56:20
+# of epochs: 8910 | Current Cost: 696832.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 0:55:49
+# of epochs: 8920 | Current Cost: 737280.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 0:55:19
+# of epochs: 8930 | Current Cost: 691712.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 0:54:49
+# of epochs: 8940 | Current Cost: 692224.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 0:54:18
+# of epochs: 8950 | Current Cost: 737280.00 | Best Cost: 340992.00 | 3.07s/ep | ETA: 0:53:48
+# of epochs: 8960 | Current Cost: 677376.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:53:18
+# of epochs: 8970 | Current Cost: 704512.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:52:48
+# of epochs: 8980 | Current Cost: 696832.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:52:18
+# of epochs: 8990 | Current Cost: 695296.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:51:47
+# of epochs: 9000 | Current Cost: 704512.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:51:17
+# of epochs: 9010 | Current Cost: 696320.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:50:47
+# of epochs: 9020 | Current Cost: 695808.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:50:16
+# of epochs: 9030 | Current Cost: 675840.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:49:46
+# of epochs: 9040 | Current Cost: 690176.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:49:15
+# of epochs: 9050 | Current Cost: 688128.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:48:45
+# of epochs: 9060 | Current Cost: 687104.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:48:14
+# of epochs: 9070 | Current Cost: 678400.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:47:44
+# of epochs: 9080 | Current Cost: 680960.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:47:13
+# of epochs: 9090 | Current Cost: 737280.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:46:43
+# of epochs: 9100 | Current Cost: 614400.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:46:12
+# of epochs: 9110 | Current Cost: 683008.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:45:42
+# of epochs: 9120 | Current Cost: 621056.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:45:11
+# of epochs: 9130 | Current Cost: 673280.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:44:41
+# of epochs: 9140 | Current Cost: 695808.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:44:11
+# of epochs: 9150 | Current Cost: 696320.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:43:40
+# of epochs: 9160 | Current Cost: 686080.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:43:10
+# of epochs: 9170 | Current Cost: 695808.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:42:39
+# of epochs: 9180 | Current Cost: 684544.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:42:08
+# of epochs: 9190 | Current Cost: 851968.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:41:38
+# of epochs: 9200 | Current Cost: 680448.00 | Best Cost: 340992.00 | 3.08s/ep | ETA: 0:41:07
+# of epochs: 9210 | Current Cost: 688640.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:40:37
+# of epochs: 9220 | Current Cost: 691200.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:40:06
+# of epochs: 9230 | Current Cost: 694272.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:39:36
+# of epochs: 9240 | Current Cost: 704512.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:39:05
+# of epochs: 9250 | Current Cost: 680448.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:38:34
+# of epochs: 9260 | Current Cost: 680960.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:38:04
+# of epochs: 9270 | Current Cost: 680960.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:37:33
+# of epochs: 9280 | Current Cost: 685568.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:37:03
+# of epochs: 9290 | Current Cost: 675328.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:36:32
+# of epochs: 9300 | Current Cost: 685056.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:36:01
+# of epochs: 9310 | Current Cost: 689152.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:35:31
+# of epochs: 9320 | Current Cost: 647168.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:35:00
+# of epochs: 9330 | Current Cost: 786432.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:34:30
+# of epochs: 9340 | Current Cost: 704512.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:33:59
+# of epochs: 9350 | Current Cost: 688640.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:33:28
+# of epochs: 9360 | Current Cost: 676864.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:32:58
+# of epochs: 9370 | Current Cost: 688128.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:32:27
+# of epochs: 9380 | Current Cost: 689664.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:31:56
+# of epochs: 9390 | Current Cost: 688128.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:31:26
+# of epochs: 9400 | Current Cost: 689664.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:30:55
+# of epochs: 9410 | Current Cost: 685568.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:30:24
+# of epochs: 9420 | Current Cost: 697344.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:29:54
+# of epochs: 9430 | Current Cost: 683008.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:29:23
+# of epochs: 9440 | Current Cost: 819200.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:28:52
+# of epochs: 9450 | Current Cost: 688640.00 | Best Cost: 340992.00 | 3.09s/ep | ETA: 0:28:22
+# of epochs: 9460 | Current Cost: 593408.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:27:51
+# of epochs: 9470 | Current Cost: 701952.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:27:20
+# of epochs: 9480 | Current Cost: 737280.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:26:50
+# of epochs: 9490 | Current Cost: 683008.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:26:19
+# of epochs: 9500 | Current Cost: 698368.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:25:48
+# of epochs: 9510 | Current Cost: 697344.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:25:17
+# of epochs: 9520 | Current Cost: 712704.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:24:47
+# of epochs: 9530 | Current Cost: 685568.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:24:16
+# of epochs: 9540 | Current Cost: 693760.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:23:45
+# of epochs: 9550 | Current Cost: 667136.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:23:14
+# of epochs: 9560 | Current Cost: 690688.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:22:43
+# of epochs: 9570 | Current Cost: 601600.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:22:12
+# of epochs: 9580 | Current Cost: 778240.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:21:42
+# of epochs: 9590 | Current Cost: 712704.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:21:11
+# of epochs: 9600 | Current Cost: 682496.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:20:40
+# of epochs: 9610 | Current Cost: 712704.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:20:09
+# of epochs: 9620 | Current Cost: 696320.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:19:38
+# of epochs: 9630 | Current Cost: 684544.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:19:07
+# of epochs: 9640 | Current Cost: 701952.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:18:37
+# of epochs: 9650 | Current Cost: 778240.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:18:06
+# of epochs: 9660 | Current Cost: 697344.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:17:35
+# of epochs: 9670 | Current Cost: 683008.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:17:04
+# of epochs: 9680 | Current Cost: 686080.00 | Best Cost: 340992.00 | 3.10s/ep | ETA: 0:16:33
+# of epochs: 9690 | Current Cost: 688640.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:16:02
+# of epochs: 9700 | Current Cost: 687104.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:15:31
+# of epochs: 9710 | Current Cost: 693760.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:15:00
+# of epochs: 9720 | Current Cost: 695296.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:14:29
+# of epochs: 9730 | Current Cost: 612864.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:13:58
+# of epochs: 9740 | Current Cost: 737280.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:13:28
+# of epochs: 9750 | Current Cost: 683520.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:12:57
+# of epochs: 9760 | Current Cost: 691200.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:12:26
+# of epochs: 9770 | Current Cost: 737280.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:11:55
+# of epochs: 9780 | Current Cost: 704512.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:11:24
+# of epochs: 9790 | Current Cost: 680960.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:10:53
+# of epochs: 9800 | Current Cost: 688128.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:10:22
+# of epochs: 9810 | Current Cost: 708096.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:09:51
+# of epochs: 9820 | Current Cost: 683520.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:09:20
+# of epochs: 9830 | Current Cost: 683008.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:08:49
+# of epochs: 9840 | Current Cost: 819200.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:08:17
+# of epochs: 9850 | Current Cost: 679424.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:07:46
+# of epochs: 9860 | Current Cost: 602624.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:07:15
+# of epochs: 9870 | Current Cost: 698368.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:06:44
+# of epochs: 9880 | Current Cost: 677888.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:06:13
+# of epochs: 9890 | Current Cost: 688128.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:05:42
+# of epochs: 9900 | Current Cost: 786432.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:05:11
+# of epochs: 9910 | Current Cost: 753664.00 | Best Cost: 340992.00 | 3.11s/ep | ETA: 0:04:40
+# of epochs: 9920 | Current Cost: 682496.00 | Best Cost: 340992.00 | 3.12s/ep | ETA: 0:04:09
+# of epochs: 9930 | Current Cost: 674816.00 | Best Cost: 340992.00 | 3.12s/ep | ETA: 0:03:38
+# of epochs: 9940 | Current Cost: 680448.00 | Best Cost: 340992.00 | 3.12s/ep | ETA: 0:03:07
+# of epochs: 9950 | Current Cost: 704512.00 | Best Cost: 340992.00 | 3.12s/ep | ETA: 0:02:35
+# of epochs: 9960 | Current Cost: 683008.00 | Best Cost: 340992.00 | 3.12s/ep | ETA: 0:02:04
+# of epochs: 9970 | Current Cost: 683520.00 | Best Cost: 340992.00 | 3.12s/ep | ETA: 0:01:33
+# of epochs: 9980 | Current Cost: 688128.00 | Best Cost: 340992.00 | 3.12s/ep | ETA: 0:01:02
+# of epochs: 9990 | Current Cost: 819200.00 | Best Cost: 340992.00 | 3.12s/ep | ETA: 0:00:31
+# of epochs: 10000 | Current Cost: 778240.00 | Best Cost: 340992.00 | 3.12s/ep | ETA: 0:00:00
+--- Current Best Layout ---
+9 2 6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8 6
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 0 9 1
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 1 0 8 3
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3 2 9 4 1
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4 3 4 6 8 3
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6 5 5 7 9 4 1
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7 6 7 9 2 6 2 0
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9 8 8 0 4 9 4 2 1
+3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 0 9 0 2 5 0 5 3 4 8
+4 9 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2 1 1 3 7 2 8 6 6 5 9
+5 7 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3 2 3 5 8 3 0 8 7 7 1 5
+9 8 0 5 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5 4 4 6 0 5 1 9 9 0 2 6 2
+6 2 1 3 8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6 5 6 8 1 6 3 1 0 1 4 8 0 9
+6 9 5 4 6 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8 7 7 9 3 8 4 2 2 3 5 9 3 2 9
+6 9 2 8 7 9 4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 9 8 9 1 4 9 6 4 3 4 7 1 5 3 2 5
+2 9 2 5 1 0 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 1 0 0 2 6 1 7 5 5 6 8 2 8 5 3 2 3
+1 8 5 5 8 4 3 5 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2 1 2 4 7 2 9 7 6 7 0 4 9 6 5 3 6 2
+0 7 1 8 8 1 7 6 8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4 3 3 5 9 4 0 8 8 9 1 5 1 8 6 6 8 9 5
+5 3 0 4 1 1 4 0 9 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5 4 5 7 0 5 2 0 9 0 3 7 2 9 8 8 9 1 7 6
+6 8 6 3 7 4 4 7 3 2 4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7 6 6 8 2 7 3 1 1 2 4 8 4 1 9 9 1 4 8 1 0
+7 9 1 2 6 0 7 7 0 6 5 7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8 7 8 0 3 8 5 3 2 3 6 0 5 2 1 1 2 5 0 3 2 1
+1 0 2 4 5 9 3 0 0 3 9 8 0 . . . . . . . . . . . . . . . . . . . . . . . . . . . . 0 9 9 1 5 0 6 4 4 5 7 1 7 4 2 2 4 7 1 7 3 2 6
+5 4 3 5 0 8 2 6 3 3 6 2 1 3 . . . . . . . . . . . . . . . . . . . . . . . . . . 1 0 1 3 6 1 8 6 5 6 9 3 8 5 4 4 5 8 3 9 6 5 3 1
+8 8 7 6 8 3 1 5 9 6 6 9 5 4 6 . . . . . . . . . . . . . . . . . . . . . . . . 3 2 2 4 8 3 9 7 7 8 0 4 0 7 5 5 7 0 4 0 8 7 7 8 3
+1 1 1 0 9 1 6 4 8 2 9 9 2 8 7 9 . . . . . . . . . . . . . . . . . . . . . . 4 3 4 6 9 4 1 9 8 9 2 6 1 8 7 7 8 1 6 2 9 8 9 9 4 4
+4 4 4 4 3 2 4 9 7 1 5 2 2 5 1 0 2 . . . . . . . . . . . . . . . . . . . . 6 5 5 7 1 6 2 0 0 1 3 7 3 0 8 8 0 3 7 3 1 0 0 2 6 9 3
+6 0 7 7 7 6 5 7 2 0 4 8 5 5 8 4 3 5 . . . . . . . . . . . . . . . . . . 7 6 7 9 2 7 4 2 1 2 5 9 4 1 0 0 1 4 9 5 2 1 2 4 7 1 9 8
+5 9 3 0 0 3 9 8 0 5 3 7 1 8 8 1 7 6 8 . . . . . . . . . . . . . . . . 9 8 8 0 4 9 5 3 3 4 6 0 6 3 1 1 3 6 0 6 4 3 3 5 9 2 0 2 3
+5 0 5 6 3 3 6 2 1 3 8 9 0 4 1 1 4 0 9 1 . . . . . . . . . . . . . . 0 9 0 2 5 0 7 5 4 5 8 2 7 4 3 3 4 7 2 8 5 4 5 7 0 5 2 5 7 1
+0 8 1 6 9 6 6 9 5 4 6 1 2 3 7 4 4 7 3 2 4 . . . . . . . . . . . . 2 1 1 3 7 2 8 6 6 7 9 3 9 6 4 4 6 9 3 9 7 6 6 8 2 7 3 7 0 3 8
+4 3 9 3 8 2 9 9 2 8 7 9 4 5 6 0 7 7 0 6 5 7 . . . . . . . . . . 3 2 3 5 8 3 0 8 7 8 1 5 0 7 6 6 7 0 5 1 8 7 8 0 3 8 5 0 6 4 6 2
+2 7 6 1 4 1 5 2 2 5 1 0 2 7 8 9 3 0 0 3 9 8 0 . . . . . . . . 5 4 4 6 0 5 1 9 9 0 2 6 2 9 7 7 9 2 6 2 0 9 9 1 5 0 6 1 8 6 5 0 3
+1 8 1 0 4 2 7 8 5 0 8 4 3 7 9 4 5 2 3 3 6 2 1 6 . . . . . . . 7 7 2 1 6 7 7 5 3 4 8 3 6 0 0 0 5 8 4 4 5 4 4 6 1 8 7 9 2 7 9 5 4
+---------------------------
+
+Final placement cost : 340992.0000
+  On-chip  comm cost : 2019449.0000
+  Off-chip comm cost : 2885137.0000
+  Chip placement     : [4030 4032 3968 4031 3904 4094 3966 3969 4033 4093 3840 4034 3967 3905
+ 4095 4029 3970 4092 3903    0 4035 3839    1 3902 3965 3776 4028 3838
+ 3841 3906 3901 3971 4091 3775 4036 3712 3964   64 4027 4090 3777 3842
+ 3774 3907 3972 3837 3648 3900 3711 3713 3963 4026 4037 3647   63 3778
+ 3843 4089 3908 3710 3773 3973 3836 3899 3584 3962 4025 4038 4088 3646
+ 3649 3709 3772 3714 3583 3835 3779 3898 3961 3844 4024 4087 3909 3519
+ 3582 3974 3645 3708 4039 3771 3834 3520 3897 3960 3585 4023 4086 3650
+ 3518 3581 3715 3455 3644 3780 3707 3770 3845 3833 3896 3910 3959 4022
+ 3975 3454 4085 4040 3391 3517 3456 3580 3643 3521 3706 3769 3586 3832
+ 3895 3651 3958 4021 3716 3327 3390 3781 4084 3453 3846 3516 3579 3911
+ 3642 3705 3976 3768 3831 3392 3894 3957 3457 4020 3263 3522 3326 3389
+ 3587 4083 3452 3652 3515 3578 4041 3641 3704 3717 3767 3830 3782 3893
+ 3956 3847 4019 3262 3912 3325 4082 3977 3199 3388 4042 3451 3514 3328
+ 3577 3640 3393 3703 3766 3458 3829 3892 3523 3955 4018 3588 4081 3135
+ 3653 3198 3261 3718 3324 3387 3783 3450 3513 3848 3576 3639 3913 3702
+ 3765 3978 3828 3891 4043 3954 4017 3264 4080 3134 3329 3197 3071 3394
+ 3260 3323 3459 3386 3449 3524 3512 3575 3589 3638 3701 3654 3764 3827
+ 3719 3890 3953 3784 4016 3007 3849 4079 3070 3914 3133 3196 3979 3259
+ 3322 4044 3385 3448 3200 3511 3574 3265 3637 3700 3330 3763 3826 3395
+ 3889 3952 3460 4015 4078 3525 3006 3069 3590 2943 3132 3655 3195 3258
+ 3720 3321 3384 3785 3447 3510 3850 3573 3636 3915 3699 3762 3980 3825
+ 3888 3136 3951 4014 3201 2879 4077 3266 2942 3005 3331 3068 3131 4045
+ 3194 3257 3396 3320 3383 3461 3446 3509 3526 3572 3635 3591 3698 3761
+ 3656 3824 3887 3721 3950 4013 3786 2815 4076 3851 2878 2941 3916 3004
+ 3067 3981 3130 3193 3072 3256 3319 3137 3382 3445 3202 3508 3571 4046
+ 3634 3697 3267 3760 3823 3332 3886 3949 3397 4012 2814 3462 2751 2877
+ 3527 2940 4075 3592 3003 3066 3657 3129 3192 3722 3255 3318    2 3381
+ 3444 3787 3507 3570 3852 3633 3696 3917 3759 3822 3982 3885 3948 3008
+ 4011 4074 4047 2687 2750 3073 2813 2876 3138 2939 3002 3203 3065 3128
+ 3268 3191 3254 3333 3317 3380 3398 3443 3506 3463 3569 3632 3528 3695
+ 3758 3593 3821 3884 3658 3947 4010 3723 4073 2623 3788 2686 2749 3853
+ 2812 2875 3918 2938 3001 3983 3064 3127 2944 3190 3253 4048 3316 3379
+ 3009 3442 3505 3074 3568 3631 3139 3694 3757 3204 3820 3883 3269 3946
+ 4009 3334 4072 2622 3399 2685 2559 3464 2748 2811 3529 2874 2937 3594
+ 3000 3063 3659 3126 3189 3724 3252 3315 3789 3378 3441 3854 3504 3567
+ 3919 3630 3693 3984 3756 3819 2880 3882 3945 2945 4008 2495 4049 4071
+ 2558 3010 2621 2684 3075 2747 2810 3140 2873 2936 3205 2999 3062 3270
+ 3125 3188 3335 3251 3314 3400 3377 3440 3465 3503 3566 3530 3629 3692
+ 3595 3755 3818 3660 3881 3944 3725 4007 2431 3790 2494 2557 3855 4070
+ 2620 3920 2683 2746 3985 2809 2872 4050 2935 2998 2816 3061 3124 2881
+ 3187 3250 2946 3313 3376 3011 3439 3502 3076 3565 3628 3141 3691 3754
+ 3206 3817 3880 3271 3943 4006 3336 2367 2430 3401 2493 2556 3466 4069
+ 2619 3531 2682 2745 3596 2808 2871 3661 2934 2997 3726 3060 3123 3791
+ 3186 3249 3856 3312 3375 3921 3438 3501 3986 3564 3627 4051 3690 3753
+ 2752 3816 3879 2817 3942 4005 2882 2303 2366 2947 2429 4068 3012 2492
+ 2555 3077 2618 2681 3142 2744 2807 3207 2870 2933 3272 2996 3059 3337
+ 3122 3185 3402 3248 3311 3467 3374 3437 3532 3500 3563 3597 3626 3689
+ 3662 3752 3815 3727 3878 3941 3792 4004 4067 3857 2302 2365 3922 2239
+ 2428 3987 2491 2554 4052 2617 2680 2688 2743 2806 2753 2869 2932 2818
+ 2995 3058 2883 3121 3184 2948 3247 3310 3013 3373 3436 3078 3499 3562
+ 3143 3625 3688 3208 3751 3814 3273 3877 3940 3338 4003 4066 3403 2175
+ 2238 3468 2301 2364 3533 2427 2490 3598 2553 2616 3663 2679 2742 3728
+ 2805 2868 3793 2931 2994 3858 3057 3120 3923 3183 3246 3988 3309 3372
+ 4053 3435 3498 2624 3561 3624 2689 3687 3750 2754 3813 3876 2819 3939
+ 4002 2884 2174 2237 2949 2111 4065 3014 2300 2363 3079 2426 2489 3144
+ 2552 2615 3209 2678 2741 3274 2804 2867 3339 2930 2993 3404 3056 3119
+ 3469 3182 3245 3534 3308 3371 3599 3434 3497 3664 3560 3623 3729 3686
+ 3749 3794 3812 3875 3859 3938 4001 3924 2047 4064 3989 2110 2173 4054
+ 2236 2299 2560 2362 2425 2625 2488 2551 2690 2614 2677 2755 2740 2803
+ 2820 2866 2929 2885 2992 3055 2950 3118 3181 3015 3244 3307 3080 3370
+ 3433 3145 3496 3559 3210 3622 3685 3275 3748 3811 3340 3874 3937 3405
+ 4000 1983 3470 4063 2046 3535 2109 2172 3600 2235 2298 3665 2361 2424
+ 3730 2487 2550 3795 2613 2676 3860 2739 2802 3925 2865 2928 3990 2991
+ 3054 2496 3117 3180 4055 3243 3306 2561 3369 3432 2626 3495 3558 2691
+ 3621 3684 2756 3747 3810 2821 3873 3936 2886 3999]
