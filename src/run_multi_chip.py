@@ -707,6 +707,11 @@ def main():
     parser.add_argument("--off_lat", type=float, default=5.0, help="Off-chip link latency (hierarchical penalty)")
     parser.add_argument("--iters", type=int, default=5000, help="SA/random iterations")
     parser.add_argument("--epochs", type=int, default=1000, help="DDPG training epochs")
+    parser.add_argument("--baseline_trials", type=int, default=1000,
+                         help="Number of random-search trials used to compute the "
+                              "baseline B for the sparse reward r_t = sqrt(B) - sqrt(L(P)) "
+                              "(Algorithm 1, line 11). Larger = better/more stable "
+                              "baseline estimate but slower startup.")
     parser.add_argument("--batch_z", type=int, default=3,
                          help="Number of logic cores placed per DDPG action, "
                               "per the paper's batched action [x1,y1,...,xz,yz] "
