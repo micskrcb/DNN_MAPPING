@@ -158,6 +158,19 @@ def test_cnn_workload_partitioning():
     assert len(labels) == num_tasks
     assert tg.shape == (num_tasks, num_tasks)
 
+    # New generalized interface: 'simple' via extract_model_task_graph should
+    # match the extract_cnn_task_graph alias exactly (same underlying model).
+    tg2, num_tasks2, labels2 = rm.extract_model_task_graph("simple", channels_per_partition=8)
+    assert num_tasks2 == num_tasks
+    assert np.array_equal(tg, tg2), "alias and generalized function should produce identical graphs"
+
+    # Unknown model name should raise a clear error, not a silent wrong result
+    try:
+        rm.extract_model_task_graph("not_a_real_model", channels_per_partition=8)
+        assert False, "should have raised for an unknown model name"
+    except ValueError:
+        pass
+
     # Must still be a valid DAG usable by pipeline_stages()
     env = MultiChipEnvironment(4, 4, 16, 16, task_graph=tg, num_tasks=num_tasks)  # 1024 cores
     stages = env.pipeline_stages()

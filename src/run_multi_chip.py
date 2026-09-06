@@ -32,8 +32,20 @@ try:
     import torch.nn.functional as F
     import torch.optim as optim
     HAS_TORCH = True
+    # PERF FIX: on CPU-only machines (no CUDA), PyTorch sometimes defaults
+    # to a single thread depending on the environment, silently leaving
+    # most cores idle. Explicitly use all available cores for the CPU
+    # matmul-heavy actor/critic forward/backward passes.
+    if not torch.cuda.is_available():
+        torch.set_num_threads(os.cpu_count())
 except ImportError:
     HAS_TORCH = False
+
+try:
+    import torchvision.models as tv_models
+    HAS_TORCHVISION = True
+except ImportError:
+    HAS_TORCHVISION = False
 
 
 # ---------------------------------------------------------------------------
@@ -65,27 +77,85 @@ if HAS_TORCH:
         def forward(self, x):
             return self.features(x)
 
-    def extract_cnn_task_graph(channels_per_partition: int = 8):
+    def _tv_model(ctor):
+        """Handle both old (pretrained=False) and new (weights=None)
+        torchvision APIs, and always skip downloading pretrained weights --
+        we only need the architecture/shapes, not trained parameters."""
+        try:
+            return ctor(weights=None)
+        except TypeError:
+            return ctor(pretrained=False)
+
+    def _build_model_and_input(model_name: str):
+        """Returns (model, dummy_input, warning_or_None)."""
+        model_name = model_name.lower()
+
+        if model_name == "simple":
+            return SimpleCNN(), torch.randn(1, 3, 32, 32), None
+
+        if not HAS_TORCHVISION:
+            raise RuntimeError(
+                f"--model {model_name} requires torchvision. Install it with "
+                f"'pip install torchvision --break-system-packages'."
+            )
+
+        # Standard ImageNet input size, matching the paper's actual
+        # AlexNet/VGG16/ResNet50 evaluation (Sec 4.1).
+        dummy_input = torch.randn(1, 3, 224, 224)
+        warning = None
+
+        if model_name == "alexnet":
+            model = _tv_model(tv_models.alexnet)
+        elif model_name == "vgg16":
+            model = _tv_model(tv_models.vgg16)
+        elif model_name == "resnet50":
+            model = _tv_model(tv_models.resnet50)
+            warning = (
+                "resnet50 has skip connections (Bottleneck 'downsample' "
+                "shortcuts) that this hook-based extractor CANNOT see -- it "
+                "only observes Conv2d/Linear CALL ORDER, not the actual "
+                "add() that merges a skip branch back in. The resulting "
+                "task graph approximates ResNet50 as a purely sequential "
+                "chain: every real layer and its shape are captured "
+                "correctly, but the skip-connection edges are topologically "
+                "WRONG. Treat ResNet50 results as a first-pass "
+                "approximation, not a faithful reproduction, until this is "
+                "replaced with a torch.fx-traced computational graph."
+            )
+        else:
+            raise ValueError(
+                f"Unknown model '{model_name}'. Choose from: simple, alexnet, vgg16, resnet50"
+            )
+
+        model.eval()
+        return model, dummy_input, warning
+
+    def extract_model_task_graph(model_name: str = "simple", channels_per_partition: int = 8):
         """
         PAPER FIX (Sec 3.1.1, Fig. 5-6): partition each CONV/FC layer's
         weights along the input channel C and output channel K into a grid
         of VMM (vector-matrix-multiply) cores, each feeding a VVA (vector-
         vector-accumulation) core that reduces the partial sums for its
-        output-channel group. This replaces the old "one task per whole
-        layer" model, which produced only ~15 tasks for this demo CNN --
-        nowhere near the paper's reported ~900-1900 logic cores for real
-        networks (Fig. 6).
+        output-channel group.
 
         Activation (ReLU) and pooling are NOT separate tasks: per the
         paper's core architecture (Sec 2.2), these run inside each core's
         transformation unit, so only Conv2d/Linear layers are partitioned.
 
         Args:
+            model_name: "simple" (small demo CNN), or one of the paper's
+                actual evaluated networks: "alexnet", "vgg16", "resnet50"
+                (Sec 4.1). Real models require torchvision installed.
+                See the ResNet50 caveat in _build_model_and_input above.
             channels_per_partition: max output channels per partition group
                 (smaller -> more, finer-grained logic cores, closer to the
                 paper's per-model core counts in Fig. 6). Set to 0 to
-                restore the old unpartitioned one-task-per-layer behavior
-                (useful for quick smoke tests).
+                restore the unpartitioned one-task-per-layer behavior
+                (useful for quick smoke tests). Real models have far more
+                channels than the demo CNN -- start with a LARGER value
+                (e.g. 32-64) for vgg16/resnet50 or you'll generate more
+                logic cores than any reasonable grid can hold; see the
+                pre-flight check in main().
 
         Returns:
             task_graph: directed volume matrix, task_graph[i, j] = elements
@@ -93,8 +163,9 @@ if HAS_TORCH:
             num_tasks: total logic core count.
             labels: human-readable label per task index, for debugging.
         """
-        model = SimpleCNN()
-        dummy_input = torch.randn(1, 3, 32, 32)
+        model, dummy_input, warning = _build_model_and_input(model_name)
+        if warning:
+            print(f"[WARN] {warning}")
 
         # Capture shape info only for Conv2d/Linear -- the only layers
         # actually partitioned into logic cores (see docstring above).
@@ -112,16 +183,29 @@ if HAS_TORCH:
                 captured.append((kind, C_in, C_out, H, W))
             return hook_fn
 
+        # Walk ALL submodules regardless of container nesting (features /
+        # classifier / avgpool / layer1..layer4 / etc.) -- hooks fire in
+        # actual forward-pass execution order, which is what determines
+        # `captured`'s sequence, not registration order. This works
+        # structurally for any architecture; see the ResNet50 caveat above
+        # for what this order does and doesn't capture correctly.
         hooks = []
-        for layer in model.features:
-            if isinstance(layer, nn.Conv2d):
-                hooks.append(layer.register_forward_hook(make_hook("conv")))
-            elif isinstance(layer, nn.Linear):
-                hooks.append(layer.register_forward_hook(make_hook("linear")))
+        for module in model.modules():
+            if isinstance(module, nn.Conv2d):
+                hooks.append(module.register_forward_hook(make_hook("conv")))
+            elif isinstance(module, nn.Linear):
+                hooks.append(module.register_forward_hook(make_hook("linear")))
 
-        model(dummy_input)
+        with torch.no_grad():
+            model(dummy_input)
         for h in hooks:
             h.remove()
+
+        if not captured:
+            raise RuntimeError(
+                f"No Conv2d/Linear layers captured for model '{model_name}' -- "
+                f"check the model built and ran correctly."
+            )
 
         if channels_per_partition <= 0:
             # Legacy behavior: one task per Conv2d/Linear layer (activation/
@@ -181,6 +265,10 @@ if HAS_TORCH:
             task_graph[src, dst] += vol
 
         return task_graph, num_tasks, labels
+
+    def extract_cnn_task_graph(channels_per_partition: int = 8):
+        """Backward-compatible alias for extract_model_task_graph('simple', ...)."""
+        return extract_model_task_graph("simple", channels_per_partition)
 
 
 # ---------------------------------------------------------------------------
@@ -498,7 +586,8 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
           f"(action_dim={action_dim})")
 
     agent = DDPGAgent(state_dim=state_dim, action_dim=action_dim, device=device)
-    print(f"[DDPG] Using device: {agent.device}")
+    print(f"[DDPG] Using device: {agent.device}"
+          + (f" ({torch.get_num_threads()} CPU threads)" if agent.device.type == "cpu" else ""))
     replay_buffer = ReplayBuffer()
     mapper = MultiChipCoreMapper(env, baseline_latency=baseline_latency, batch_z=batch_z)
 
@@ -618,7 +707,6 @@ def main():
     parser.add_argument("--off_lat", type=float, default=5.0, help="Off-chip link latency (hierarchical penalty)")
     parser.add_argument("--iters", type=int, default=5000, help="SA/random iterations")
     parser.add_argument("--epochs", type=int, default=1000, help="DDPG training epochs")
-    parser.add_argument("--baseline_trials", type=int, default=1000, help="Number of random search trials to compute baseline B")
     parser.add_argument("--batch_z", type=int, default=3,
                          help="Number of logic cores placed per DDPG action, "
                               "per the paper's batched action [x1,y1,...,xz,yz] "
@@ -637,12 +725,24 @@ def main():
     
     # NEW ARGUMENT: Flag to use the real CNN workload
     parser.add_argument("--use_cnn", action="store_true", help="Use real CNN workload instead of random")
+    parser.add_argument("--model", type=str, default="simple",
+                         choices=["simple", "alexnet", "vgg16", "resnet50"],
+                         help="Which network to extract a workload from when --use_cnn "
+                              "is set. 'simple' is a small demo CNN. 'alexnet'/'vgg16'/"
+                              "'resnet50' are the paper's actual evaluated networks "
+                              "(Sec 4.1) via torchvision -- requires torchvision "
+                              "installed. NOTE: resnet50's skip connections are not "
+                              "captured correctly by this hook-based extractor (see "
+                              "the warning printed at extraction time).")
     parser.add_argument("--channels_per_partition", type=int, default=8,
                          help="Max output channels per VMM/VVA partition group when "
                               "--use_cnn is set (paper Sec 3.1.1, Fig 5-6). Smaller = "
                               "more, finer-grained logic cores (closer to the paper's "
                               "per-model core counts in Fig 6). Set to 0 for the old "
-                              "one-task-per-layer behavior.")
+                              "one-task-per-layer behavior. Real models (vgg16/resnet50) "
+                              "have far more channels than 'simple' -- start with a "
+                              "LARGER value (e.g. 32-64) or you'll generate more logic "
+                              "cores than any reasonable grid can hold.")
     parser.add_argument("--seed", type=int, default=None,
                          help="Seed for random/numpy/torch RNGs. Not fixed by default -- "
                               "the paper itself (Sec 4.5, Fig 20) runs 5 different seeds "
@@ -659,14 +759,19 @@ def main():
         print(f">> Seeded RNGs with --seed {args.seed} (random search baseline B "
               f"and DDPG exploration noise are now reproducible for this run)\n")
 
+    if args.model != "simple" and not HAS_TORCHVISION:
+        print(f"ERROR: --model {args.model} requires torchvision, which isn't installed.")
+        print("Install it with: pip install torchvision --break-system-packages")
+        sys.exit(1)
+
     # 1. Determine which workload to use
     real_task_graph = None
     num_tasks = None
 
     if args.use_cnn and HAS_TORCH:
-        print(">> Extracting Real CNN Workload via PyTorch Hooks...")
-        real_task_graph, num_tasks, task_labels = extract_cnn_task_graph(
-            channels_per_partition=args.channels_per_partition
+        print(f">> Extracting {args.model} Workload via PyTorch Hooks...")
+        real_task_graph, num_tasks, task_labels = extract_model_task_graph(
+            model_name=args.model, channels_per_partition=args.channels_per_partition
         )
         print(f">> Channel partitioning: channels_per_partition={args.channels_per_partition} "
               f"-> {num_tasks} logic cores (VMM+VVA)\n" if args.channels_per_partition > 0 else
