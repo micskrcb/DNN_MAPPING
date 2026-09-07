@@ -593,7 +593,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     checkpoint = None
     if load_checkpoint is not None and os.path.exists(load_checkpoint):
         print(f"[DDPG] Loading checkpoint from {load_checkpoint} ...")
-        checkpoint = torch.load(load_checkpoint, map_location="cpu")
+        checkpoint = torch.load(load_checkpoint, map_location="cpu", weights_only=False)
         baseline_latency = checkpoint["baseline_latency"]
         print(f"[DDPG] Resuming from episode {checkpoint['episode']}, "
               f"Baseline B = {baseline_latency:.4f} (loaded, not recomputed)")
