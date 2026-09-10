@@ -9,9 +9,30 @@ Key concepts (from the ACM paper 10.1145/3418498):
   - Off-chip links  : higher-latency links between chips (non-uniform cost)
   - Hierarchical communication cost modelled as alpha * (on-chip hops)
     + beta * (chip-to-chip hops)
+
+HARDWARE FLEXIBILITY: grid SIZE (num_chips_x/y, rows/cols_per_chip) and
+LATENCY VALUES (on_chip_latency/off_chip_latency) were already fully
+configurable via the CLI without touching this file. What was previously
+hardcoded is TOPOLOGY TYPE -- the routing/distance rule itself. This file
+now supports `topology="mesh"` (original, edges only, the default -- no
+behavior change) and `topology="torus"` (wraparound edges on both the
+on-chip mesh and the inter-chip grid, one of the paper's own mentioned
+alternative topologies, Sec 4.4). Genuinely different topology FAMILIES
+(HNoC, dragonfly, or an arbitrary custom connectivity graph) are NOT
+supported here -- that would need a different distance model entirely
+(e.g. shortest-path over an arbitrary adjacency graph rather than a
+closed-form hop-count formula), and is tracked as future work.
 """
 
 import numpy as np
+
+
+def _wrapped_delta(a: int, b: int, size: int) -> int:
+    """Distance between two positions on a ring of the given size (torus
+    wraparound) -- the shorter of going directly or going the other way
+    around the edge."""
+    d = abs(a - b)
+    return min(d, size - d)
 
 
 class MultiChipTopology:
@@ -25,7 +46,11 @@ class MultiChipTopology:
         cols_per_chip: int = 4,
         on_chip_latency: float = 1.0,
         off_chip_latency: float = 5.0,
+        topology: str = "mesh",
     ):
+        if topology not in ("mesh", "torus"):
+            raise ValueError(f"Unknown topology '{topology}'. Choose 'mesh' or 'torus'.")
+
         self.num_chips_x = num_chips_x
         self.num_chips_y = num_chips_y
         self.num_chips = num_chips_x * num_chips_y
@@ -36,6 +61,7 @@ class MultiChipTopology:
 
         self.on_chip_latency = on_chip_latency
         self.off_chip_latency = off_chip_latency
+        self.topology = topology
 
     # ------------------------------------------------------------------
     # Core / chip indexing helpers
@@ -69,12 +95,23 @@ class MultiChipTopology:
         Hierarchical communication cost between two global core IDs.
         On-chip hops cost `on_chip_latency`; crossing a chip boundary
         adds `off_chip_latency` per chip hop.
+
+        For `topology="torus"`, both the on-chip mesh and the inter-chip
+        grid wrap around at the edges (row/col 0 is adjacent to the last
+        row/col), so the effective distance in each dimension is the
+        shorter of the direct and wraparound paths.
         """
         scx, scy, sr, sc = self.core_xy_global(src_global)
         dcx, dcy, dr, dc = self.core_xy_global(dst_global)
 
-        on_chip_hops = abs(sr - dr) + abs(sc - dc)
-        chip_hops = abs(scx - dcx) + abs(scy - dcy)
+        if self.topology == "torus":
+            on_chip_hops = (_wrapped_delta(sr, dr, self.rows_per_chip) +
+                             _wrapped_delta(sc, dc, self.cols_per_chip))
+            chip_hops = (_wrapped_delta(scx, dcx, self.num_chips_x) +
+                         _wrapped_delta(scy, dcy, self.num_chips_y))
+        else:  # mesh (default, original behavior -- unchanged)
+            on_chip_hops = abs(sr - dr) + abs(sc - dc)
+            chip_hops = abs(scx - dcx) + abs(scy - dcy)
 
         return (on_chip_hops * self.on_chip_latency +
                 chip_hops * self.off_chip_latency)
@@ -107,5 +144,5 @@ class MultiChipTopology:
         return (
             f"MultiChipTopology({self.num_chips_x}x{self.num_chips_y} chips, "
             f"{self.rows_per_chip}x{self.cols_per_chip} cores/chip, "
-            f"total={self.total_cores} cores)"
+            f"total={self.total_cores} cores, topology={self.topology})"
         )

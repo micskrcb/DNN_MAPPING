@@ -3,18 +3,10 @@ multi_chip_environment.py
 --------------------------
 Wraps MultiChipTopology into an RL-compatible environment.
 
-CHANGE (objective function fix, vs. original):
-The original `evaluate()` / `_total_cost()` summed Volume[i,j] * Latency[i,j]
-over every task pair -- a total communication cost. The 2020 ACM paper
-(Eq. 4, Sec 3.1.2) instead optimizes:
-
-    P* = argmin_P { L(P) },   where L(P) = max_k T(k|P)
-
-i.e. the *bottleneck* latency across pipeline stages, since a streaming
-pipeline's throughput is capped by its slowest stage, not by the sum of
-all stages. `evaluate()` now returns this bottleneck latency. The old
-sum-of-pairs metric is preserved as `total_communication_cost()` for
-diagnostics / comparison, and is still what `chip_breakdown()` reports.
+The objective is a maximum per-task service cost, inspired by the paper's
+Eq. 4 bottleneck objective. Nested maxima over DAG levels do not reconstruct
+its block-streaming schedule. See RECONCILIATION.md for units and assumptions.
+The sum-of-pairs diagnostic is separate from the optimization objective.
 """
 
 from typing import List, Optional
@@ -39,6 +31,8 @@ class MultiChipEnvironment:
         num_tasks: Optional[int] = None,
         compute_latency: Optional[np.ndarray] = None,
         make_dag: bool = True,
+        topology: str = "mesh",
+        timing_units: str = "proxy",
     ):
         """
         Args:
@@ -60,12 +54,15 @@ class MultiChipEnvironment:
             num_chips_x, num_chips_y,
             rows_per_chip, cols_per_chip,
             on_chip_latency, off_chip_latency,
+            topology=topology,
         )
         self.total_cores = self.topo.total_cores
 
         if num_tasks is None:
             num_tasks = self.total_cores
         self.num_tasks = num_tasks
+        if not 1 <= num_tasks <= self.total_cores:
+            raise ValueError("num_tasks must be positive and fit the physical core capacity")
 
         if task_graph is None:
             rng = np.random.default_rng(42)
@@ -79,13 +76,25 @@ class MultiChipEnvironment:
                 np.fill_diagonal(W, 0)
             task_graph = W
         self.task_graph = task_graph
+        if (np.shape(task_graph) != (num_tasks, num_tasks) or
+                not np.all(np.isfinite(task_graph)) or np.any(task_graph < 0)):
+            raise ValueError("task_graph must be a finite nonnegative square matrix")
         self.latency = self.topo.latency_matrix()
 
+        if timing_units not in ("proxy", "seconds"):
+            raise ValueError("timing_units must be proxy or seconds")
+        self.timing_units = timing_units
         if compute_latency is None:
             compute_latency = np.zeros(self.num_tasks, dtype=np.float32)
         assert len(compute_latency) == self.num_tasks, \
             "compute_latency must have length num_tasks"
-        self.compute_latency = np.asarray(compute_latency, dtype=np.float32)
+        self.compute_latency = np.asarray(compute_latency, dtype=np.float64)
+        if timing_units == "proxy" and np.any(self.compute_latency != 0):
+            raise ValueError("Nonzero compute requires timing_units='seconds' and communication calibrated in seconds")
+        if (self.compute_latency.shape != (self.num_tasks,) or
+                not np.all(np.isfinite(self.compute_latency)) or
+                np.any(self.compute_latency < 0)):
+            raise ValueError("compute_latency must be a finite nonnegative vector")
 
         self.placement = np.full(self.num_tasks, -1, dtype=np.int32)
         self.core_occupied = np.zeros(self.total_cores, dtype=bool)
@@ -149,9 +158,8 @@ class MultiChipEnvironment:
 
         Requires `task_graph` to be a DAG: task_graph[i, j] > 0 means task i
         sends data to task j. If a cycle is found (e.g. a symmetric/
-        undirected graph was passed in), the unresolved tasks are dumped
-        into one trailing stage rather than silently mis-measuring -- check
-        `make_dag=True` if you hit this.
+        undirected graph was passed in), raises ValueError. These levels
+        establish dependency order, not a block-streaming execution schedule.
 
         PERF FIX: also builds `self._succ_cache`, a sparse adjacency list of
         (successor, volume) pairs per task, computed once via np.nonzero
@@ -195,7 +203,7 @@ class MultiChipEnvironment:
 
         leftover = [i for i in range(n) if i not in seen]
         if leftover:
-            stages.append(leftover)
+            raise ValueError("Pipeline objective requires a DAG; cycle detected")
 
         self._stages_cache = stages
         self._succ_cache = succ_with_vol
@@ -235,6 +243,30 @@ class MultiChipEnvironment:
                 task_latencies.append(float(self.compute_latency[i]) + comm)
             stage_latencies.append(max(task_latencies) if task_latencies else 0.0)
         return max(stage_latencies) if stage_latencies else 0.0
+
+    @staticmethod
+    def estimate_compute_latency(
+        mac_operations: np.ndarray,
+        *,
+        macs_per_core: int = 128,
+        frequency_hz: float = 400e6,
+        utilization: float = 1.0,
+    ) -> np.ndarray:
+        """Estimate per-task compute time in seconds.
+
+        This is the idealized Table 1 model: one core has ``macs_per_core``
+        parallel MAC units at ``frequency_hz``.  ``mac_operations`` must be
+        the work assigned to each logic core for one full-frame work unit.
+        ``utilization`` makes the assumption explicit (1.0 is peak MAC
+        utilization).  VVA tasks should pass their accumulation operation
+        count separately; the method intentionally does not guess it.
+        """
+        ops = np.asarray(mac_operations, dtype=np.float64)
+        if not np.all(np.isfinite(ops)) or np.any(ops < 0) or macs_per_core <= 0 or frequency_hz <= 0:
+            raise ValueError("operations must be non-negative and hardware rates positive")
+        if not (0 < utilization <= 1):
+            raise ValueError("utilization must be in (0, 1]")
+        return (ops / (macs_per_core * frequency_hz * utilization)).astype(np.float32)
 
     def evaluate(self) -> float:
         """Primary objective: L(P), the bottleneck pipeline-stage latency

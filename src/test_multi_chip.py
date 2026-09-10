@@ -59,12 +59,14 @@ def test_pipeline_stages_and_latency():
     assert env.total_communication_cost() == 400.0, \
         "diagnostic sum metric should still equal the old total-cost value"
 
-    # non-DAG (symmetric) input must degrade gracefully, not crash
+    # A cyclic graph must not silently receive a pipeline score.
     tg_sym = tg + tg.T
     env2 = MultiChipEnvironment(2, 2, 2, 2, task_graph=tg_sym, num_tasks=4)
-    stages2 = env2.pipeline_stages()
-    assert len(stages2) == 1 and set(stages2[0]) == {0, 1, 2, 3}, \
-        "a cyclic/symmetric graph should collapse into a single fallback stage"
+    try:
+        env2.pipeline_stages()
+        assert False, "expected cycle rejection"
+    except ValueError:
+        pass
 
     # default random workload must now be a DAG by default (make_dag=True)
     env3 = MultiChipEnvironment(2, 2, 2, 2, num_tasks=6)
@@ -73,6 +75,21 @@ def test_pipeline_stages_and_latency():
         "default synthetic workload should be a DAG with >1 stage, not a symmetric cycle"
 
     print("✓ pipeline_stages/pipeline_latency tests passed")
+
+
+def test_compute_latency_estimate():
+    """Table 1 peak-throughput estimate is explicit and unit-tested."""
+    # 128 MACs at 400 MHz perform 51.2 billion MACs/s; one billion MACs
+    # therefore takes 19.53125 ms at peak utilization.
+    got = MultiChipEnvironment.estimate_compute_latency(
+        np.array([1_000_000_000]), macs_per_core=128, frequency_hz=400e6
+    )[0]
+    assert abs(float(got) - 1e9 / (128 * 400e6)) < 1e-9
+    slower = MultiChipEnvironment.estimate_compute_latency(
+        np.array([1_000]), macs_per_core=128, frequency_hz=400e6, utilization=0.5
+    )[0]
+    assert abs(float(slower) - 2 * 1e3 / (128 * 400e6)) < 1e-9
+    print("✓ compute latency estimate tests passed")
 
 
 def test_collision_resolution():
@@ -152,7 +169,7 @@ def test_cnn_workload_partitioning():
 
     import run_multi_chip as rm
 
-    tg, num_tasks, labels = rm.extract_cnn_task_graph(channels_per_partition=8)
+    tg, num_tasks, labels = rm.extract_cnn_task_graph(channels_per_partition=32)
     assert num_tasks > 100, \
         f"channel partitioning should produce far more than 15 tasks, got {num_tasks}"
     assert len(labels) == num_tasks
@@ -160,7 +177,7 @@ def test_cnn_workload_partitioning():
 
     # New generalized interface: 'simple' via extract_model_task_graph should
     # match the extract_cnn_task_graph alias exactly (same underlying model).
-    tg2, num_tasks2, labels2 = rm.extract_model_task_graph("simple", channels_per_partition=8)
+    tg2, num_tasks2, labels2 = rm.extract_model_task_graph("simple", channels_per_partition=32)
     assert num_tasks2 == num_tasks
     assert np.array_equal(tg, tg2), "alias and generalized function should produce identical graphs"
 
@@ -182,7 +199,7 @@ def test_cnn_workload_partitioning():
     assert n_legacy < 20, f"legacy mode should be whole-layer granularity, got {n_legacy} tasks"
 
     print(f"✓ CNN workload partitioning tests passed ({num_tasks} logic cores at "
-          f"channels_per_partition=8, {n_legacy} in legacy mode)")
+          f"channels_per_partition=32, {n_legacy} in legacy mode)")
 
 
 def test_sa_improves_random():
@@ -211,6 +228,7 @@ if __name__ == "__main__":
     test_topology()
     test_environment_reset_step()
     test_pipeline_stages_and_latency()
+    test_compute_latency_estimate()
     test_collision_resolution()
     test_batched_actions()
     test_cnn_workload_partitioning()

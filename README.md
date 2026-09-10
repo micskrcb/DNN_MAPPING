@@ -1,5 +1,9 @@
 # DNN Mapping with Reinforcement Learning
 
+> Current validation and limitations: see [RECONCILIATION.md](RECONCILIATION.md).
+> The multi-chip implementation remains an approximation, not a completed paper
+> reproduction. Physical compute timing is opt-in; CUDA requires host validation.
+
 ## Policy Gradient / Actor-Critic Based Core Placement Optimization for Multi-Chip Many-Core DNN Accelerators
 
 This project implements and extends reinforcement-learning-based **core placement optimization for Deep Neural Network (DNN) workloads** on multi-chip many-core hardware architectures.
