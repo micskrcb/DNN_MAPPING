@@ -708,3 +708,443 @@ Final placement cost : 6749184.0000
   On-chip  comm cost : 22260200.0000
   Off-chip comm cost : 27277207.0000
   Chip placement     : [  61    1  129 ... 2699 2764  501]
+
+
+comparch@15127:~/Desktop/dnn_mapping/Core_Placement_with_Reinforcement_Learning  final (working copy for sem 1 26-27)/src$ python3 run_multi_chip.py --algo ddpg --use_cnn --model alexnet --channels_per_partition 128     --chips_x 4 --chips_y 4 --rows 16 --cols 16 --epochs 10000 --seed 0 --batch_z 3     --save_checkpoint alexnet_ckpt.pt --load_checkpoint alexnet_ckpt.pt --checkpoint_every 100
+>> Seeded RNGs with --seed 0 (random search baseline B and DDPG exploration noise are now reproducible for this run)
+
+>> Extracting alexnet Workload via PyTorch Hooks...
+>> Channel partitioning: channels_per_partition=128 -> 1445 logic cores (VMM+VVA)
+
+System : MultiChipTopology(4x4 chips, 16x16 cores/chip, total=4096 cores)
+Tasks  : 1445
+Algo   : ddpg
+--------------------------------------------------
+[DDPG] Loading checkpoint from alexnet_ckpt.pt ...
+[DDPG] Resuming from episode 6800, Baseline B = 12697984.0000 (loaded, not recomputed)
+[DDPG] Batched action: placing 3 logic core(s) per step (action_dim=6)
+[DDPG] Using device: cpu (20 CPU threads)
+# of epochs: 6810 | Current Cost: 31561088.00 | Best Cost: 8068736.00 | 12.73s/ep | ETA: 11:16:45
+# of epochs: 6820 | Current Cost: 28921984.00 | Best Cost: 8068736.00 | 11.04s/ep | ETA: 9:44:52
+# of epochs: 6830 | Current Cost: 31734144.00 | Best Cost: 8068736.00 | 10.25s/ep | ETA: 9:01:21
+# of epochs: 6840 | Current Cost: 32923904.00 | Best Cost: 8068736.00 | 10.45s/ep | ETA: 9:10:23
+# of epochs: 6850 | Current Cost: 32231680.00 | Best Cost: 8068736.00 | 10.76s/ep | ETA: 9:24:49
+# of epochs: 6860 | Current Cost: 29744000.00 | Best Cost: 8068736.00 | 13.65s/ep | ETA: 11:54:06
+# of epochs: 6870 | Current Cost: 28316288.00 | Best Cost: 8068736.00 | 15.36s/ep | ETA: 13:21:09
+# of epochs: 6880 | Current Cost: 28316288.00 | Best Cost: 8068736.00 | 15.48s/ep | ETA: 13:25:01
+# of epochs: 6890 | Current Cost: 28337920.00 | Best Cost: 8068736.00 | 14.65s/ep | ETA: 12:39:35
+# of epochs: 6900 | Current Cost: 33010432.00 | Best Cost: 8068736.00 | 14.31s/ep | ETA: 12:19:06
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 6900)
+# of epochs: 6910 | Current Cost: 25395968.00 | Best Cost: 8068736.00 | 13.85s/ep | ETA: 11:53:20
+# of epochs: 6920 | Current Cost: 28359552.00 | Best Cost: 8068736.00 | 13.52s/ep | ETA: 11:34:05
+# of epochs: 6930 | Current Cost: 27710592.00 | Best Cost: 8068736.00 | 13.15s/ep | ETA: 11:12:59
+# of epochs: 6940 | Current Cost: 33399808.00 | Best Cost: 8068736.00 | 12.85s/ep | ETA: 10:55:20
+# of epochs: 6950 | Current Cost: 29657472.00 | Best Cost: 8068736.00 | 12.67s/ep | ETA: 10:43:53
+# of epochs: 6960 | Current Cost: 31063552.00 | Best Cost: 8068736.00 | 12.46s/ep | ETA: 10:31:24
+# of epochs: 6970 | Current Cost: 32145152.00 | Best Cost: 8068736.00 | 12.51s/ep | ETA: 10:31:51
+# of epochs: 6980 | Current Cost: 34005504.00 | Best Cost: 8068736.00 | 12.47s/ep | ETA: 10:27:35
+# of epochs: 6990 | Current Cost: 29570944.00 | Best Cost: 8068736.00 | 12.23s/ep | ETA: 10:13:38
+# of epochs: 7000 | Current Cost: 32577792.00 | Best Cost: 8068736.00 | 12.15s/ep | ETA: 10:07:25
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 7000)
+# of epochs: 7010 | Current Cost: 26304512.00 | Best Cost: 8068736.00 | 12.15s/ep | ETA: 10:05:14
+# of epochs: 7020 | Current Cost: 26802048.00 | Best Cost: 8068736.00 | 12.24s/ep | ETA: 10:07:42
+# of epochs: 7030 | Current Cost: 31150080.00 | Best Cost: 8068736.00 | 12.11s/ep | ETA: 9:59:26
+# of epochs: 7040 | Current Cost: 31517824.00 | Best Cost: 8068736.00 | 12.00s/ep | ETA: 9:52:14
+# of epochs: 7050 | Current Cost: 30479488.00 | Best Cost: 8068736.00 | 11.90s/ep | ETA: 9:45:19
+# of epochs: 7060 | Current Cost: 29095040.00 | Best Cost: 8068736.00 | 11.88s/ep | ETA: 9:42:08
+# of epochs: 7070 | Current Cost: 30998656.00 | Best Cost: 8068736.00 | 11.79s/ep | ETA: 9:35:50
+# of epochs: 7080 | Current Cost: 31431296.00 | Best Cost: 8068736.00 | 11.64s/ep | ETA: 9:26:36
+# of epochs: 7090 | Current Cost: 27515904.00 | Best Cost: 8068736.00 | 11.54s/ep | ETA: 9:19:54
+# of epochs: 7100 | Current Cost: 28900352.00 | Best Cost: 8068736.00 | 11.63s/ep | ETA: 9:22:10
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 7100)
+# of epochs: 7110 | Current Cost: 32036992.00 | Best Cost: 8068736.00 | 12.04s/ep | ETA: 9:40:07
+# of epochs: 7120 | Current Cost: 28878720.00 | Best Cost: 8068736.00 | 12.31s/ep | ETA: 9:50:44
+# of epochs: 7130 | Current Cost: 29246464.00 | Best Cost: 8068736.00 | 12.45s/ep | ETA: 9:55:31
+# of epochs: 7140 | Current Cost: 28294656.00 | Best Cost: 8068736.00 | 12.85s/ep | ETA: 10:12:34
+# of epochs: 7150 | Current Cost: 29073408.00 | Best Cost: 8068736.00 | 13.15s/ep | ETA: 10:24:44
+# of epochs: 7160 | Current Cost: 31085184.00 | Best Cost: 8068736.00 | 13.16s/ep | ETA: 10:22:44
+# of epochs: 7170 | Current Cost: 28381184.00 | Best Cost: 8068736.00 | 13.40s/ep | ETA: 10:32:05
+# of epochs: 7180 | Current Cost: 29808896.00 | Best Cost: 8068736.00 | 13.58s/ep | ETA: 10:38:14
+# of epochs: 7190 | Current Cost: 32556160.00 | Best Cost: 8068736.00 | 13.60s/ep | ETA: 10:36:56
+# of epochs: 7200 | Current Cost: 31279872.00 | Best Cost: 8068736.00 | 13.64s/ep | ETA: 10:36:41
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 7200)
+# of epochs: 7210 | Current Cost: 30868864.00 | Best Cost: 8068736.00 | 13.65s/ep | ETA: 10:34:40
+# of epochs: 7220 | Current Cost: 31972096.00 | Best Cost: 8068736.00 | 13.82s/ep | ETA: 10:40:12
+# of epochs: 7230 | Current Cost: 31388032.00 | Best Cost: 8068736.00 | 13.92s/ep | ETA: 10:42:32
+# of epochs: 7240 | Current Cost: 28727296.00 | Best Cost: 8068736.00 | 13.99s/ep | ETA: 10:43:32
+# of epochs: 7250 | Current Cost: 31561088.00 | Best Cost: 8068736.00 | 14.11s/ep | ETA: 10:46:55
+# of epochs: 7260 | Current Cost: 30198272.00 | Best Cost: 8068736.00 | 14.39s/ep | ETA: 10:57:05
+# of epochs: 7270 | Current Cost: 27602432.00 | Best Cost: 8068736.00 | 14.75s/ep | ETA: 11:10:55
+# of epochs: 7280 | Current Cost: 31799040.00 | Best Cost: 8068736.00 | 14.74s/ep | ETA: 11:08:02
+# of epochs: 7290 | Current Cost: 31842304.00 | Best Cost: 8068736.00 | 14.83s/ep | ETA: 11:09:50
+# of epochs: 7300 | Current Cost: 30479488.00 | Best Cost: 8068736.00 | 14.95s/ep | ETA: 11:12:50
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 7300)
+# of epochs: 7310 | Current Cost: 32902272.00 | Best Cost: 8068736.00 | 14.94s/ep | ETA: 11:09:56
+# of epochs: 7320 | Current Cost: 28619136.00 | Best Cost: 8068736.00 | 14.94s/ep | ETA: 11:07:15
+# of epochs: 7330 | Current Cost: 31366400.00 | Best Cost: 8068736.00 | 15.03s/ep | ETA: 11:08:57
+# of epochs: 7340 | Current Cost: 28705664.00 | Best Cost: 8068736.00 | 15.18s/ep | ETA: 11:12:49
+# of epochs: 7350 | Current Cost: 31734144.00 | Best Cost: 8068736.00 | 15.38s/ep | ETA: 11:19:12
+# of epochs: 7360 | Current Cost: 29441152.00 | Best Cost: 8068736.00 | 15.49s/ep | ETA: 11:21:38
+# of epochs: 7370 | Current Cost: 31734144.00 | Best Cost: 8068736.00 | 15.66s/ep | ETA: 11:26:16
+# of epochs: 7380 | Current Cost: 29181568.00 | Best Cost: 8068736.00 | 15.62s/ep | ETA: 11:22:03
+# of epochs: 7390 | Current Cost: 29441152.00 | Best Cost: 8068736.00 | 15.69s/ep | ETA: 11:22:27
+# of epochs: 7400 | Current Cost: 28748928.00 | Best Cost: 8068736.00 | 15.72s/ep | ETA: 11:21:16
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 7400)
+# of epochs: 7410 | Current Cost: 28359552.00 | Best Cost: 8068736.00 | 15.80s/ep | ETA: 11:21:57
+# of epochs: 7420 | Current Cost: 29419520.00 | Best Cost: 8068736.00 | 15.85s/ep | ETA: 11:21:22
+# of epochs: 7430 | Current Cost: 29030144.00 | Best Cost: 8068736.00 | 15.90s/ep | ETA: 11:21:00
+# of epochs: 7440 | Current Cost: 28575872.00 | Best Cost: 8068736.00 | 16.01s/ep | ETA: 11:23:09
+# of epochs: 7450 | Current Cost: 25893504.00 | Best Cost: 8068736.00 | 16.10s/ep | ETA: 11:24:03
+# of epochs: 7460 | Current Cost: 28251392.00 | Best Cost: 8068736.00 | 16.10s/ep | ETA: 11:21:33
+# of epochs: 7470 | Current Cost: 25850240.00 | Best Cost: 8068736.00 | 16.28s/ep | ETA: 11:26:20
+# of epochs: 7480 | Current Cost: 27126528.00 | Best Cost: 8068736.00 | 16.36s/ep | ETA: 11:26:57
+# of epochs: 7490 | Current Cost: 32145152.00 | Best Cost: 8068736.00 | 16.42s/ep | ETA: 11:26:42
+# of epochs: 7500 | Current Cost: 31734144.00 | Best Cost: 8068736.00 | 16.39s/ep | ETA: 11:22:51
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 7500)
+# of epochs: 7510 | Current Cost: 28748928.00 | Best Cost: 8068736.00 | 16.38s/ep | ETA: 11:19:51
+# of epochs: 7520 | Current Cost: 26802048.00 | Best Cost: 8068736.00 | 16.34s/ep | ETA: 11:15:23
+# of epochs: 7530 | Current Cost: 28035072.00 | Best Cost: 8068736.00 | 16.42s/ep | ETA: 11:15:59
+# of epochs: 7540 | Current Cost: 28446080.00 | Best Cost: 8068736.00 | 16.45s/ep | ETA: 11:14:18
+# of epochs: 7550 | Current Cost: 27970176.00 | Best Cost: 8068736.00 | 16.50s/ep | ETA: 11:13:48
+# of epochs: 7560 | Current Cost: 28532608.00 | Best Cost: 8068736.00 | 16.47s/ep | ETA: 11:09:53
+# of epochs: 7570 | Current Cost: 27775488.00 | Best Cost: 8068736.00 | 16.55s/ep | ETA: 11:10:20
+# of epochs: 7580 | Current Cost: 27840384.00 | Best Cost: 8068736.00 | 16.55s/ep | ETA: 11:07:27
+# of epochs: 7590 | Current Cost: 28662400.00 | Best Cost: 8068736.00 | 16.59s/ep | ETA: 11:06:19
+# of epochs: 7600 | Current Cost: 31452928.00 | Best Cost: 8068736.00 | 16.75s/ep | ETA: 11:10:09
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 7600)
+# of epochs: 7610 | Current Cost: 32145152.00 | Best Cost: 8068736.00 | 16.75s/ep | ETA: 11:07:20
+# of epochs: 7620 | Current Cost: 27775488.00 | Best Cost: 8068736.00 | 16.88s/ep | ETA: 11:09:37
+# of epochs: 7630 | Current Cost: 30955392.00 | Best Cost: 8068736.00 | 16.92s/ep | ETA: 11:08:19
+# of epochs: 7640 | Current Cost: 31625984.00 | Best Cost: 8068736.00 | 16.98s/ep | ETA: 11:07:49
+# of epochs: 7650 | Current Cost: 28684032.00 | Best Cost: 8068736.00 | 16.99s/ep | ETA: 11:05:30
+# of epochs: 7660 | Current Cost: 32512896.00 | Best Cost: 8068736.00 | 17.00s/ep | ETA: 11:02:59
+# of epochs: 7670 | Current Cost: 24530688.00 | Best Cost: 8068736.00 | 16.98s/ep | ETA: 10:59:29
+# of epochs: 7680 | Current Cost: 22518912.00 | Best Cost: 8068736.00 | 17.02s/ep | ETA: 10:58:02
+# of epochs: 7690 | Current Cost: 22518912.00 | Best Cost: 8068736.00 | 16.93s/ep | ETA: 10:51:49
+# of epochs: 7700 | Current Cost: 22410752.00 | Best Cost: 8068736.00 | 17.03s/ep | ETA: 10:52:45
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 7700)
+# of epochs: 7710 | Current Cost: 33140224.00 | Best Cost: 8068736.00 | 17.07s/ep | ETA: 10:51:20
+# of epochs: 7720 | Current Cost: 29246464.00 | Best Cost: 8068736.00 | 17.17s/ep | ETA: 10:52:25
+# of epochs: 7730 | Current Cost: 23124608.00 | Best Cost: 8068736.00 | 17.10s/ep | ETA: 10:46:47
+# of epochs: 7740 | Current Cost: 24379264.00 | Best Cost: 8068736.00 | 17.14s/ep | ETA: 10:45:27
+# of epochs: 7750 | Current Cost: 23470720.00 | Best Cost: 8068736.00 | 17.19s/ep | ETA: 10:44:33
+# of epochs: 7760 | Current Cost: 23470720.00 | Best Cost: 8068736.00 | 17.16s/ep | ETA: 10:40:29
+# of epochs: 7770 | Current Cost: 24898432.00 | Best Cost: 8068736.00 | 17.22s/ep | ETA: 10:40:00
+# of epochs: 7780 | Current Cost: 24941696.00 | Best Cost: 8068736.00 | 17.22s/ep | ETA: 10:37:04
+# of epochs: 7790 | Current Cost: 23470720.00 | Best Cost: 8068736.00 | 17.20s/ep | ETA: 10:33:33
+# of epochs: 7800 | Current Cost: 22627072.00 | Best Cost: 8068736.00 | 17.23s/ep | ETA: 10:31:43
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 7800)
+# of epochs: 7810 | Current Cost: 23059712.00 | Best Cost: 8068736.00 | 17.25s/ep | ETA: 10:29:30
+# of epochs: 7820 | Current Cost: 24509056.00 | Best Cost: 8068736.00 | 17.18s/ep | ETA: 10:24:08
+# of epochs: 7830 | Current Cost: 22778496.00 | Best Cost: 8068736.00 | 17.29s/ep | ETA: 10:25:22
+# of epochs: 7840 | Current Cost: 22691968.00 | Best Cost: 8068736.00 | 17.30s/ep | ETA: 10:22:50
+# of epochs: 7850 | Current Cost: 22064640.00 | Best Cost: 8068736.00 | 17.30s/ep | ETA: 10:19:59
+# of epochs: 7860 | Current Cost: 25158016.00 | Best Cost: 8068736.00 | 17.32s/ep | ETA: 10:17:54
+# of epochs: 7870 | Current Cost: 28359552.00 | Best Cost: 8068736.00 | 17.38s/ep | ETA: 10:17:07
+# of epochs: 7880 | Current Cost: 24660480.00 | Best Cost: 8068736.00 | 17.44s/ep | ETA: 10:16:04
+# of epochs: 7890 | Current Cost: 28554240.00 | Best Cost: 8068736.00 | 17.45s/ep | ETA: 10:13:42
+# of epochs: 7900 | Current Cost: 29246464.00 | Best Cost: 8068736.00 | 17.47s/ep | ETA: 10:11:22
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 7900)
+# of epochs: 7910 | Current Cost: 24357632.00 | Best Cost: 8068736.00 | 17.44s/ep | ETA: 10:07:21
+# of epochs: 7920 | Current Cost: 24768640.00 | Best Cost: 8068736.00 | 17.46s/ep | ETA: 10:05:21
+# of epochs: 7930 | Current Cost: 23189504.00 | Best Cost: 8068736.00 | 17.49s/ep | ETA: 10:03:29
+# of epochs: 7940 | Current Cost: 23600512.00 | Best Cost: 8068736.00 | 17.64s/ep | ETA: 10:05:40
+# of epochs: 7950 | Current Cost: 24552320.00 | Best Cost: 8068736.00 | 17.69s/ep | ETA: 10:04:19
+# of epochs: 7960 | Current Cost: 23146240.00 | Best Cost: 8068736.00 | 17.69s/ep | ETA: 10:01:36
+# of epochs: 7970 | Current Cost: 22821760.00 | Best Cost: 8068736.00 | 17.78s/ep | ETA: 10:01:26
+# of epochs: 7980 | Current Cost: 24768640.00 | Best Cost: 8068736.00 | 17.88s/ep | ETA: 10:02:04
+# of epochs: 7990 | Current Cost: 24747008.00 | Best Cost: 8068736.00 | 17.84s/ep | ETA: 9:57:32
+# of epochs: 8000 | Current Cost: 24530688.00 | Best Cost: 8068736.00 | 17.79s/ep | ETA: 9:52:57
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 8000)
+# of epochs: 8010 | Current Cost: 23319296.00 | Best Cost: 8068736.00 | 17.79s/ep | ETA: 9:50:10
+# of epochs: 8020 | Current Cost: 21826688.00 | Best Cost: 8068736.00 | 17.83s/ep | ETA: 9:48:27
+# of epochs: 8030 | Current Cost: 22518912.00 | Best Cost: 8068736.00 | 17.87s/ep | ETA: 9:46:51
+# of epochs: 8040 | Current Cost: 27580800.00 | Best Cost: 8068736.00 | 17.87s/ep | ETA: 9:43:43
+# of epochs: 8050 | Current Cost: 27451008.00 | Best Cost: 8068736.00 | 17.85s/ep | ETA: 9:40:14
+# of epochs: 8060 | Current Cost: 28640768.00 | Best Cost: 8068736.00 | 17.91s/ep | ETA: 9:39:02
+# of epochs: 8070 | Current Cost: 27970176.00 | Best Cost: 8068736.00 | 17.90s/ep | ETA: 9:35:38
+# of epochs: 8080 | Current Cost: 27407744.00 | Best Cost: 8068736.00 | 17.89s/ep | ETA: 9:32:24
+# of epochs: 8090 | Current Cost: 28294656.00 | Best Cost: 8068736.00 | 17.93s/ep | ETA: 9:30:45
+# of epochs: 8100 | Current Cost: 31625984.00 | Best Cost: 8068736.00 | 17.93s/ep | ETA: 9:27:52
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 8100)
+# of epochs: 8110 | Current Cost: 28705664.00 | Best Cost: 8068736.00 | 17.92s/ep | ETA: 9:24:23
+# of epochs: 8120 | Current Cost: 31193344.00 | Best Cost: 8068736.00 | 17.91s/ep | ETA: 9:21:07
+# of epochs: 8130 | Current Cost: 28662400.00 | Best Cost: 8068736.00 | 17.98s/ep | ETA: 9:20:30
+# of epochs: 8140 | Current Cost: 28013440.00 | Best Cost: 8068736.00 | 18.07s/ep | ETA: 9:20:03
+# of epochs: 8150 | Current Cost: 31625984.00 | Best Cost: 8068736.00 | 18.10s/ep | ETA: 9:18:00
+# of epochs: 8160 | Current Cost: 32036992.00 | Best Cost: 8068736.00 | 18.13s/ep | ETA: 9:15:54
+# of epochs: 8170 | Current Cost: 27948544.00 | Best Cost: 8068736.00 | 18.13s/ep | ETA: 9:13:03
+# of epochs: 8180 | Current Cost: 31993728.00 | Best Cost: 8068736.00 | 18.25s/ep | ETA: 9:13:43
+# of epochs: 8190 | Current Cost: 31452928.00 | Best Cost: 8068736.00 | 18.33s/ep | ETA: 9:12:49
+# of epochs: 8200 | Current Cost: 26866944.00 | Best Cost: 8068736.00 | 18.34s/ep | ETA: 9:10:10
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 8200)
+# of epochs: 8210 | Current Cost: 31928832.00 | Best Cost: 8068736.00 | 18.32s/ep | ETA: 9:06:29
+# of epochs: 8220 | Current Cost: 31193344.00 | Best Cost: 8068736.00 | 18.39s/ep | ETA: 9:05:31
+# of epochs: 8230 | Current Cost: 28900352.00 | Best Cost: 8068736.00 | 18.46s/ep | ETA: 9:04:28
+# of epochs: 8240 | Current Cost: 28381184.00 | Best Cost: 8068736.00 | 18.49s/ep | ETA: 9:02:15
+# of epochs: 8250 | Current Cost: 28857088.00 | Best Cost: 8068736.00 | 18.53s/ep | ETA: 9:00:27
+# of epochs: 8260 | Current Cost: 28078336.00 | Best Cost: 8068736.00 | 18.57s/ep | ETA: 8:58:35
+# of epochs: 8270 | Current Cost: 31885568.00 | Best Cost: 8068736.00 | 18.64s/ep | ETA: 8:57:28
+# of epochs: 8280 | Current Cost: 26001664.00 | Best Cost: 8068736.00 | 18.62s/ep | ETA: 8:53:43
+# of epochs: 8290 | Current Cost: 27429376.00 | Best Cost: 8068736.00 | 18.63s/ep | ETA: 8:51:00
+# of epochs: 8300 | Current Cost: 27234688.00 | Best Cost: 8068736.00 | 18.71s/ep | ETA: 8:49:59
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 8300)
+# of epochs: 8310 | Current Cost: 27515904.00 | Best Cost: 8068736.00 | 18.74s/ep | ETA: 8:47:57
+# of epochs: 8320 | Current Cost: 26066560.00 | Best Cost: 8068736.00 | 18.73s/ep | ETA: 8:44:26
+# of epochs: 8330 | Current Cost: 27407744.00 | Best Cost: 8068736.00 | 18.76s/ep | ETA: 8:42:04
+# of epochs: 8340 | Current Cost: 26066560.00 | Best Cost: 8068736.00 | 18.78s/ep | ETA: 8:39:41
+# of epochs: 8350 | Current Cost: 26607360.00 | Best Cost: 8068736.00 | 18.81s/ep | ETA: 8:37:19
+# of epochs: 8360 | Current Cost: 26931840.00 | Best Cost: 8068736.00 | 18.81s/ep | ETA: 8:34:13
+# of epochs: 8370 | Current Cost: 26910208.00 | Best Cost: 8068736.00 | 18.90s/ep | ETA: 8:33:32
+# of epochs: 8380 | Current Cost: 26866944.00 | Best Cost: 8068736.00 | 18.94s/ep | ETA: 8:31:26
+# of epochs: 8390 | Current Cost: 26780416.00 | Best Cost: 8068736.00 | 18.96s/ep | ETA: 8:28:46
+# of epochs: 8400 | Current Cost: 28402816.00 | Best Cost: 8068736.00 | 18.93s/ep | ETA: 8:24:52
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 8400)
+# of epochs: 8410 | Current Cost: 28208128.00 | Best Cost: 8068736.00 | 18.95s/ep | ETA: 8:22:11
+# of epochs: 8420 | Current Cost: 28273024.00 | Best Cost: 8068736.00 | 19.03s/ep | ETA: 8:21:09
+# of epochs: 8430 | Current Cost: 28619136.00 | Best Cost: 8068736.00 | 19.02s/ep | ETA: 8:17:33
+# of epochs: 8440 | Current Cost: 28684032.00 | Best Cost: 8068736.00 | 19.11s/ep | ETA: 8:16:47
+# of epochs: 8450 | Current Cost: 30263168.00 | Best Cost: 8068736.00 | 19.12s/ep | ETA: 8:13:54
+# of epochs: 8460 | Current Cost: 30025216.00 | Best Cost: 8068736.00 | 19.06s/ep | ETA: 8:09:17
+# of epochs: 8470 | Current Cost: 29852160.00 | Best Cost: 8068736.00 | 19.03s/ep | ETA: 8:05:19
+# of epochs: 8480 | Current Cost: 32837376.00 | Best Cost: 8068736.00 | 19.12s/ep | ETA: 8:04:18
+# of epochs: 8490 | Current Cost: 29635840.00 | Best Cost: 8068736.00 | 19.10s/ep | ETA: 8:00:48
+# of epochs: 8500 | Current Cost: 28662400.00 | Best Cost: 8068736.00 | 19.14s/ep | ETA: 7:58:35
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 8500)
+# of epochs: 8510 | Current Cost: 28575872.00 | Best Cost: 8068736.00 | 19.21s/ep | ETA: 7:57:07
+# of epochs: 8520 | Current Cost: 28748928.00 | Best Cost: 8068736.00 | 19.19s/ep | ETA: 7:53:28
+# of epochs: 8530 | Current Cost: 27537536.00 | Best Cost: 8068736.00 | 19.27s/ep | ETA: 7:52:13
+# of epochs: 8540 | Current Cost: 27494272.00 | Best Cost: 8068736.00 | 19.29s/ep | ETA: 7:49:17
+# of epochs: 8550 | Current Cost: 28770560.00 | Best Cost: 8068736.00 | 19.38s/ep | ETA: 7:48:27
+# of epochs: 8560 | Current Cost: 28813824.00 | Best Cost: 8068736.00 | 19.38s/ep | ETA: 7:45:08
+# of epochs: 8570 | Current Cost: 28857088.00 | Best Cost: 8068736.00 | 19.36s/ep | ETA: 7:41:21
+# of epochs: 8580 | Current Cost: 27645696.00 | Best Cost: 8068736.00 | 19.41s/ep | ETA: 7:39:16
+# of epochs: 8590 | Current Cost: 28640768.00 | Best Cost: 8068736.00 | 19.38s/ep | ETA: 7:35:31
+# of epochs: 8600 | Current Cost: 28619136.00 | Best Cost: 8068736.00 | 19.36s/ep | ETA: 7:31:48
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 8600)
+# of epochs: 8610 | Current Cost: 29981952.00 | Best Cost: 8068736.00 | 19.38s/ep | ETA: 7:29:00
+# of epochs: 8620 | Current Cost: 29895424.00 | Best Cost: 8068736.00 | 19.44s/ep | ETA: 7:27:04
+# of epochs: 8630 | Current Cost: 28727296.00 | Best Cost: 8068736.00 | 19.47s/ep | ETA: 7:24:37
+# of epochs: 8640 | Current Cost: 29635840.00 | Best Cost: 8068736.00 | 19.46s/ep | ETA: 7:21:00
+# of epochs: 8650 | Current Cost: 32923904.00 | Best Cost: 8068736.00 | 19.54s/ep | ETA: 7:19:44
+# of epochs: 8660 | Current Cost: 33140224.00 | Best Cost: 8068736.00 | 19.52s/ep | ETA: 7:15:57
+# of epochs: 8670 | Current Cost: 32945536.00 | Best Cost: 8068736.00 | 19.48s/ep | ETA: 7:11:43
+# of epochs: 8680 | Current Cost: 29722368.00 | Best Cost: 8068736.00 | 19.45s/ep | ETA: 7:07:57
+# of epochs: 8690 | Current Cost: 32815744.00 | Best Cost: 8068736.00 | 19.45s/ep | ETA: 7:04:38
+# of epochs: 8700 | Current Cost: 30025216.00 | Best Cost: 8068736.00 | 19.49s/ep | ETA: 7:02:15
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 8700)
+# of epochs: 8710 | Current Cost: 32923904.00 | Best Cost: 8068736.00 | 19.54s/ep | ETA: 7:00:05
+# of epochs: 8720 | Current Cost: 33096960.00 | Best Cost: 8068736.00 | 19.53s/ep | ETA: 6:56:37
+# of epochs: 8730 | Current Cost: 29527680.00 | Best Cost: 8068736.00 | 19.57s/ep | ETA: 6:54:09
+# of epochs: 8740 | Current Cost: 33010432.00 | Best Cost: 8068736.00 | 19.59s/ep | ETA: 6:51:25
+# of epochs: 8750 | Current Cost: 29570944.00 | Best Cost: 8068736.00 | 19.61s/ep | ETA: 6:48:36
+# of epochs: 8760 | Current Cost: 33075328.00 | Best Cost: 8068736.00 | 19.62s/ep | ETA: 6:45:29
+# of epochs: 8770 | Current Cost: 33096960.00 | Best Cost: 8068736.00 | 19.63s/ep | ETA: 6:42:22
+# of epochs: 8780 | Current Cost: 30198272.00 | Best Cost: 8068736.00 | 19.67s/ep | ETA: 6:40:03
+# of epochs: 8790 | Current Cost: 33096960.00 | Best Cost: 8068736.00 | 19.73s/ep | ETA: 6:37:57
+# of epochs: 8800 | Current Cost: 29787264.00 | Best Cost: 8068736.00 | 19.71s/ep | ETA: 6:34:11
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 8800)
+# of epochs: 8810 | Current Cost: 28619136.00 | Best Cost: 8068736.00 | 19.71s/ep | ETA: 6:30:49
+# of epochs: 8820 | Current Cost: 29830528.00 | Best Cost: 8068736.00 | 19.69s/ep | ETA: 6:27:19
+# of epochs: 8830 | Current Cost: 30025216.00 | Best Cost: 8068736.00 | 19.73s/ep | ETA: 6:24:38
+# of epochs: 8840 | Current Cost: 29917056.00 | Best Cost: 8068736.00 | 19.70s/ep | ETA: 6:20:56
+# of epochs: 8850 | Current Cost: 29938688.00 | Best Cost: 8068736.00 | 19.76s/ep | ETA: 6:18:45
+# of epochs: 8860 | Current Cost: 29852160.00 | Best Cost: 8068736.00 | 19.78s/ep | ETA: 6:15:52
+# of epochs: 8870 | Current Cost: 29917056.00 | Best Cost: 8068736.00 | 19.75s/ep | ETA: 6:11:53
+# of epochs: 8880 | Current Cost: 29852160.00 | Best Cost: 8068736.00 | 19.76s/ep | ETA: 6:08:52
+# of epochs: 8890 | Current Cost: 29938688.00 | Best Cost: 8068736.00 | 19.78s/ep | ETA: 6:05:51
+# of epochs: 8900 | Current Cost: 28640768.00 | Best Cost: 8068736.00 | 19.80s/ep | ETA: 6:03:04
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 8900)
+# of epochs: 8910 | Current Cost: 28921984.00 | Best Cost: 8068736.00 | 19.85s/ep | ETA: 6:00:35
+# of epochs: 8920 | Current Cost: 28727296.00 | Best Cost: 8068736.00 | 19.85s/ep | ETA: 5:57:20
+# of epochs: 8930 | Current Cost: 28013440.00 | Best Cost: 8068736.00 | 19.90s/ep | ETA: 5:54:56
+# of epochs: 8940 | Current Cost: 27191424.00 | Best Cost: 8068736.00 | 19.92s/ep | ETA: 5:51:51
+# of epochs: 8950 | Current Cost: 27191424.00 | Best Cost: 8068736.00 | 19.90s/ep | ETA: 5:48:18
+# of epochs: 8960 | Current Cost: 27580800.00 | Best Cost: 8068736.00 | 19.96s/ep | ETA: 5:46:00
+# of epochs: 8970 | Current Cost: 27040000.00 | Best Cost: 8068736.00 | 19.99s/ep | ETA: 5:43:14
+# of epochs: 8980 | Current Cost: 26044928.00 | Best Cost: 8068736.00 | 20.01s/ep | ETA: 5:40:14
+# of epochs: 8990 | Current Cost: 27710592.00 | Best Cost: 8068736.00 | 20.00s/ep | ETA: 5:36:39
+# of epochs: 9000 | Current Cost: 26066560.00 | Best Cost: 8068736.00 | 19.97s/ep | ETA: 5:32:49
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 9000)
+# of epochs: 9010 | Current Cost: 27451008.00 | Best Cost: 8068736.00 | 19.96s/ep | ETA: 5:29:25
+# of epochs: 9020 | Current Cost: 27472640.00 | Best Cost: 8068736.00 | 19.96s/ep | ETA: 5:26:05
+# of epochs: 9030 | Current Cost: 28835456.00 | Best Cost: 8068736.00 | 19.96s/ep | ETA: 5:22:41
+# of epochs: 9040 | Current Cost: 28900352.00 | Best Cost: 8068736.00 | 20.00s/ep | ETA: 5:19:57
+# of epochs: 9050 | Current Cost: 28813824.00 | Best Cost: 8068736.00 | 19.97s/ep | ETA: 5:16:11
+# of epochs: 9060 | Current Cost: 27559168.00 | Best Cost: 8068736.00 | 19.98s/ep | ETA: 5:12:59
+# of epochs: 9070 | Current Cost: 27753856.00 | Best Cost: 8068736.00 | 19.97s/ep | ETA: 5:09:28
+# of epochs: 9080 | Current Cost: 28878720.00 | Best Cost: 8068736.00 | 19.96s/ep | ETA: 5:05:59
+# of epochs: 9090 | Current Cost: 28835456.00 | Best Cost: 8068736.00 | 19.96s/ep | ETA: 5:02:46
+# of epochs: 9100 | Current Cost: 27624064.00 | Best Cost: 8068736.00 | 20.03s/ep | ETA: 5:00:24
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 9100)
+# of epochs: 9110 | Current Cost: 27667328.00 | Best Cost: 8068736.00 | 20.00s/ep | ETA: 4:56:42
+# of epochs: 9120 | Current Cost: 27321216.00 | Best Cost: 8068736.00 | 20.07s/ep | ETA: 4:54:18
+# of epochs: 9130 | Current Cost: 27537536.00 | Best Cost: 8068736.00 | 20.05s/ep | ETA: 4:50:42
+# of epochs: 9140 | Current Cost: 31344768.00 | Best Cost: 8068736.00 | 20.04s/ep | ETA: 4:47:18
+# of epochs: 9150 | Current Cost: 28013440.00 | Best Cost: 8068736.00 | 20.10s/ep | ETA: 4:44:48
+# of epochs: 9160 | Current Cost: 27602432.00 | Best Cost: 8068736.00 | 20.11s/ep | ETA: 4:41:35
+# of epochs: 9170 | Current Cost: 27602432.00 | Best Cost: 8068736.00 | 20.16s/ep | ETA: 4:38:48
+# of epochs: 9180 | Current Cost: 28597504.00 | Best Cost: 8068736.00 | 20.16s/ep | ETA: 4:35:32
+# of epochs: 9190 | Current Cost: 31496192.00 | Best Cost: 8068736.00 | 20.21s/ep | ETA: 4:32:46
+# of epochs: 9200 | Current Cost: 31690880.00 | Best Cost: 8068736.00 | 20.26s/ep | ETA: 4:30:05
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 9200)
+# of epochs: 9210 | Current Cost: 27083264.00 | Best Cost: 8068736.00 | 20.28s/ep | ETA: 4:27:00
+# of epochs: 9220 | Current Cost: 27213056.00 | Best Cost: 8068736.00 | 20.27s/ep | ETA: 4:23:30
+# of epochs: 9230 | Current Cost: 27040000.00 | Best Cost: 8068736.00 | 20.29s/ep | ETA: 4:20:23
+# of epochs: 9240 | Current Cost: 27234688.00 | Best Cost: 8068736.00 | 20.25s/ep | ETA: 4:16:32
+# of epochs: 9250 | Current Cost: 28965248.00 | Best Cost: 8068736.00 | 20.27s/ep | ETA: 4:13:20
+# of epochs: 9260 | Current Cost: 32296576.00 | Best Cost: 8068736.00 | 20.30s/ep | ETA: 4:10:18
+# of epochs: 9270 | Current Cost: 32210048.00 | Best Cost: 8068736.00 | 20.30s/ep | ETA: 4:06:55
+# of epochs: 9280 | Current Cost: 32101888.00 | Best Cost: 8068736.00 | 20.29s/ep | ETA: 4:03:31
+# of epochs: 9290 | Current Cost: 32080256.00 | Best Cost: 8068736.00 | 20.25s/ep | ETA: 3:59:38
+# of epochs: 9300 | Current Cost: 28921984.00 | Best Cost: 8068736.00 | 20.23s/ep | ETA: 3:56:04
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 9300)
+# of epochs: 9310 | Current Cost: 28554240.00 | Best Cost: 8068736.00 | 20.21s/ep | ETA: 3:52:25
+# of epochs: 9320 | Current Cost: 29787264.00 | Best Cost: 8068736.00 | 20.26s/ep | ETA: 3:49:34
+# of epochs: 9330 | Current Cost: 28294656.00 | Best Cost: 8068736.00 | 20.25s/ep | ETA: 3:46:10
+# of epochs: 9340 | Current Cost: 28078336.00 | Best Cost: 8068736.00 | 20.25s/ep | ETA: 3:42:44
+# of epochs: 9350 | Current Cost: 28294656.00 | Best Cost: 8068736.00 | 20.30s/ep | ETA: 3:39:55
+# of epochs: 9360 | Current Cost: 27840384.00 | Best Cost: 8068736.00 | 20.32s/ep | ETA: 3:36:43
+# of epochs: 9370 | Current Cost: 27991808.00 | Best Cost: 8068736.00 | 20.35s/ep | ETA: 3:33:39
+# of epochs: 9380 | Current Cost: 28273024.00 | Best Cost: 8068736.00 | 20.37s/ep | ETA: 3:30:30
+# of epochs: 9390 | Current Cost: 27559168.00 | Best Cost: 8068736.00 | 20.35s/ep | ETA: 3:26:53
+# of epochs: 9400 | Current Cost: 27926912.00 | Best Cost: 8068736.00 | 20.35s/ep | ETA: 3:23:30
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 9400)
+# of epochs: 9410 | Current Cost: 27472640.00 | Best Cost: 8068736.00 | 20.36s/ep | ETA: 3:20:10
+# of epochs: 9420 | Current Cost: 26434304.00 | Best Cost: 8068736.00 | 20.37s/ep | ETA: 3:16:54
+# of epochs: 9430 | Current Cost: 26607360.00 | Best Cost: 8068736.00 | 20.38s/ep | ETA: 3:13:37
+# of epochs: 9440 | Current Cost: 27797120.00 | Best Cost: 8068736.00 | 20.41s/ep | ETA: 3:10:27
+# of epochs: 9450 | Current Cost: 27948544.00 | Best Cost: 8068736.00 | 20.43s/ep | ETA: 3:07:15
+# of epochs: 9460 | Current Cost: 28013440.00 | Best Cost: 8068736.00 | 20.41s/ep | ETA: 3:03:41
+# of epochs: 9470 | Current Cost: 27883648.00 | Best Cost: 8068736.00 | 20.41s/ep | ETA: 3:00:17
+# of epochs: 9480 | Current Cost: 27407744.00 | Best Cost: 8068736.00 | 20.38s/ep | ETA: 2:56:36
+# of epochs: 9490 | Current Cost: 27277952.00 | Best Cost: 8068736.00 | 20.39s/ep | ETA: 2:53:19
+# of epochs: 9500 | Current Cost: 27061632.00 | Best Cost: 8068736.00 | 20.42s/ep | ETA: 2:50:10
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 9500)
+# of epochs: 9510 | Current Cost: 27104896.00 | Best Cost: 8068736.00 | 20.42s/ep | ETA: 2:46:43
+# of epochs: 9520 | Current Cost: 27559168.00 | Best Cost: 8068736.00 | 20.46s/ep | ETA: 2:43:41
+# of epochs: 9530 | Current Cost: 26109824.00 | Best Cost: 8068736.00 | 20.47s/ep | ETA: 2:40:19
+# of epochs: 9540 | Current Cost: 28164864.00 | Best Cost: 8068736.00 | 20.48s/ep | ETA: 2:37:01
+# of epochs: 9550 | Current Cost: 27299584.00 | Best Cost: 8068736.00 | 20.48s/ep | ETA: 2:33:34
+# of epochs: 9560 | Current Cost: 27126528.00 | Best Cost: 8068736.00 | 20.49s/ep | ETA: 2:30:13
+# of epochs: 9570 | Current Cost: 27277952.00 | Best Cost: 8068736.00 | 20.49s/ep | ETA: 2:26:51
+# of epochs: 9580 | Current Cost: 27148160.00 | Best Cost: 8068736.00 | 20.52s/ep | ETA: 2:23:40
+# of epochs: 9590 | Current Cost: 27407744.00 | Best Cost: 8068736.00 | 20.51s/ep | ETA: 2:20:10
+# of epochs: 9600 | Current Cost: 27451008.00 | Best Cost: 8068736.00 | 20.55s/ep | ETA: 2:17:00
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 9600)
+# of epochs: 9610 | Current Cost: 27559168.00 | Best Cost: 8068736.00 | 20.56s/ep | ETA: 2:13:39
+# of epochs: 9620 | Current Cost: 26239616.00 | Best Cost: 8068736.00 | 20.55s/ep | ETA: 2:10:09
+# of epochs: 9630 | Current Cost: 26672256.00 | Best Cost: 8068736.00 | 20.58s/ep | ETA: 2:06:54
+# of epochs: 9640 | Current Cost: 28099968.00 | Best Cost: 8068736.00 | 20.60s/ep | ETA: 2:03:35
+# of epochs: 9650 | Current Cost: 27840384.00 | Best Cost: 8068736.00 | 20.66s/ep | ETA: 2:00:31
+# of epochs: 9660 | Current Cost: 26650624.00 | Best Cost: 8068736.00 | 20.67s/ep | ETA: 1:57:07
+# of epochs: 9670 | Current Cost: 26499200.00 | Best Cost: 8068736.00 | 20.70s/ep | ETA: 1:53:52
+# of epochs: 9680 | Current Cost: 26737152.00 | Best Cost: 8068736.00 | 20.70s/ep | ETA: 1:50:24
+# of epochs: 9690 | Current Cost: 27753856.00 | Best Cost: 8068736.00 | 20.77s/ep | ETA: 1:47:19
+# of epochs: 9700 | Current Cost: 26758784.00 | Best Cost: 8068736.00 | 20.78s/ep | ETA: 1:43:53
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 9700)
+# of epochs: 9710 | Current Cost: 26650624.00 | Best Cost: 8068736.00 | 20.81s/ep | ETA: 1:40:33
+# of epochs: 9720 | Current Cost: 26499200.00 | Best Cost: 8068736.00 | 20.81s/ep | ETA: 1:37:07
+# of epochs: 9730 | Current Cost: 26737152.00 | Best Cost: 8068736.00 | 20.79s/ep | ETA: 1:33:34
+# of epochs: 9740 | Current Cost: 27753856.00 | Best Cost: 8068736.00 | 20.77s/ep | ETA: 1:30:00
+# of epochs: 9750 | Current Cost: 27732224.00 | Best Cost: 8068736.00 | 20.78s/ep | ETA: 1:26:34
+# of epochs: 9760 | Current Cost: 26910208.00 | Best Cost: 8068736.00 | 20.76s/ep | ETA: 1:23:02
+# of epochs: 9770 | Current Cost: 27667328.00 | Best Cost: 8068736.00 | 20.74s/ep | ETA: 1:19:29
+# of epochs: 9780 | Current Cost: 26347776.00 | Best Cost: 8068736.00 | 20.73s/ep | ETA: 1:16:00
+# of epochs: 9790 | Current Cost: 27602432.00 | Best Cost: 8068736.00 | 20.73s/ep | ETA: 1:12:33
+# of epochs: 9800 | Current Cost: 27732224.00 | Best Cost: 8068736.00 | 20.76s/ep | ETA: 1:09:11
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 9800)
+# of epochs: 9810 | Current Cost: 26542464.00 | Best Cost: 8068736.00 | 20.75s/ep | ETA: 1:05:42
+# of epochs: 9820 | Current Cost: 26412672.00 | Best Cost: 8068736.00 | 20.74s/ep | ETA: 1:02:13
+# of epochs: 9830 | Current Cost: 28164864.00 | Best Cost: 8068736.00 | 20.73s/ep | ETA: 0:58:44
+# of epochs: 9840 | Current Cost: 26542464.00 | Best Cost: 8068736.00 | 20.73s/ep | ETA: 0:55:16
+# of epochs: 9850 | Current Cost: 26347776.00 | Best Cost: 8068736.00 | 20.72s/ep | ETA: 0:51:47
+# of epochs: 9860 | Current Cost: 26044928.00 | Best Cost: 8068736.00 | 20.70s/ep | ETA: 0:48:17
+# of epochs: 9870 | Current Cost: 27321216.00 | Best Cost: 8068736.00 | 20.71s/ep | ETA: 0:44:52
+# of epochs: 9880 | Current Cost: 26153088.00 | Best Cost: 8068736.00 | 20.71s/ep | ETA: 0:41:24
+# of epochs: 9890 | Current Cost: 27299584.00 | Best Cost: 8068736.00 | 20.69s/ep | ETA: 0:37:56
+# of epochs: 9900 | Current Cost: 27299584.00 | Best Cost: 8068736.00 | 20.68s/ep | ETA: 0:34:28
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 9900)
+# of epochs: 9910 | Current Cost: 26153088.00 | Best Cost: 8068736.00 | 20.70s/ep | ETA: 0:31:02
+# of epochs: 9920 | Current Cost: 26282880.00 | Best Cost: 8068736.00 | 20.71s/ep | ETA: 0:27:36
+# of epochs: 9930 | Current Cost: 26174720.00 | Best Cost: 8068736.00 | 20.73s/ep | ETA: 0:24:11
+# of epochs: 9940 | Current Cost: 25958400.00 | Best Cost: 8068736.00 | 20.72s/ep | ETA: 0:20:43
+# of epochs: 9950 | Current Cost: 27580800.00 | Best Cost: 8068736.00 | 20.72s/ep | ETA: 0:17:16
+# of epochs: 9960 | Current Cost: 26282880.00 | Best Cost: 8068736.00 | 20.73s/ep | ETA: 0:13:49
+# of epochs: 9970 | Current Cost: 27624064.00 | Best Cost: 8068736.00 | 20.74s/ep | ETA: 0:10:22
+# of epochs: 9980 | Current Cost: 27537536.00 | Best Cost: 8068736.00 | 20.71s/ep | ETA: 0:06:54
+# of epochs: 9990 | Current Cost: 25936768.00 | Best Cost: 8068736.00 | 20.70s/ep | ETA: 0:03:26
+# of epochs: 10000 | Current Cost: 27753856.00 | Best Cost: 8068736.00 | 20.72s/ep | ETA: 0:00:00
+[DDPG] Checkpoint saved to alexnet_ckpt.pt (episode 10000)
+[DDPG] Final checkpoint saved to alexnet_ckpt.pt
+--- Current Best Layout ---
+9 8 6 1 3 8 3 5 6 6 5 0 5 1 0 7 3 0 8 5 7 2 8 6 9 . . . . 1 9 . 5 . . . 1 . . 0 7 8 9 3 8 2 3 6 6 8 1 2 5 6 6 0 0 4 8 5 1 8 9 3
+5 0 2 8 5 4 3 6 3 7 2 2 4 2 5 1 3 1 7 4 3 8 8 4 . . . . . . . . . . . . . . . . 1 3 1 1 1 4 7 1 1 8 9 8 6 9 3 2 1 5 0 5 8 0 4 6
+9 4 9 7 7 6 5 5 4 8 6 9 7 0 4 2 6 9 9 6 9 8 6 1 . . . . . . . . . . . . . 8 . . . 9 1 3 4 0 0 6 7 7 7 3 4 5 1 6 5 4 1 3 8 2 1 8
+7 1 9 0 9 8 1 5 6 4 8 0 4 6 0 1 4 5 9 1 7 3 . . 1 . . . . . . . . . . . . . . . . . 7 0 4 7 5 3 5 0 4 2 2 7 1 0 9 4 5 2 6 1 5 9
+3 8 1 5 9 7 9 3 6 4 3 0 2 0 6 5 4 5 7 4 9 . . . . . . . . . . . . . . . . . . . . . 9 0 3 0 3 7 6 8 3 2 5 6 3 4 3 8 7 7 4 9 7 9
+2 4 2 8 8 6 8 9 8 6 4 3 9 2 7 6 8 6 8 0 . . . . 8 . . . . . . . . . . . . . . . . . . . 0 9 6 0 5 9 7 8 5 1 2 6 3 2 4 6 0 7 2 9
+2 3 7 2 0 2 1 7 3 7 6 3 8 0 7 9 3 0 2 . . . . . . . . 4 . . . . . . . . . . . . . . . . . 3 2 9 3 9 7 3 6 8 4 5 9 6 8 8 0 3 7 4
+1 0 4 3 4 2 9 3 0 9 2 0 6 6 4 9 6 5 . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6 4 3 9 6 2 2 9 2 3 9 5 9 8 5 1 9 3
+6 3 1 5 4 7 6 6 7 5 1 9 0 7 2 9 8 . . . 5 . . . . . . . . . . . . . . . . . . . . . . . . . . 9 4 8 2 8 5 0 2 1 9 4 1 2 6 0 8 4
+0 2 7 8 0 9 9 2 8 4 2 2 1 3 2 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2 5 5 5 4 8 3 8 4 2 2 4 3 9 5 3
+8 5 7 3 0 5 5 4 0 5 6 0 0 5 4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3 2 1 7 9 1 6 1 2 5 5 7 5 8 7
+1 2 7 1 1 1 7 3 3 3 3 0 1 7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5 6 1 6 5 4 9 4 7 8 8 0 7 3
+0 7 4 4 7 7 6 8 5 6 5 7 3 1 7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8 8 2 1 8 7 2 4 6 4 8 5 1
+9 3 4 6 0 9 1 8 9 1 8 0 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 1 1 7 4 1 6 1 0 9 6 0 0
+1 4 9 3 2 4 6 2 4 3 7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4 4 2 0 7 9 5 9 2 8 8
+0 4 9 8 7 1 5 7 4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7 7 0 6 0 4 8 4 5 9
+0 5 1 0 3 4 0 0 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 0 0 6 9 6 0 1 7 4
+1 4 2 4 7 3 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3 1 9 2 2 3 0 2
+4 8 7 6 6 6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6 3 2 5 5 6 3
+1 0 2 9 9 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6 5 8 8 2
+2 5 2 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2 8 1 3
+4 5 5 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5 5 0
+1 8 1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8 7
+1 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7 . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2 . . . . . . .
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7 . . . . . . . 2
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 1
+. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 5
+6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 0 2
+7 6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 3 5 9
+8 0 9 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6 0 7 0
+3 1 3 4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 1 3 9 5 1
+6 2 3 6 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6 9 2 9 0 0
+5 0 7 2 6 4 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 8 1 6 1 0 2 7
+1 1 8 1 6 8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 1 5 5 0 4 3 9 5
+1 2 2 3 3 7 7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 4 8 8 0 7 9 2 6 5
+9 5 5 5 6 4 9 0 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7 9 4 3 0 6 8 3 4 2
+4 8 7 1 8 1 9 0 3 . . . . . . . . . . . . . . . . . . . . . . . . 0 . . . . . . . . . . . . . . . . . . . 0 1 5 6 3 5 0 2 7 2 7
+1 6 7 0 5 4 5 7 5 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 7 7 1 4 6 0 3 5 0 4 1 4
+2 6 5 4 6 8 0 9 5 4 5 7 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6 5 7 9 8 3 6 8 6 3 3 5 6
+0 3 0 8 6 9 0 3 4 6 0 8 . . . . . . . . . . . . . . . . . . . . . . . . . . 8 . . 0 . . . . . . . . 9 4 0 5 5 2 1 3 2 7 7 8 2 7
+0 6 5 3 3 1 1 9 4 7 0 2 9 8 . . . . . . . . . . . 8 . . . . . . . . . . 1 . . . . . . . . . . . . 8 7 3 2 7 6 4 7 5 8 3 7 8 8 0
+0 4 9 8 6 4 3 9 4 6 2 2 3 5 8 . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 6 . 1 5 3 6 8 1 9 7 0 8 1 0 6 4 4 2 5
+0 0 0 8 1 9 0 0 5 1 1 7 4 5 8 2 . . . . . . . . . . . . . . . . . . . . . . . . . . . 0 . . . 9 6 9 1 2 4 1 6 9 3 6 9 7 4 9 7 8
+2 6 9 3 7 7 7 3 4 9 3 7 9 3 9 1 3 . . . . . . . . . . . . . . . . . . . . . . . . . . . . 2 4 2 2 4 1 2 4 9 1 6 5 2 0 6 1 8 1 3
+8 9 2 2 6 0 4 3 2 7 3 6 9 0 5 8 5 . . . . . . . . . 1 . . . . . . . . . . . . . . . . . 8 7 6 5 7 8 7 0 1 4 3 9 5 6 2 5 1 3 5 9
+7 0 5 5 5 0 2 0 2 7 8 2 7 0 2 7 9 0 . . . . . . . . . . . . . . 1 . . . . . . . . . . 5 3 8 8 3 9 3 3 1 7 6 2 8 9 7 8 2 1 9 2 2
+4 1 6 9 0 8 9 5 1 5 6 0 4 7 2 1 0 1 3 . 5 . . . . . . . . . . . . . 8 . . . . . . . . 6 9 1 6 4 6 6 0 0 5 5 9 7 0 2 4 4 3 5 6 9
+4 0 2 4 8 3 2 5 8 3 8 9 3 0 9 3 5 6 4 6 . . . . . . . . . . . . . . . . . . . . . . 9 2 9 2 7 6 5 3 0 9 8 0 1 6 5 7 7 7 9 9 5 7
+2 6 3 7 1 6 6 4 2 4 4 4 2 6 8 2 3 6 8 4 9 . . . . . . . . . . . . . . . . . . . . 2 5 4 8 1 2 6 1 9 0 1 3 9 9 0 3 0 0 1 0 7 2 0
+1 8 9 6 3 4 1 9 4 5 3 6 9 5 2 4 4 8 8 9 9 8 . . . . . . . . . . . . . . . . . . 5 8 7 1 2 8 9 2 2 5 4 6 2 9 7 6 6 6 4 8 0 4 5 1
+6 7 7 2 5 6 7 4 8 3 8 7 9 7 8 8 3 8 3 9 1 2 6 2 . . . . . . . . . . . . . . . 0 4 0 4 7 7 5 5 8 2 7 4 5 1 3 9 6 2 0 5 1 6 4 2 6
+1 5 3 0 5 7 9 3 7 7 6 3 0 2 0 1 1 6 9 1 1 4 5 9 . . . . . 3 . . . . . . . 1 3 0 3 7 0 7 1 8 4 8 0 9 1 1 7 0 2 8 9 2 8 8 1 7 8 6
+2 3 8 9 7 7 5 2 9 0 3 2 1 3 5 9 6 4 8 4 2 4 5 2 2 . . 6 3 . . . . . . 0 . 8 9 6 0 5 2 4 4 7 4 9 2 4 3 3 3 5 8 0 1 4 3 5 1 9 2 7
+0 9 3 5 0 5 2 1 6 5 3 9 8 4 1 8 7 1 4 1 7 5 8 7 4 5 . . 3 4 . . . . . 6 . 2 4 3 4 8 7 1 0 1 9 8 3 3 7 4 6 7 6 9 4 3 3 2 8 3 1 4
+---------------------------
+
+Final placement cost : 8068736.0000
+  On-chip  comm cost : 8520269.0000
+  Off-chip comm cost : 53936156.0000
+  Chip placement     : [4036 3571 4091 ... 2168  780 4061]
