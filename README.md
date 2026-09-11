@@ -261,6 +261,23 @@ These are implementation checks. H100 execution, 12 GB memory use, long-run conv
 
 ## Remaining reproduction work
 
+The corrected [project state and next steps](PROJECT_STATE.md) distinguish
+implemented behavior from assumptions and historical experiment claims.
+
+For a bounded device check after installing the dependencies above, run:
+
+```bash
+python src/validate_device.py --device cpu --output runs/cpu-validation.json
+# On the allocated H100 host once SSH access is available:
+python src/validate_device.py --device cuda --output runs/h100-validation.json
+```
+
+This runs both test suites, checks real DDPG updates and an agent checkpoint
+round-trip, and records component timings and CUDA peak training memory in JSON.
+CUDA mode fails explicitly if unavailable. The default CPU run passed with 120
+steps and 57 updates on 2026-09-11. This short check does not establish convergence,
+steady-state memory fit, or GPU speedup; timings include synchronization overhead.
+
 1. Reconstruct and validate block-streaming stages and communication contention with explicit assumptions.
 2. Implement compute-aware partitioning and buffer-capacity constraints; the paper's refinement formula is unspecified.
 3. Implement and validate merge arithmetic and separate CONV/FC placement regions.
@@ -280,9 +297,11 @@ src/
   multi_chip_topology.py     # Mesh/torus costs and physical core IDs
   test_multi_chip.py         # Original smoke suite
   test_reconciliation.py     # Reconciliation regression suite
+  validate_device.py         # Bounded CPU/CUDA validation and component timings
   run_multi_chip_fast.py     # Historical alternative; not reconciled or validated
   agent/, env/, runner/      # Original single-chip implementation
 RECONCILIATION.md             # Detailed assumptions and reconciliation history
+PROJECT_STATE.md              # Corrected progress, evidence and next steps
 requirements.txt              # Historical dependency list, not current multi-chip setup
 ~~~
 
