@@ -47,9 +47,14 @@ class MultiChipTopology:
         on_chip_latency: float = 1.0,
         off_chip_latency: float = 5.0,
         topology: str = "mesh",
+        routing_model: str = "legacy_distance",
     ):
         if topology not in ("mesh", "torus"):
             raise ValueError(f"Unknown topology '{topology}'. Choose 'mesh' or 'torus'.")
+        if routing_model not in ("legacy_distance", "paper_xy"):
+            raise ValueError("routing_model must be legacy_distance or paper_xy")
+        if routing_model == "paper_xy" and topology != "mesh":
+            raise ValueError("paper_xy routing currently supports the paper's mesh topology only")
 
         self.num_chips_x = num_chips_x
         self.num_chips_y = num_chips_y
@@ -62,6 +67,7 @@ class MultiChipTopology:
         self.on_chip_latency = on_chip_latency
         self.off_chip_latency = off_chip_latency
         self.topology = topology
+        self.routing_model = routing_model
 
     # ------------------------------------------------------------------
     # Core / chip indexing helpers
@@ -101,6 +107,11 @@ class MultiChipTopology:
         row/col), so the effective distance in each dimension is the
         shorter of the direct and wraparound paths.
         """
+        if self.routing_model == "paper_xy":
+            route = self.xy_route(src_global, dst_global)
+            return sum(self.on_chip_latency if kind == "on" else self.off_chip_latency
+                       for kind, _ in route)
+
         scx, scy, sr, sc = self.core_xy_global(src_global)
         dcx, dcy, dr, dc = self.core_xy_global(dst_global)
 
@@ -115,6 +126,63 @@ class MultiChipTopology:
 
         return (on_chip_hops * self.on_chip_latency +
                 chip_hops * self.off_chip_latency)
+
+    @staticmethod
+    def _axis_steps(start: int, end: int):
+        step = 1 if end > start else -1
+        return range(start, end, step)
+
+    def _local_xy_route(self, chip_id, start_row, start_col, end_row, end_col):
+        links = []
+        col = start_col
+        for current in self._axis_steps(start_col, end_col):
+            nxt = current + (1 if end_col > start_col else -1)
+            links.append(("on", (chip_id, start_row, current, start_row, nxt)))
+            col = nxt
+        row = start_row
+        for current in self._axis_steps(start_row, end_row):
+            nxt = current + (1 if end_row > start_row else -1)
+            links.append(("on", (chip_id, current, col, nxt, col)))
+            row = nxt
+        return links
+
+    def xy_route(self, src_global: int, dst_global: int):
+        """Directed links for the paper-mode XY reconstruction.
+
+        Same-chip traffic follows X then Y through the core mesh. Inter-chip
+        traffic goes from the source core to a lower-left chip-periphery
+        router, follows X then Y through the chip grid, and then travels from
+        the destination periphery to its core. The lower-left gateway is an
+        explicit interpretation of Figure 3; the paper does not publish a
+        cycle-accurate GRS route implementation.
+        """
+        if not (0 <= src_global < self.total_cores and
+                0 <= dst_global < self.total_cores):
+            raise ValueError("core IDs must be within the topology")
+        if src_global == dst_global:
+            return []
+        src_chip, src_local = self.chip_and_local(src_global)
+        dst_chip, dst_local = self.chip_and_local(dst_global)
+        sr, sc = divmod(src_local, self.cols_per_chip)
+        dr, dc = divmod(dst_local, self.cols_per_chip)
+        if src_chip == dst_chip:
+            return self._local_xy_route(src_chip, sr, sc, dr, dc)
+
+        gateway_row, gateway_col = self.rows_per_chip - 1, 0
+        links = self._local_xy_route(src_chip, sr, sc, gateway_row, gateway_col)
+        scx, scy = self.chip_xy(src_chip)
+        dcx, dcy = self.chip_xy(dst_chip)
+        chip_x, chip_y = scx, scy
+        for current in self._axis_steps(scx, dcx):
+            nxt = current + (1 if dcx > scx else -1)
+            links.append(("off", (current, chip_y, nxt, chip_y)))
+            chip_x = nxt
+        for current in self._axis_steps(scy, dcy):
+            nxt = current + (1 if dcy > scy else -1)
+            links.append(("off", (chip_x, current, chip_x, nxt)))
+            chip_y = nxt
+        links.extend(self._local_xy_route(dst_chip, gateway_row, gateway_col, dr, dc))
+        return links
 
     # ------------------------------------------------------------------
     # Full latency matrix (cached)
@@ -144,5 +212,6 @@ class MultiChipTopology:
         return (
             f"MultiChipTopology({self.num_chips_x}x{self.num_chips_y} chips, "
             f"{self.rows_per_chip}x{self.cols_per_chip} cores/chip, "
-            f"total={self.total_cores} cores, topology={self.topology})"
+            f"total={self.total_cores} cores, topology={self.topology}, "
+            f"routing={self.routing_model})"
         )

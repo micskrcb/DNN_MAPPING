@@ -33,6 +33,9 @@ class MultiChipEnvironment:
         make_dag: bool = True,
         topology: str = "mesh",
         timing_units: str = "proxy",
+        allowed_cores: Optional[np.ndarray] = None,
+        routing_model: str = "legacy_distance",
+        pipeline_model: str = "task_sum",
     ):
         """
         Args:
@@ -55,14 +58,26 @@ class MultiChipEnvironment:
             rows_per_chip, cols_per_chip,
             on_chip_latency, off_chip_latency,
             topology=topology,
+            routing_model=routing_model,
         )
         self.total_cores = self.topo.total_cores
+
+        if allowed_cores is None:
+            allowed_cores = np.arange(self.total_cores, dtype=np.int32)
+        allowed_cores = np.asarray(allowed_cores, dtype=np.int32)
+        if (allowed_cores.ndim != 1 or len(allowed_cores) == 0 or
+                len(np.unique(allowed_cores)) != len(allowed_cores) or
+                np.any(allowed_cores < 0) or np.any(allowed_cores >= self.total_cores)):
+            raise ValueError("allowed_cores must be unique valid physical-core IDs")
+        self.allowed_cores = np.sort(allowed_cores)
+        self.allowed_core_mask = np.zeros(self.total_cores, dtype=bool)
+        self.allowed_core_mask[self.allowed_cores] = True
 
         if num_tasks is None:
             num_tasks = self.total_cores
         self.num_tasks = num_tasks
-        if not 1 <= num_tasks <= self.total_cores:
-            raise ValueError("num_tasks must be positive and fit the physical core capacity")
+        if not 1 <= num_tasks <= len(self.allowed_cores):
+            raise ValueError("num_tasks must be positive and fit the allowed physical-core capacity")
 
         if task_graph is None:
             rng = np.random.default_rng(42)
@@ -79,7 +94,11 @@ class MultiChipEnvironment:
         if (np.shape(task_graph) != (num_tasks, num_tasks) or
                 not np.all(np.isfinite(task_graph)) or np.any(task_graph < 0)):
             raise ValueError("task_graph must be a finite nonnegative square matrix")
-        self.latency = self.topo.latency_matrix()
+        if pipeline_model not in ("task_sum", "xy_contention"):
+            raise ValueError("pipeline_model must be task_sum or xy_contention")
+        if pipeline_model == "xy_contention" and routing_model != "paper_xy":
+            raise ValueError("xy_contention requires paper_xy routing")
+        self.pipeline_model = pipeline_model
 
         if timing_units not in ("proxy", "seconds"):
             raise ValueError("timing_units must be proxy or seconds")
@@ -142,12 +161,17 @@ class MultiChipEnvironment:
         return self._get_state(), reward, done
 
     def place(self, placement: np.ndarray):
-        assert len(placement) == self.num_tasks
+        placement = np.asarray(placement, dtype=np.int32)
+        if len(placement) != self.num_tasks:
+            raise ValueError("placement length must equal num_tasks")
+        placed = placement[placement >= 0]
+        if (len(np.unique(placed)) != len(placed) or
+                np.any(placement < -1) or np.any(placed >= self.total_cores) or
+                not np.all(self.allowed_core_mask[placed])):
+            raise ValueError("placement must use distinct allowed physical cores")
         self.placement = placement.copy()
         self.core_occupied[:] = False
-        for c in placement:
-            if 0 <= c < self.total_cores:
-                self.core_occupied[c] = True
+        self.core_occupied[placed] = True
 
     # ------------------------------------------------------------------
     # Pipeline-stage objective (paper Eq. 4)
@@ -226,6 +250,8 @@ class MultiChipEnvironment:
         thousands of tasks this was previously the dominant runtime cost.
         """
         stages = self.pipeline_stages()  # also populates self._succ_cache
+        if self.pipeline_model == "xy_contention":
+            return self._xy_contention_latency(stages)
         stage_latencies = []
         for stage in stages:
             task_latencies = []
@@ -243,6 +269,42 @@ class MultiChipEnvironment:
                 task_latencies.append(float(self.compute_latency[i]) + comm)
             stage_latencies.append(max(task_latencies) if task_latencies else 0.0)
         return max(stage_latencies) if stage_latencies else 0.0
+
+    def _xy_contention_latency(self, stages) -> float:
+        """Maximum time phase with shared-link load under reconstructed XY routes.
+
+        Tasks in a topological stage execute in parallel. A time phase is the
+        maximum task compute time plus the maximum serialization time of any
+        directed on-chip or off-chip link used by that stage's outgoing data.
+        This is closer to the paper's traffic-sensitive objective than summing
+        independent byte-hop costs, while the exact GRS gateway and block
+        schedule remain documented reconstruction assumptions.
+        """
+        phase_latencies = []
+        for stage in stages:
+            compute = max((float(self.compute_latency[index])
+                           for index in stage if self.placement[index] >= 0),
+                          default=0.0)
+            loads = {}
+            for index in stage:
+                source = self.placement[index]
+                if source < 0:
+                    continue
+                for successor, volume in self._succ_cache[index]:
+                    destination = self.placement[successor]
+                    if destination < 0:
+                        continue
+                    for kind, link in self.topo.xy_route(int(source), int(destination)):
+                        key = (kind, link)
+                        loads[key] = loads.get(key, 0.0) + volume
+            communication = max(
+                (volume * (self.topo.on_chip_latency if kind == "on"
+                           else self.topo.off_chip_latency)
+                 for (kind, _), volume in loads.items()),
+                default=0.0,
+            )
+            phase_latencies.append(compute + communication)
+        return max(phase_latencies, default=0.0)
 
     @staticmethod
     def estimate_compute_latency(
@@ -296,11 +358,12 @@ class MultiChipEnvironment:
                     continue
                 volume = self.task_graph[i, j]
                 if volume > 0:
-                    cost += volume * self.latency[ci, cj]
+                    cost += volume * self.topo.comm_cost(ci, cj)
         return cost
 
     def _get_state(self) -> np.ndarray:
         occupancy = self.core_occupied.astype(np.float32)
+        occupancy[~self.allowed_core_mask] = -1.0
         task_norm = (self.placement / max(self.total_cores, 1)).astype(np.float32)
         return np.concatenate([occupancy, task_norm])
 
@@ -328,6 +391,59 @@ class MultiChipEnvironment:
                     off_cost += vol * self.topo.comm_cost(ci, cj)
         return {"on_chip_cost": on_cost, "off_chip_cost": off_cost,
                 "total_cost": on_cost + off_cost}
+
+    def routing_diagnostics(self) -> Optional[dict]:
+        """Summarize routed hops and shared-link traffic for paper XY mode.
+
+        Both an edge-average and a traffic-weighted hop count are reported.
+        Link loads are communication volumes before multiplication by link
+        serialization time.  These diagnostics support the paper's
+        hop-distance and traffic-distribution comparisons without changing
+        the optimization objective.
+        """
+        if self.topo.routing_model != "paper_xy":
+            return None
+        self.pipeline_stages()  # populate the sparse successor cache
+        edge_count = 0
+        total_volume = 0.0
+        total_hops = 0
+        volume_hops = 0.0
+        on_loads = {}
+        off_loads = {}
+        for source_task, successors in enumerate(self._succ_cache):
+            source_core = int(self.placement[source_task])
+            if source_core < 0:
+                continue
+            for destination_task, volume in successors:
+                destination_core = int(self.placement[destination_task])
+                if destination_core < 0:
+                    continue
+                route = self.topo.xy_route(source_core, destination_core)
+                hops = len(route)
+                edge_count += 1
+                total_volume += volume
+                total_hops += hops
+                volume_hops += volume * hops
+                for kind, link in route:
+                    loads = on_loads if kind == "on" else off_loads
+                    loads[link] = loads.get(link, 0.0) + volume
+
+        def load_summary(loads):
+            values = list(loads.values())
+            return {
+                "used_links": len(values),
+                "mean_load": float(np.mean(values)) if values else 0.0,
+                "max_load": float(max(values)) if values else 0.0,
+            }
+
+        return {
+            "communicating_edges": edge_count,
+            "communication_volume": total_volume,
+            "mean_hops_per_edge": total_hops / edge_count if edge_count else 0.0,
+            "traffic_weighted_mean_hops": volume_hops / total_volume if total_volume else 0.0,
+            "on_chip_links": load_summary(on_loads),
+            "off_chip_links": load_summary(off_loads),
+        }
 
     def __repr__(self):
         return f"MultiChipEnvironment({self.topo})"

@@ -57,6 +57,12 @@ def diagnose(records):
         "tail_noisy_cost": describe(item["current_cost"] for item in tail),
         "tail_deterministic_cost": describe(item["deterministic_cost"] for item in tail),
         "tail_collision_repairs": describe(item["collision_repairs"] for item in tail),
+        "tail_deterministic_collision_repairs": describe(
+            item.get("deterministic_collision_repairs") for item in tail),
+        "tail_unique_intended_cores": describe(
+            item.get("unique_intended_cores") for item in tail),
+        "tail_deterministic_unique_intended_cores": describe(
+            item.get("deterministic_unique_intended_cores") for item in tail),
         "tail_actor_loss": describe(item.get("actor_loss_mean") for item in tail),
         "tail_critic_loss": describe(item.get("critic_loss_mean") for item in tail),
         "final_noise_scale": final["noise_scale"],

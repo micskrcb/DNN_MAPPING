@@ -19,6 +19,7 @@ import os
 import time
 import hashlib
 import json
+import subprocess
 from datetime import timedelta
 import numpy as np
 
@@ -27,7 +28,23 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from multi_chip_topology import MultiChipTopology
 from multi_chip_environment import MultiChipEnvironment
-from compute_model import channel_ranges, tile_work, compute_seconds, edge_bytes
+from compute_model import (PAPER_LOGIC_CORE_TARGETS, channel_ranges, tile_work,
+                           compute_seconds, edge_bytes, paper_partition_grids)
+
+
+def git_provenance():
+    """Best-effort revision metadata for reproducible experiment reports."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        revision = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=root, check=True,
+            text=True, capture_output=True).stdout.strip()
+        dirty = bool(subprocess.run(
+            ["git", "status", "--porcelain"], cwd=root, check=True,
+            text=True, capture_output=True).stdout.strip())
+        return {"revision": revision, "dirty": dirty}
+    except (OSError, subprocess.CalledProcessError):
+        return {"revision": None, "dirty": None}
 
 try:
     import torch
@@ -158,13 +175,16 @@ if HAS_TORCH:
         model.eval()
 
         warning = None
-        if any(k in model_name for k in _CONCAT_MERGE_FAMILIES + _ADD_MERGE_FAMILIES):
-            warning = ("Branch dependencies are traced, but merge arithmetic is not modeled. "
-                       "Full-frame timing rejects residual/concat graphs; proxy scores are approximate.")
+        if any(k in model_name for k in _CONCAT_MERGE_FAMILIES):
+            warning = ("Branch dependencies are traced, but concatenation timing is unsupported.")
+        elif any(k in model_name for k in _ADD_MERGE_FAMILIES):
+            warning = ("Residual dependencies are traced; add arithmetic is assigned to the "
+                       "destination transformation/VVA path without a separate logic core.")
         return model, dummy_input, warning
 
     def extract_model_task_graph(model_name: str = "simple", channels_per_partition: int = 8,
-                                  custom_model_path: str = None, return_work: bool = False):
+                                  custom_model_path: str = None, return_work: bool = False,
+                                  partition_mode: str = "uniform"):
         """
         PAPER FIX (Sec 3.1.1, Fig. 5-6): partition each CONV/FC layer's
         weights along the input channel C and output channel K into a grid
@@ -177,11 +197,11 @@ if HAS_TORCH:
         transformation unit, so only Conv2d/Linear layers are partitioned.
 
         Uses torch.fx for Conv2d/Linear dependency discovery. Channel ranges
-        are routed through pooling/flatten using consumer shapes. Residual adds
-        are bypassed for proxy graph inspection, not modeled as arithmetic tasks.
-        Full-frame timing rejects residual/concat graphs; grouped convolutions
-        and channel-changing merges are rejected. This is a restricted extractor,
-        not an exact simulator for every torchvision architecture.
+        are routed through pooling/flatten using consumer shapes. Residual
+        branch traffic is retained and addition is assigned to the destination
+        transformation/VVA path without a separate task. Concatenation, grouped
+        convolutions, and channel-changing merges are rejected. This is a
+        restricted extractor, not an exact simulator for every architecture.
 
         Args:
             model_name: "simple" (small demo CNN), any model name found in
@@ -260,10 +280,15 @@ if HAS_TORCH:
         node_list = [n for n in traced.graph.nodes if n in logic_nodes]
         if return_work:
             import operator
-            if any(n.op == "call_function" and n.target in (operator.add, torch.add, torch.cat)
+            if any(n.op == "call_function" and n.target is torch.cat
+                   for n in traced.graph.nodes):
+                raise ValueError("Full-frame timing does not model concatenation merges")
+            if any(n.op == "call_function" and n.target in (operator.add, torch.add)
                    or n.op == "call_method" and n.target in ("add", "add_")
                    for n in traced.graph.nodes):
-                raise ValueError("Full-frame timing does not yet model residual add/concat work; use proxy mode for graph inspection")
+                print("[ASSUMPTION] Residual-add traffic is traced from both branches; "
+                      "the add executes in the destination transformation/VVA path and "
+                      "does not consume a separate Figure-6 logic core.")
 
         def downstream_logic_nodes(start):
             """BFS forward through non-logic nodes to find the TRUE next
@@ -303,6 +328,25 @@ if HAS_TORCH:
                     task_graph[id_of[n], id_of[dst]] += vol
             return task_graph, num_tasks, labels
 
+        if partition_mode not in ("uniform", "paper_targets"):
+            raise ValueError("partition_mode must be uniform or paper_targets")
+        paper_grids = {}
+        if partition_mode == "paper_targets":
+            normalized_model = model_name.lower()
+            if custom_model_path is not None or normalized_model not in PAPER_LOGIC_CORE_TARGETS:
+                raise ValueError("paper_targets supports alexnet, vgg16 and resnet50 only")
+            for region_kind in ("conv", "linear"):
+                region_nodes = [node for node in node_list if logic_nodes[node][1] == region_kind]
+                layer_specs = []
+                for node in region_nodes:
+                    name, _, cin, cout, height, width = logic_nodes[node]
+                    layer_specs.append({"name": name, "cin": cin, "cout": cout,
+                                        "height": height, "width": width,
+                                        "kernel_area": kernels[node]})
+                target = PAPER_LOGIC_CORE_TARGETS[normalized_model][region_kind]
+                grids = paper_partition_grids(layer_specs, target)
+                paper_grids.update(zip(region_nodes, grids))
+
         # --- Channel-partitioned extraction (paper Sec 3.1.1), generalized
         # to arbitrary graph topology. M/N are now computed independently
         # per layer from its OWN (C_in, C_out) -- not tied to a specific
@@ -318,8 +362,11 @@ if HAS_TORCH:
 
         for n in node_list:
             name, kind, C_in, C_out, H, W = logic_nodes[n]
-            M = max(1, math.ceil(C_out / channels_per_partition))
-            N = max(1, math.ceil(C_in / channels_per_partition))
+            if partition_mode == "paper_targets":
+                M, N = paper_grids[n]
+            else:
+                M = max(1, math.ceil(C_out / channels_per_partition))
+                N = max(1, math.ceil(C_in / channels_per_partition))
             work, kinds = tile_work(C_in, C_out, H, W, kernels[n], N, M)
             operations.extend(work)
             task_kinds.extend(kinds)
@@ -346,7 +393,10 @@ if HAS_TORCH:
             layer_ids[n] = (vmm_ids, vva_ids, M, N, partial_vol, edges_here)
             breakdown_rows.append((name, kind, C_in, C_out, M, N, M * N, M))
 
-        print(f">> Per-layer VMM/VVA breakdown ({model_name}, channels_per_partition={channels_per_partition}, "
+        partition_label = ("Figure-6 aggregate targets with explicit reconstructed per-layer grids"
+                           if partition_mode == "paper_targets"
+                           else f"channels_per_partition={channels_per_partition}")
+        print(f">> Per-layer VMM/VVA breakdown ({model_name}, {partition_label}, "
               f"extracted via torch.fx true computational-graph tracing):")
         print(f"   {'Layer':<30} {'Type':<8} {'Cin':>6} {'Cout':>6} {'M':>4} {'N':>4} {'VMM':>6} {'VVA':>5}")
         for name, kind, cin, cout, M, N, vmm, vva in breakdown_rows:
@@ -716,8 +766,23 @@ class MultiChipCoreMapper:
         self.batch_z    = max(1, batch_z)
         self._placement = np.full(self.num_tasks, -1, dtype=np.int32)
         self._occupied  = set()
+        physical = env.allowed_cores
+        chip = physical // topo.cores_per_chip
+        local = physical % topo.cores_per_chip
+        chip_x = chip % topo.num_chips_x
+        chip_y = chip // topo.num_chips_x
+        grid_x = chip_x * topo.cols_per_chip + local % topo.cols_per_chip
+        grid_y = chip_y * topo.rows_per_chip + local // topo.cols_per_chip
+        self._allowed_grid = np.sort(grid_y * self.total_cols + grid_x)
+        self._allowed_grid_mask = np.zeros(self.total_rows * self.total_cols, dtype=bool)
+        self._allowed_grid_mask[self._allowed_grid] = True
+        self._region_min_x, self._region_max_x = int(grid_x.min()), int(grid_x.max())
+        self._region_min_y, self._region_max_y = int(grid_y.min()), int(grid_y.max())
         self._task_ptr  = 0
         self.collision_repairs = 0
+        self.occupied_collision_repairs = 0
+        self.masked_region_repairs = 0
+        self.intended_cores = set()
         if reward_mode not in ("sparse", "potential"):
             raise ValueError("reward_mode must be sparse or potential")
         self.reward_mode = reward_mode
@@ -734,6 +799,9 @@ class MultiChipCoreMapper:
         self._occupied.clear()
         self._task_ptr = 0
         self.collision_repairs = 0
+        self.occupied_collision_repairs = 0
+        self.masked_region_repairs = 0
+        self.intended_cores.clear()
         self._potential = 0.0
         self.env.reset()
         return self._occ_map()
@@ -749,7 +817,8 @@ class MultiChipCoreMapper:
         # num_tasks (called every environment step -- e.g. ~482 times/episode
         # for AlexNet at batch_z=3) with vectorized numpy assignment. Same
         # result, no interpreted-Python loop.
-        m = np.zeros(self.total_rows * self.total_cols, dtype=np.float32)
+        m = np.full(self.total_rows * self.total_cols, -1.0, dtype=np.float32)
+        m[self._allowed_grid] = 0.0
         valid = self._placement >= 0
         if np.any(valid):
             m[self._placement[valid]] = (np.nonzero(valid)[0] + 1) / self.num_tasks
@@ -796,13 +865,17 @@ class MultiChipCoreMapper:
         intended_x = min(max(intended_x, 0), self.total_cols - 1)
         intended_y = min(max(intended_y, 0), self.total_rows - 1)
         intended_core = intended_y * self.total_cols + intended_x
+        self.intended_cores.add(intended_core)
 
-        if intended_core not in self._occupied:
+        if self._allowed_grid_mask[intended_core] and intended_core not in self._occupied:
             core_id = intended_core
         else:
             self.collision_repairs += 1
-            total = self.total_rows * self.total_cols
-            occupied_mask = np.zeros(total, dtype=bool)
+            if not self._allowed_grid_mask[intended_core]:
+                self.masked_region_repairs += 1
+            else:
+                self.occupied_collision_repairs += 1
+            occupied_mask = ~self._allowed_grid_mask.copy()
             if self._occupied:
                 occupied_mask[np.fromiter(self._occupied, dtype=np.int64, count=len(self._occupied))] = True
             free_cores = np.nonzero(~occupied_mask)[0]  # ascending order, preserves tie-break
@@ -826,8 +899,10 @@ class MultiChipCoreMapper:
 
         for k in range(n_this_step):
             ax, ay = action[2 * k], action[2 * k + 1]
-            target_x = ((ax + 1.0) / 2.0) * (self.total_cols - 1)
-            target_y = ((ay + 1.0) / 2.0) * (self.total_rows - 1)
+            target_x = self._region_min_x + ((ax + 1.0) / 2.0) * (
+                self._region_max_x - self._region_min_x)
+            target_y = self._region_min_y + ((ay + 1.0) / 2.0) * (
+                self._region_max_y - self._region_min_y)
             self._place_one(target_x, target_y)
             self._task_ptr += 1
 
@@ -903,6 +978,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     signature = hashlib.sha256()
     signature.update(np.ascontiguousarray(env.task_graph).tobytes())
     signature.update(np.ascontiguousarray(env.compute_latency).tobytes())
+    signature.update(np.ascontiguousarray(env.allowed_cores).tobytes())
     signature.update(repr((env.topo, env.topo.on_chip_latency, env.topo.off_chip_latency,
                            batch_z, env.timing_units, agent_arch, reward_mode,
                            "chip-major-v2-ou")).encode())
@@ -1080,6 +1156,13 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
                 "episode_discounted_return": episode_discounted_return,
                 "noise_scale": noise_scale,
                 "collision_repairs": mapper.collision_repairs,
+                "occupied_collision_repairs": mapper.occupied_collision_repairs,
+                "masked_region_repairs": mapper.masked_region_repairs,
+                "unique_intended_cores": len(mapper.intended_cores),
+                "deterministic_collision_repairs": evaluation_mapper.collision_repairs,
+                "deterministic_occupied_collision_repairs": evaluation_mapper.occupied_collision_repairs,
+                "deterministic_masked_region_repairs": evaluation_mapper.masked_region_repairs,
+                "deterministic_unique_intended_cores": len(evaluation_mapper.intended_cores),
                 "action_mean": float(action_values.mean()) if len(action_values) else None,
                 "action_std": float(action_values.std()) if len(action_values) else None,
                 "action_saturated_fraction": float(np.mean(np.abs(action_values) >= 0.999)) if len(action_values) else None,
@@ -1095,7 +1178,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
             per_ep = elapsed / max(1, ep - start_episode)
             eta_sec = per_ep * (n_episodes - ep)
             eta_str = str(timedelta(seconds=int(eta_sec)))
-            print(f"# of epochs: {ep:4d} | Current Cost: {final_cost:.6g} | "
+            print(f"# of placements: {ep:7d} | Current Cost: {final_cost:.6g} | "
                   f"Best Cost: {best_cost:.6g} | {per_ep:.2f}s/ep | ETA: {eta_str}")
 
         if save_checkpoint is not None and ep % checkpoint_every == 0:
@@ -1153,7 +1236,7 @@ def run_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     search; a printed warning fires below this threshold so it's never
     silently unclear which regime a given run used.
     """
-    n, k = env.num_tasks, env.total_cores
+    n = env.num_tasks
     if n_iter <= 0 or not (0 < T_end < T_start) or not (0 < cooldown < 1):
         raise ValueError("SA requires positive budget, T_start > T_end > 0, and cooldown in (0,1)")
     if n_iter < 1_000_000:
@@ -1161,7 +1244,8 @@ def run_sa(env: MultiChipEnvironment, n_iter: int = 100000,
               f"search budget (Sec 4.2). Results are not directly comparable to the paper's "
               f"reported SA baseline until run at closer to that scale.")
 
-    placement = np.array(random.sample(range(k), min(n, k)), dtype=np.int32)
+    allowed = env.allowed_cores.tolist()
+    placement = np.array(random.sample(allowed, n), dtype=np.int32)
     env.place(placement)
     best_cost = env.evaluate()
     best_p = placement.copy()
@@ -1197,7 +1281,7 @@ def run_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             new_p[idx] = perm
             # Swaps alone cannot explore unused physical cores. Include a
             # relocation proposal when spare cores exist (explicit interpretation).
-            free = np.setdiff1d(np.arange(k), placement)
+            free = np.setdiff1d(env.allowed_cores, placement)
             if len(free) and (n == 1 or random.random() < 0.5):
                 new_p[idx[0]] = random.choice(free)
 
@@ -1227,10 +1311,10 @@ def run_random(env: MultiChipEnvironment, n_trials: int = 1000) -> float:
         print(f"[RS] WARNING: n_trials={n_trials} is far below the paper's 1,000,000-sample "
               f"search budget (Sec 4.2). Results are not directly comparable to the paper's "
               f"reported RS baseline until run at closer to that scale.")
-    n, k = env.num_tasks, env.total_cores
+    n = env.num_tasks
     best_cost, best_p = float("inf"), None
     for _ in range(n_trials):
-        p = np.array(random.sample(range(k), min(n, k)), dtype=np.int32)
+        p = np.array(random.sample(env.allowed_cores.tolist(), n), dtype=np.int32)
         env.place(p); cost = env.evaluate()
         if cost < best_cost: best_cost, best_p = cost, p.copy()
     env.place(best_p)
@@ -1239,9 +1323,9 @@ def run_random(env: MultiChipEnvironment, n_trials: int = 1000) -> float:
 
 def run_sequential(env: MultiChipEnvironment) -> float:
     """Paper BS baseline: assign tasks by chip index, then core index."""
-    if env.num_tasks > env.total_cores:
+    if env.num_tasks > len(env.allowed_cores):
         raise ValueError("Sequential placement requires at least one physical core per task")
-    placement = np.arange(env.num_tasks, dtype=np.int32)
+    placement = env.allowed_cores[:env.num_tasks].copy()
     env.place(placement)
     return env.evaluate()
 
@@ -1268,7 +1352,12 @@ def main():
                               "topology families (HNoC, dragonfly, arbitrary graphs) aren't "
                               "supported -- see multi_chip_topology.py docstring.")
     parser.add_argument("--iters", type=int, default=5000, help="SA/random iterations")
-    parser.add_argument("--epochs", type=int, default=1000, help="DDPG training epochs")
+    parser.add_argument("--epochs", type=int, default=1000,
+                        help="DDPG training epochs; multiply by --placements_per_epoch "
+                             "to obtain complete placements evaluated")
+    parser.add_argument("--placements_per_epoch", type=int, default=1,
+                        help="Complete placements generated in each declared epoch; "
+                             "the paper states 30 (default 1 preserves historical runs)")
     parser.add_argument("--baseline_trials", type=int, default=1000,
                          help="Number of random-search trials used to compute the "
                               "baseline B for the sparse reward r_t = sqrt(B) - sqrt(L(P)) "
@@ -1313,8 +1402,17 @@ def main():
     parser.add_argument("--compute_ops", type=str, default=None,
                          help="Optional .npy file containing MAC operations per task; "
                               "converted with Table 1's 128 MACs/core at 400 MHz.")
-    parser.add_argument("--timing_model", choices=["proxy", "full_frame"], default="proxy",
-                         help="full_frame: compute + byte-hop serialization in seconds; approximate, no streaming/contention")
+    parser.add_argument("--timing_model", choices=["proxy", "full_frame", "paper_pipeline"],
+                        default="proxy",
+                        help="paper_pipeline adds reconstructed block scaling, XY routing "
+                             "and shared-link contention to full-frame compute/traffic")
+    parser.add_argument("--routing_model", choices=["legacy_distance", "paper_xy"],
+                        default="legacy_distance",
+                        help="paper_xy uses Figure-3 chip-periphery gateways and directed XY routes")
+    parser.add_argument("--conv_blocks", type=int, default=4,
+                        help="Blocks per frame for paper_pipeline CONV timing; 4 follows the "
+                             "paper's illustrative Figure 7 because workload-specific values "
+                             "are not published")
     parser.add_argument("--report", help="Write configuration, objective units, best placement and runtime as JSON")
     parser.add_argument("--diagnostics", help="Optional JSONL path for per-episode DDPG diagnostics: noisy and deterministic costs, reward, OU noise, collisions, action statistics, and losses")
     parser.add_argument("--vva_ops_per_cycle", type=float, default=1.0,
@@ -1328,8 +1426,9 @@ def main():
     parser.add_argument("--use_cnn", action="store_true", help="Use real CNN workload instead of random")
     parser.add_argument("--model", type=str, default="simple",
                          help="simple or a torchvision model name. FX tracing is required; "
-                              "grouped convolutions and some merges are unsupported. "
-                              "Residual/concat timing is rejected in full_frame mode.")
+                              "grouped convolutions and concatenation are unsupported. "
+                              "Residual branch traffic is traced; addition uses the "
+                              "documented destination-task assumption.")
     parser.add_argument("--custom_model", type=str, default=None,
                          help="Path to a Python file defining build_model() -> model or "
                               "(model, dummy_input), for a user-supplied architecture instead "
@@ -1344,6 +1443,14 @@ def main():
                               "have far more channels than 'simple' -- start with a "
                               "LARGER value (e.g. 32-64) or you'll generate more logic "
                               "cores than any reasonable grid can hold.")
+    parser.add_argument("--partition_mode", choices=["uniform", "paper_targets"],
+                        default="uniform",
+                        help="uniform uses --channels_per_partition; paper_targets "
+                             "matches Figure 6 aggregate CONV/FC core counts with "
+                             "documented reconstructed per-layer grids")
+    parser.add_argument("--workload_region", choices=["all", "conv", "fc"], default="all",
+                        help="Optimize the whole extracted graph or, with paper_targets, "
+                             "a separately masked CONV/FC region as in Section 3.1.2")
     parser.add_argument("--seed", type=int, default=None,
                          help="Seed for random/numpy/torch RNGs. Not fixed by default -- "
                               "the paper itself (Sec 4.5, Fig 20) runs 5 different seeds "
@@ -1357,8 +1464,20 @@ def main():
         parser.error("CUDA requested but unavailable; install CUDA PyTorch on the GPU host")
     if args.compute_ops:
         parser.error("--compute_ops is disabled: an untyped MAC vector cannot specify VVA work or communication units. Use --timing_model full_frame --use_cnn")
-    if args.timing_model == "full_frame" and not args.use_cnn:
-        parser.error("full_frame timing requires an extracted workload with operation and byte metadata")
+    if args.timing_model != "proxy" and not args.use_cnn:
+        parser.error("full-frame timing requires an extracted workload with operation and byte metadata")
+    if args.workload_region != "all" and args.partition_mode != "paper_targets":
+        parser.error("--workload_region conv/fc requires --partition_mode paper_targets")
+    if args.epochs <= 0 or args.placements_per_epoch <= 0:
+        parser.error("--epochs and --placements_per_epoch must be positive")
+    if args.conv_blocks <= 0:
+        parser.error("--conv_blocks must be positive")
+    if args.timing_model == "paper_pipeline":
+        if (args.partition_mode != "paper_targets" or
+                args.workload_region not in ("conv", "fc") or
+                args.routing_model != "paper_xy"):
+            parser.error("paper_pipeline requires --partition_mode paper_targets, "
+                         "--workload_region conv|fc and --routing_model paper_xy")
     if not 0 < args.mac_utilization <= 1 or not math.isfinite(args.vva_ops_per_cycle) or args.vva_ops_per_cycle <= 0:
         parser.error("utilization must be in (0,1] and VVA rate finite and positive")
     if any(not math.isfinite(v) or v <= 0 for v in (args.on_bandwidth_gbs, args.off_bandwidth_gbs)):
@@ -1385,12 +1504,30 @@ def main():
         print(f">> Extracting {args.model} Workload via torch.fx graph tracing...")
         extracted = extract_model_task_graph(
             model_name=args.model, channels_per_partition=args.channels_per_partition,
-            custom_model_path=args.custom_model, return_work=args.timing_model == "full_frame"
+            custom_model_path=args.custom_model, return_work=args.timing_model != "proxy",
+            partition_mode=args.partition_mode
         )
         real_task_graph, num_tasks, task_labels = extracted[:3]
-        print(f">> Channel partitioning: channels_per_partition={args.channels_per_partition} "
-              f"-> {num_tasks} logic cores (VMM+VVA)\n" if args.channels_per_partition > 0 else
-              f">> Legacy mode (channels_per_partition=0): {num_tasks} whole-layer tasks\n")
+        operations = extracted[3] if args.timing_model != "proxy" else None
+        kinds = extracted[4] if args.timing_model != "proxy" else None
+        if args.workload_region != "all":
+            wanted = "conv" if args.workload_region == "conv" else "linear"
+            selected = np.array([index for index, label in enumerate(task_labels)
+                                 if f"_{wanted}_" in label], dtype=np.int64)
+            real_task_graph = real_task_graph[np.ix_(selected, selected)]
+            task_labels = [task_labels[index] for index in selected]
+            if operations is not None:
+                operations = operations[selected]
+                kinds = [kinds[index] for index in selected]
+            num_tasks = len(selected)
+        if args.partition_mode == "paper_targets":
+            target = PAPER_LOGIC_CORE_TARGETS[args.model.lower()]
+            print(f">> Paper-target partitioning: CONV={target['conv']}, FC={target['linear']} "
+                  f"-> {num_tasks} logic cores (VMM+VVA)\n")
+        else:
+            print(f">> Channel partitioning: channels_per_partition={args.channels_per_partition} "
+                  f"-> {num_tasks} logic cores (VMM+VVA)\n" if args.channels_per_partition > 0 else
+                  f">> Legacy mode (channels_per_partition=0): {num_tasks} whole-layer tasks\n")
 
     # Pre-flight check: partitioning can produce far more logic cores than a
     # small default grid has room for. Fail clearly here rather than deep
@@ -1408,8 +1545,10 @@ def main():
 
     # 2. Build the Environment
     compute_latency = None
-    if args.timing_model == "full_frame":
-        operations, kinds = extracted[3:]
+    if args.timing_model != "proxy":
+        if args.timing_model == "paper_pipeline" and args.workload_region == "conv":
+            operations = operations / args.conv_blocks
+            real_task_graph = real_task_graph / args.conv_blocks
         compute_latency = compute_seconds(
             operations, kinds, utilization=args.mac_utilization,
             vva_ops_per_cycle=args.vva_ops_per_cycle
@@ -1417,19 +1556,51 @@ def main():
         real_task_graph = edge_bytes(real_task_graph, kinds)
         args.on_lat = 1 / (args.on_bandwidth_gbs * 1e9)
         args.off_lat = 1 / (args.off_bandwidth_gbs * 1e9)
-        print(">> Full-frame approximation in seconds: arithmetic + byte-hop serialization; no contention or streaming schedule")
+        if args.timing_model == "paper_pipeline":
+            print(f">> Paper-pipeline reconstruction: {args.conv_blocks if args.workload_region == 'conv' else 1} "
+                  "block(s), XY routing and shared-link contention; GRS gateway/block count are assumptions")
+        else:
+            print(">> Full-frame approximation in seconds: arithmetic + byte-hop serialization; no contention or streaming schedule")
     else:
         print(">> Compute latency disabled (communication-only objective)")
+
+    allowed_cores = None
+    if args.workload_region != "all":
+        targets = PAPER_LOGIC_CORE_TARGETS[args.model.lower()]
+        cores_per_chip = args.rows * args.cols
+        conv_chips = math.ceil(targets["conv"] / cores_per_chip)
+        region_chips = (conv_chips if args.workload_region == "conv"
+                        else math.ceil(targets["linear"] / cores_per_chip))
+        region_width = min(args.chips_x, region_chips)
+        region_height = math.ceil(region_chips / region_width)
+        start_row = 0 if args.workload_region == "conv" else math.ceil(conv_chips / args.chips_x)
+        if start_row + region_height > args.chips_y:
+            parser.error("paper region reconstruction does not fit the configured chip array")
+        chip_ids = []
+        for row in range(start_row, start_row + region_height):
+            for col in range(region_width):
+                if len(chip_ids) < region_chips:
+                    chip_ids.append(row * args.chips_x + col)
+        allowed_cores = np.concatenate([
+            np.arange(chip * cores_per_chip, (chip + 1) * cores_per_chip,
+                      dtype=np.int32) for chip in chip_ids
+        ])
+        print(f">> Masked {args.workload_region.upper()} region: chips {chip_ids}, "
+              f"{len(allowed_cores)} physical cores "
+              f"for {num_tasks} logic cores (minimal whole-chip reconstruction)")
 
     env = MultiChipEnvironment(
         num_chips_x=args.chips_x, num_chips_y=args.chips_y,
         rows_per_chip=args.rows, cols_per_chip=args.cols,
         on_chip_latency=args.on_lat, off_chip_latency=args.off_lat,
         topology=args.topology,
+        routing_model=args.routing_model,
         task_graph=real_task_graph,  # Passes the CNN graph here (or None for random)
         num_tasks=num_tasks,
         compute_latency=compute_latency,
-        timing_units="seconds" if args.timing_model == "full_frame" else "proxy"
+        timing_units="seconds" if args.timing_model != "proxy" else "proxy",
+        allowed_cores=allowed_cores,
+        pipeline_model="xy_contention" if args.timing_model == "paper_pipeline" else "task_sum",
     )
     
     print(f"System : {env.topo}")
@@ -1441,7 +1612,11 @@ def main():
     run_started = time.perf_counter()
     if args.algo == "ddpg":
         ddpg_metadata = {}
-        cost = run_ddpg(env, n_episodes=args.epochs, batch_z=args.batch_z,
+        complete_placements = args.epochs * args.placements_per_epoch
+        print(f">> DDPG budget: {args.epochs} epoch(s) x "
+              f"{args.placements_per_epoch} placement(s) = "
+              f"{complete_placements} complete placements")
+        cost = run_ddpg(env, n_episodes=complete_placements, batch_z=args.batch_z,
                          baseline_trials=args.baseline_trials,
                          train_every=args.train_every, device=args.device,
                          save_checkpoint=args.save_checkpoint,
@@ -1449,6 +1624,9 @@ def main():
                          checkpoint_every=args.checkpoint_every,
                          diagnostics_path=args.diagnostics, run_metadata=ddpg_metadata,
                          agent_arch=args.agent_arch, reward_mode=args.reward_mode)
+        ddpg_metadata.update({"declared_epochs": args.epochs,
+                              "placements_per_epoch": args.placements_per_epoch,
+                              "complete_placement_evaluations": complete_placements})
     elif args.algo == "sa":
         cost = run_sa(env, n_iter=args.iters)
     elif args.algo == "bs":
@@ -1457,6 +1635,7 @@ def main():
         cost = run_random(env, n_trials=args.iters)
 
     bd = env.chip_breakdown()
+    routing_diagnostics = env.routing_diagnostics()
     print(f"\nFinal placement cost : {cost:.6g}")
     print(f"  On-chip  comm cost : {bd['on_chip_cost']:.6g}")
     print(f"  Off-chip comm cost : {bd['off_chip_cost']:.6g}")
@@ -1465,18 +1644,49 @@ def main():
         report_parent = os.path.dirname(args.report)
         if report_parent:
             os.makedirs(report_parent, exist_ok=True)
+        limitations = ["replay buffer is not persisted in DDPG checkpoints"]
+        if args.agent_arch != "paper_cnn" and args.algo == "ddpg":
+            limitations.append("selected DDPG agent is not the Figure-9 paper CNN")
+        if args.partition_mode != "paper_targets":
+            limitations.append("logic-core allocation does not match Figure-6 aggregate counts")
+        else:
+            limitations.append("per-layer M/N grids are reconstructed because Figure 6 publishes only aggregate counts")
+        if args.workload_region == "all":
+            limitations.append("CONV and FC placements are not optimized in separate masked regions")
+        else:
+            limitations.append("masked region uses a minimal rectangular whole-chip reconstruction")
+        if args.timing_model != "paper_pipeline":
+            limitations.append("timing omits the reconstructed block schedule and shared-link contention")
+        else:
+            limitations.extend([
+                "workload-specific CONV block count is unpublished and configurable",
+                "GRS is approximated with a lower-left chip-periphery gateway and XY routing",
+                "64-KB input/activation-buffer stalls and compute/communication overlap remain unmodeled",
+            ])
+        if args.model.lower() == "resnet50":
+            limitations.append("residual add is assigned to the destination transformation/VVA path")
+        evaluated_placements = (complete_placements if args.algo == "ddpg"
+                                else 1 if args.algo == "bs" else args.iters)
         with open(args.report, "w") as stream:
-            json.dump({"config": vars(args), "tasks": env.num_tasks,
+            json.dump({"config": vars(args), "algorithm": args.algo,
+                       "tasks": env.num_tasks,
+                       "allowed_physical_cores": len(env.allowed_cores),
                        "objective_units": env.timing_units, "best_cost": cost,
+                       "complete_placement_evaluations": evaluated_placements,
+                       "reward_normalizer_evaluations": args.baseline_trials
+                       if args.algo == "ddpg" else 0,
                        "placement_chip_major": env.placement.tolist(),
+                       "routing_diagnostics": routing_diagnostics,
                        "seconds_elapsed": time.perf_counter() - run_started,
+                       "python_version": sys.version,
+                       "git": git_provenance(),
                        "torch_version": torch.__version__ if HAS_TORCH else None,
+                       "torch_cuda_build": torch.version.cuda if HAS_TORCH else None,
                        "cuda_available": HAS_TORCH and torch.cuda.is_available(),
+                       "cuda_device": torch.cuda.get_device_name(0)
+                       if HAS_TORCH and torch.cuda.is_available() else None,
                        "ddpg_metadata": ddpg_metadata if args.algo == "ddpg" else None,
-                       "limitations": ["CNN agent is an experimental spatial encoder, not a validated paper architecture",
-                           "no shared-link contention",
-                           "no block-streaming schedule", "uniform channel partitioning",
-                           "full_frame excludes residual/concat timing", "replay not persisted"]},
+                       "limitations": limitations},
                       stream, indent=2)
 
 if __name__ == "__main__":

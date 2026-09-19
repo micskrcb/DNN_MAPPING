@@ -1,83 +1,95 @@
 # DNN Mapping with Reinforcement Learning
 
-Place DNN computation across a multi-chip many-core accelerator using DDPG,
-sequential placement, random search, or simulated annealing.
+This repository maps DNN computation tasks onto a multi-chip many-core accelerator using DDPG, random search, simulated annealing, or the sequential baseline (BS). Its reproduction target is Wu et al., **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning**, ACM TODAES 2020 ([DOI 10.1145/3418498](https://doi.org/10.1145/3418498)).
 
-The project aims to reproduce **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning** by Nan Wu, Lei Deng, Guoqi Li, and Yuan Xie, published in ACM TODAES (2020). [Read the paper's publication record](https://doi.org/10.1145/3418498).
+The `codex/reconciled-paper-implementation` branch contains the closest current paper-mode implementation. It is runnable and tested on CPU. CUDA execution is implemented, but the H100 12 GB slice has not yet been available for validation. The paper does not publish its simulator or every parameter, so the code records reconstruction assumptions instead of claiming exact numerical reproduction.
 
-**Status: a tested research implementation with explicit approximations. It is not yet a complete reproduction of the paper or its reported results.** CPU extraction and training have been tested. CUDA selection is implemented; H100 execution and memory use on a 12 GB slice remain unverified.
+## Present state
 
-Development follows two stages: establish a defensible reproduction first, then evaluate improvements. Bug fixes and assumed simulator details are not claimed as research contributions.
-
-## What the code does
-
-1. Trace a PyTorch model with torch.fx to discover Conv2d/Linear dependencies.
-2. Partition input and output channels into VMM tasks and VVA reduction tasks.
-3. Construct communication edges between overlapping channel ranges.
-4. Assign those tasks to distinct physical cores on a mesh or torus.
-5. Evaluate a communication proxy or a full-frame compute/communication approximation.
-6. Search for a low-cost placement and optionally save a checkpoint and JSON report.
-
-VMM means vector–matrix multiplication; VVA means vector–vector accumulation. Both refer to **logic tasks** that are assigned to physical cores.
-
-## Changes included in this version
-
-The reconciled implementation restores features from the supplied earlier archives and fixes inconsistencies in both those archives and the previous checkout.
-
-| Area | Current behavior |
+| Paper feature | Current status |
 | --- | --- |
-| Dependency extraction | FX tracing replaces sequential forward-hook order; custom models are supported |
-| Communication graph | Overlapping channel ranges replace unconditional all-to-all broadcasts; pooling/flattening use consumer shapes |
-| Operation counts | Remainder tiles have exact sizes, preserving total layer MAC counts |
-| Timing units | Physical compute time is never added to an arbitrary communication score |
-| Core coordinates | Row-major policy coordinates convert to chip-major physical IDs before evaluation |
-| Topology | Mesh and torus configurations are available |
-| Placement overhead | Occupancy construction and collision searches use NumPy vectorization |
-| Simulated annealing | Acceptance uses current cost, cooling uses 0.99, and proposals can reach unused cores |
-| Exploration | DDPG uses fading Ornstein–Uhlenbeck noise |
-| Checkpoints | Workload/configuration fingerprints reject incompatible checkpoints; RNG states are saved |
-| Reporting | Optional JSON includes configuration, objective units, best placement, runtime, and limitations |
-| Failure handling | Unsupported timing, cyclic graphs, over-capacity workloads, and unavailable requested devices fail explicitly |
+| 4×4 chips, 16×16 cores/chip | Implemented |
+| Figure 6 logic-core totals | Exact aggregate counts for AlexNet, VGG16, and ResNet50 |
+| Separate CONV and FC placement | Implemented with disjoint whole-chip masks |
+| Figure 9 actor/critic | Implemented as `--agent_arch paper_cnn` |
+| Sparse reward `sqrt(B) - sqrt(L(P))` | Implemented; zero before a complete placement |
+| BS, RS, SA, and DDPG | Implemented |
+| 30 placements/epoch and paper search budgets | Explicitly accounted for by the paper runner |
+| XY routing and link contention | Reconstructed and implemented |
+| 64 KB weight-buffer constraint | Enforced during paper partition reconstruction |
+| 64 KB activation-buffer stalls and exact GRS | Not published in enough detail; not implemented |
+| Full paper-scale results | Not run yet |
 
-See [RECONCILIATION.md](RECONCILIATION.md) for implementation provenance and detailed assumptions.
+Paper-mode reports include routed mean hop counts and on/off-chip link-load summaries. Multi-seed summaries report the objective normalized to BS and its inverse ratio. The inverse ratio is useful for comparison, but it is not labeled as measured accelerator throughput.
+
+## Repository layout
+
+- `src/run_multi_chip.py` runs one BS, DDPG, random-search, or SA experiment.
+- `src/run_multiseed_experiment.py` runs all four methods across seeds.
+- `src/run_paper_experiment.py` runs separate CONV and FC paper-mode suites.
+- `src/compute_model.py` reconstructs partitions and converts work/traffic to physical units.
+- `src/multi_chip_topology.py` implements physical IDs and mesh/torus routing.
+- `src/multi_chip_environment.py` implements the placement objective and diagnostics.
+- `src/validate_device.py` performs a bounded CPU/CUDA functionality profile.
+- `PROJECT_STATE.md` gives the detailed handoff state and known limitations.
+- `NEXT_STEPS.md` tracks the reproduction gates.
+- `prev version readmes/` preserves earlier README snapshots.
+
+The older single-chip PPO/GCN programs and `run_multi_chip_fast.py` are not part of the validated paper reproduction path.
 
 ## Installation
 
-Use the reconciled branch; all commands below run from the repository root.
+Clone the maintained branch and create an isolated environment:
 
-~~~bash
+```bash
 git clone --branch codex/reconciled-paper-implementation https://github.com/micskrcb/DNN_MAPPING.git
 cd DNN_MAPPING
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-~~~
+```
 
-The multi-chip path needs **NumPy, PyTorch, and torchvision**. The root requirements.txt contains historical dependencies for the original project, including old Torch pins; it is not the installation specification for this reconciled path.
+For CPU-only use:
 
-For a CPU environment:
-
-~~~bash
+```bash
 python -m pip install numpy
 python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-~~~
+```
 
-For a GPU environment, use the GPU provider's configured environment or install compatible torch/torchvision packages using the [official PyTorch installation selector](https://pytorch.org/get-started/locally/). Choose the CUDA build appropriate to the host. Do not install CPU-only wheels into the environment intended for the H100.
+For the H100, install the CUDA build of PyTorch and torchvision selected for the host driver using the [official PyTorch installer](https://pytorch.org/get-started/locally/), then install NumPy. The historical root `requirements.txt` contains old pins and is not the environment specification for this path.
 
-The local validation environment used Python 3.13, torch 2.14.0+cpu and torchvision 0.29.0+cpu. These describe the tested environment, not a CUDA compatibility guarantee.
+Verify the environment:
 
-## Start with tests and a small run
+```bash
+python -c "import torch, torchvision, numpy; print(torch.__version__, torchvision.__version__); print('CUDA:', torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
+```
 
-~~~bash
+The local CPU checks used Python 3.13, torch 2.14.0+cpu, and torchvision 0.29.0+cpu. Those versions are evidence for this workstation only, not required CUDA pins.
+
+## Tests
+
+Run both maintained suites from the repository root:
+
+```bash
 python src/test_multi_chip.py
-python -m unittest discover -s src -p test_reconciliation.py -v
-~~~
+python -m unittest discover -s src -p 'test_reconciliation.py' -v
+```
 
-The first suite can skip extraction when PyTorch is missing. A run with skipped extraction does not validate the real-model path. The second suite tests actual training updates on CPU and also CUDA when available.
+Then run the bounded device validator:
 
-Run a small, complete training smoke test:
+```bash
+python src/validate_device.py --device cpu --output runs/cpu-validation.json
+# On the allocated GPU host:
+python src/validate_device.py --device cuda --output runs/h100-validation.json
+```
 
-~~~bash
+The CUDA validator checks that networks and training tensors are on the GPU, records visible/peak memory, and separates action, environment, replay, and update timing. Environment evaluation, placement repair, replay storage, and experiment control remain CPU-side, so a faster GPU does not by itself improve solution quality.
+
+## Quick functional run
+
+This small CPU command checks extraction, training, checkpointing, and reports. It is not a paper comparison:
+
+```bash
 mkdir -p runs
 OMP_NUM_THREADS=2 python src/run_multi_chip.py \
   --algo ddpg --use_cnn --model simple \
@@ -86,278 +98,95 @@ OMP_NUM_THREADS=2 python src/run_multi_chip.py \
   --train_every 1 --batch_z 3 --seed 0 \
   --save_checkpoint runs/smoke.pt \
   --checkpoint_every 5 --report runs/smoke.json
-~~~
+```
 
-This configuration produces 29 logic tasks on the default 64-core grid. Its small search budget is for checking functionality, not measuring paper-level performance.
+`--epochs` is a total target when resuming. Checkpoints restore models, optimizers, best placement, baseline, counters, and RNG state. Replay is not persisted, and the noise-fading schedule depends on the requested total, so a resumed run is not bit-exact.
 
-Resume to a **total** of 12 episodes:
+## Paper-mode commands
 
-~~~bash
-OMP_NUM_THREADS=2 python src/run_multi_chip.py \
-  --algo ddpg --use_cnn --model simple \
-  --channels_per_partition 128 --timing_model full_frame \
-  --device cpu --epochs 12 --baseline_trials 10 \
-  --train_every 1 --batch_z 3 --seed 0 \
-  --load_checkpoint runs/smoke.pt --save_checkpoint runs/smoke.pt \
-  --report runs/resume.json
-~~~
+Inspect the two generated CONV/FC commands and manifest without starting a long run:
 
-Checkpoints restore networks, optimizers, best placement, baseline, counters, and RNG states. **Replay is not persisted**, and changing the total episode target changes the fading schedule; resumed training is not bit-exact. Old or incompatible checkpoints are rejected. A missing load path starts a new run; use a save path if the result should persist.
+```bash
+python src/run_paper_experiment.py \
+  --model alexnet --device cuda \
+  --output_dir runs/paper-alexnet --dry_run
+```
 
-## Running on an H100 slice
+Run the full default AlexNet suite on the H100 allocation:
 
-First check the device from inside the allocated GPU environment:
+```bash
+python src/run_paper_experiment.py \
+  --model alexnet --device cuda \
+  --output_dir runs/paper-alexnet
+```
 
-~~~bash
-python -c "import torch; print('Torch:', torch.__version__); print('CUDA:', torch.cuda.is_available()); assert torch.cuda.is_available(), 'CUDA unavailable'; print(torch.cuda.get_device_name(0)); print('Visible memory (GiB):', round(torch.cuda.get_device_properties(0).total_memory / 2**30, 2))"
-~~~
+The defaults are intentionally large: five seeds; 10,000 declared DDPG epochs; 30 complete placements per epoch (300,000 per seed); one million random trials to form DDPG's fixed baseline; and one million RS/SA placements. The runner executes CONV and FC separately and saves a manifest, reports, logs, checkpoints, per-placement diagnostics, and `summary.json` files. Run the dry run first and keep the SSH session in `tmux` or the cluster's job scheduler.
 
-Run the tests, then repeat the small smoke command with **--device cuda**. The actor, critic, and sampled training tensors use CUDA. Environment evaluation, collision resolution, replay storage, and search control remain on CPU. Multiple environments are not batched on the GPU.
+For a bounded end-to-end paper-mode smoke test:
 
-For the planned H100 12 GB slice, inspect actual visible memory and runtime before scaling. No full-card H100 capacity or 12 GB fit is assumed. A GPU smoke test verifies execution, not convergence or paper fidelity.
+```bash
+python src/run_paper_experiment.py \
+  --model alexnet --device cpu --seeds 0 \
+  --epochs 1 --placements_per_epoch 1 \
+  --baseline_trials 2 --search_budget 2 \
+  --output_dir runs/paper-smoke
+```
 
-The paper's physical grid is **4 × 4 chips, each with 16 × 16 cores: 4,096 physical cores**. An example larger-workload smoke configuration is:
+One placement cannot train or establish convergence; it only verifies that both regions and all methods complete.
 
-~~~bash
+To run one region or method directly:
+
+```bash
 python src/run_multi_chip.py \
-  --algo ddpg --use_cnn --model alexnet \
-  --channels_per_partition 512 --timing_model full_frame \
+  --algo bs --use_cnn --model alexnet \
+  --partition_mode paper_targets --workload_region conv \
+  --timing_model paper_pipeline --routing_model paper_xy \
   --chips_x 4 --chips_y 4 --rows 16 --cols 16 \
-  --device cuda --epochs 10 --baseline_trials 10 \
-  --batch_z 3 --train_every 1 --seed 0 \
-  --save_checkpoint runs/alexnet-smoke.pt \
-  --report runs/alexnet-smoke.json
-~~~
+  --seed 0 --report runs/alexnet-conv-bs.json
+```
 
-AlexNet extraction at partition size 512 has been tested; this larger CUDA command has not. The partition size is a capacity-conscious example, not the paper's verified allocation.
+Valid paper-target workloads are `alexnet`, `vgg16`, and `resnet50`. Their exact aggregate logic-core counts are:
 
-## Objectives and their units
+| Workload | CONV | FC | Total |
+| --- | ---: | ---: | ---: |
+| AlexNet | 183 | 932 | 1,115 |
+| VGG16 | 1,024 | 1,924 | 2,948 |
+| ResNet50 | 512 | 37 | 549 |
 
-| Mode | Contents | Units |
+## What paper mode reconstructs
+
+FX traces Conv2d/Linear dependencies. For each layer, deterministic integer `(M,N)` output/input partitions are selected so that total VMM plus VVA tasks match Figure 6 exactly, approximate MAC-balanced allocation, and keep every 8-bit weight tile within 64 KB. The paper publishes only aggregate counts, so these per-layer grids are assumptions.
+
+CONV and FC are optimized independently. Each uses the minimum number of contiguous whole chips that can hold its tasks. CONV begins at chip row zero and FC begins at the next chip row. This preserves disjoint regions but is a reconstruction because the exact masks are not published.
+
+Same-chip messages take deterministic X-then-Y routes. Inter-chip messages run from the source core to a lower-left chip-periphery gateway, traverse the chip grid X then Y, then travel from the destination gateway to its core. A time phase combines the maximum task compute time with the bottleneck serialized load on any shared directed link. The gateway is inferred from Figure 3; the paper's complete GRS implementation is unavailable.
+
+CONV work and traffic are divided across `--conv_blocks` (default 4, taken from the illustrative Figure 7). FC uses one layer work unit. Workload-specific block counts are not published. ResNet branch dependencies are retained; residual addition is assigned to the destination transformation/VVA path without adding a Figure 6 core.
+
+## Objectives
+
+| Mode | Meaning | Units |
 | --- | --- | --- |
-| proxy (default) | Communication volume multiplied by hierarchical hop costs | Arbitrary score |
-| full_frame | Per-task arithmetic time plus outgoing byte-hop serialization | Seconds |
+| `proxy` | Communication volume × hierarchical distance | Arbitrary score |
+| `full_frame` | Ideal arithmetic plus per-task byte-hop serialization | Seconds |
+| `paper_pipeline` | Reconstructed block/layer phases with XY shared-link contention | Seconds |
 
-Both modes minimize the **maximum task service cost**. Computing nested maxima over DAG levels does not implement the paper's block-streaming schedule.
+`paper_pipeline` requires `paper_targets`, `workload_region conv|fc`, and `paper_xy`. It uses Table 1's 128 MACs at 400 MHz, 64 GB/s/core on-chip links, 100 GB/s/chip off-chip links, 8-bit activations/weights, and 32-bit partial sums. VVA defaults to one addition/cycle because its throughput is unpublished.
 
-### Communication proxy
+The remaining simulator gaps are material: 64 KB input/activation-buffer stalls, exact multicast/GRS behavior, router startup, transformation costs, compute/communication overlap, and workload-specific block schedules. Results must therefore be called a documented reconstruction, not an exact replay of the authors' simulator.
 
-The defaults --on_lat 1 and --off_lat 5 weight on-chip and inter-chip hops. Proxy scores cannot be interpreted as seconds or compared numerically to full_frame results. Even proxy results can change after graph and coordinate fixes; record the code version for comparisons.
+## DDPG and baselines
 
-### Full-frame approximation
+Paper-mode DDPG uses the Figure 9 spatial CNN, the 2-D placement grid, batched `2z` continuous coordinates, floor conversion, nearest-free Manhattan repair, actor learning rate 0.0002, critic learning rate 0.001, gamma 0.98, minibatch 64, and sparse terminal reward. `batch_z`, OU parameters, replay capacity, padding, LRN parameters, target networks, and soft-update coefficient are not fully specified by the paper and remain recorded assumptions.
 
-This mode requires --use_cnn and positive channel partitioning.
+`--reward_mode potential` and the `mlp`/`cnn` agents are improvement conditions. Do not mix their results into the frozen paper-mode comparison. Collision repairs are expected because continuous coordinates may select the same or a masked core; diagnostics separate occupied-core repairs from mask repairs and also evaluate the deterministic policy.
 
-- VMM time: ceil(MACs / (128 × utilization)) / 400 MHz.
-- VVA time: ceil(additions / (assumed additions per cycle × utilization)) / 400 MHz.
-- VMM outputs are 32-bit partial sums; VVA outputs are 8-bit activations.
-- Communication charges bytes × hops / bandwidth, summed over outgoing edges.
-- Defaults: 64 GB/s on-chip and 100 GB/s off-chip, using decimal GB.
-- Default VVA throughput is **1 addition/cycle**, an explicit assumption because the paper does not specify it.
+BS fills allowed physical cores in chip-major order. RS samples complete valid placements. SA uses current-cost acceptance, cooling factor 0.99, and roughly 1% placement perturbations that may use free cores.
 
-The bandwidth values and arithmetic hardware parameters draw from the paper's Table 1. Treating bandwidth as byte-hop serialization is an approximation; bandwidth alone does not specify routing latency.
+## Interpreting results
 
-This objective is **not end-to-end inference latency**. It excludes shared-link contention, multicast, router startup, buffer stalls, overlap, input/output transfer, and bias/activation/pooling arithmetic. It does not reproduce the block-streaming schedule or separate CONV/FC placement regions.
+A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets.
 
-In full_frame mode, bandwidth parameters determine communication coefficients; --on_lat and --off_lat are overridden. The old --compute_ops option is retained only to emit an error: an untyped MAC vector cannot describe VVA throughput or communication units safely.
+Report CONV and FC separately. Normalize latency to BS as in the paper, include seed mean/sample standard deviation/minimum/maximum, and examine hop counts and link loads. Do not compare old proxy scores, full-frame scores, and paper-pipeline seconds as though they were the same metric.
 
-## Workload support
-
-| Workload | Current support |
-| --- | --- |
-| Built-in simple CNN | Extraction, timing, and short CPU training tested |
-| AlexNet / VGG16 | Extraction and operation counts tested; full_frame available |
-| Residual networks, including ResNet | Dependency edges can be traced in proxy mode; full_frame rejects residual merges |
-| Concatenation-based networks | Full-frame timing rejected; channel-changing merges also rejected in proxy extraction |
-| Grouped / depthwise convolutions | Rejected |
-| Other torchvision models | Dynamic name lookup; tracing and supported operators are still required |
-| Custom models | Python file with build_model(), subject to the same restrictions |
-
-Residual dependency tracing does not model residual-add arithmetic. It must not be described as exact ResNet timing.
-
-A custom model file can return either a model or a model/input pair:
-
-~~~python
-import torch
-from torch import nn
-
-def build_model():
-    model = nn.Sequential(
-        nn.Conv2d(3, 8, kernel_size=3),
-        nn.ReLU(),
-        nn.AdaptiveAvgPool2d(1),
-        nn.Flatten(),
-        nn.Linear(8, 4),
-    )
-    return model, torch.zeros(1, 3, 16, 16)
-~~~
-
-Pass it with --use_cnn --custom_model path/to/model.py. Without a supplied input, the default input is 1 × 3 × 224 × 224. Pretrained weights and datasets are not needed for shape-based extraction.
-
-## Algorithms and comparison discipline
-
-DDPG uses actor/critic learning rates 0.0002/0.001, gamma 0.98, and a training
-minibatch of 64. Select `--agent_arch paper_cnn` for the Figure 9 architecture;
-the default MLP and junior-derived `cnn` remain comparison conditions.
-
-Each action places up to --batch_z tasks. Coordinates are floored; collisions use the nearest free grid position by Manhattan distance. Nonterminal reward is zero; completed placements receive sqrt(B) − sqrt(L), where B is the best initial random-search cost. OU noise uses assumed theta=0.15 and sigma=0.2 with a fading scale.
-
-Run the paper's baselines on the same small workload:
-
-~~~bash
-python src/run_multi_chip.py --algo random --use_cnn \
-  --channels_per_partition 128 --timing_model full_frame \
-  --iters 100 --seed 0 --report runs/random.json
-
-python src/run_multi_chip.py --algo sa --use_cnn \
-  --channels_per_partition 128 --timing_model full_frame \
-  --iters 100 --seed 0 --report runs/sa.json
-
-python src/run_multi_chip.py --algo bs --use_cnn \
-  --channels_per_partition 128 --timing_model full_frame \
-  --seed 0 --report runs/bs.json
-~~~
-
-SA uses a fixed 0.99 cooldown and an approximately 1% task subset (at least two when possible). Relocation to unused cores is an implementation choice; its exact neighborhood is not established by the paper.
-
-The paper uses about one million placements for RS and SA. CLI defaults are much smaller. Matching that budget alone does not establish reproduction. Keep workload, partitioning, topology, objective, units, budgets, and seeds consistent; report runtime and variation over multiple seeds. Do not compare historical proxy scores with the new timing mode or interpret smoke-test gains as the paper's results.
-
-## Important options
-
-Run python src/run_multi_chip.py --help for the complete CLI.
-
-| Option | Default / meaning |
-| --- | --- |
-| --algo | ddpg; alternatives bs, sa and random |
-| --use_cnn | Use an extracted model; otherwise a synthetic DAG |
-| --channels_per_partition | 8; set explicitly, since small values can exceed grid capacity |
-| --chips_x / --chips_y | 2 / 2 |
-| --rows / --cols | 4 / 4 per chip |
-| --topology | mesh or torus |
-| --timing_model | proxy or full_frame |
-| --mac_utilization | 1.0; assumed arithmetic utilization |
-| --vva_ops_per_cycle | 1.0; assumed VVA throughput |
-| --on_bandwidth_gbs / --off_bandwidth_gbs | 64 / 100; full_frame only |
-| --epochs | 1,000 total DDPG episodes; each builds a complete placement |
-| --baseline_trials | 1,000 RS trials to establish DDPG reward baseline B |
-| --iters | 5,000 trials for standalone RS/SA |
-| --batch_z | 3 tasks per action |
-| --train_every | 5; set 1 for a training-update attempt every environment step |
-| --device | Auto-select CUDA when available; cpu/cuda can be explicit |
-| --seed | Unset unless supplied |
-| --checkpoint_every | 100 episodes when saving is enabled |
-| --report | Optional JSON output path |
-
-Create parent output directories before running. Reports contain configuration, task count, best cost, objective units, chip-major placement IDs, runtime, Torch version, CUDA availability, and limitations. Runtime starts at algorithm dispatch, excluding extraction and environment construction; reports are summaries, not per-episode training logs.
-
-## What has actually been validated
-
-- Original smoke suite, including real CNN extraction.
-- Seven regression tests covering operation conservation, timing/byte units, pooling/flatten routing, residual dependencies and timing rejection, core IDs, SA behavior, and parameter updates.
-- A 10-episode CPU DDPG run, saved and resumed to episode 12.
-- Small SA and random-search CLI runs, including torus mode.
-- CLI rejection of unavailable CUDA and invalid timing inputs.
-- Real-model extraction at partition size 512:
-
-| Model | Logic tasks | VMM MACs per frame |
-| --- | ---: | ---: |
-| AlexNet | 252 | 714,188,480 |
-| VGG16 | 516 | 15,470,264,320 |
-
-These are implementation checks. H100 execution, 12 GB memory use, long-run convergence, multi-seed paper-scale results, and the paper's reported percentage improvements have not been established.
-
-## Remaining reproduction work
-
-The corrected [project state and next steps](PROJECT_STATE.md) distinguish
-implemented behavior from assumptions and historical experiment claims.
-
-For a bounded device check after installing the dependencies above, run:
-
-```bash
-python src/validate_device.py --device cpu --output runs/cpu-validation.json
-# On the allocated H100 host once SSH access is available:
-python src/validate_device.py --device cuda --output runs/h100-validation.json
-```
-
-This runs both test suites, checks real DDPG updates and an agent checkpoint
-round-trip, and records component timings and CUDA peak training memory in JSON.
-CUDA mode fails explicitly if unavailable. The default CPU run passed with 120
-steps and 57 updates on 2026-09-11. This short check does not establish convergence,
-steady-state memory fit, or GPU speedup; timings include synchronization overhead.
-
-To compare DDPG with BS and matched random-search and SA placement-evaluation
-budgets across five reproducible seeds, run this on the GPU host:
-
-```bash
-python src/run_multiseed_experiment.py \
-  --device cuda --agent_arch paper_cnn --seeds 0,1,2,3,4 --epochs 1000 --baseline_trials 1000 \
-  --model alexnet --channels_per_partition 512 \
-  --output_dir runs/alexnet-five-seed
-```
-
-It writes a `summary.json`, one JSON report and log per method/seed, and a DDPG
-JSONL diagnostics file per seed. Diagnostics record noisy and deterministic
-policy costs, reward, OU noise, collision repairs, action distribution, and
-actor/critic losses. DDPG, RS and SA receive 1,000 complete-placement
-evaluations; BS evaluates its one deterministic sequential placement. DDPG's
-1,000 baseline trials are separately reported because they normalize its sparse
-reward and are not part of that matched comparison.
-
-`--agent_arch mlp` is the default. `--agent_arch cnn` preserves the junior-derived
-spatial encoder that combines grid features with the task-communication vector.
-`--agent_arch paper_cnn` follows Figure 9: 3x3 CONV-32, pool/LRN, 3x3 CONV-64,
-pool/LRN, FC-600/BN, FC-300/BN and the actor output; the critic merges the action
-after FC-600. The paper does not state convolution padding or LRN parameters, so
-same-padding and PyTorch's conventional size-5 LRN are documented assumptions.
-Run matched seeds before claiming an improvement.
-
-Paper-mode reward remains `--reward_mode sparse`. The opt-in
-`--reward_mode potential` adds discounted potential-based feedback from partial
-placements; its shaping terms telescope to zero over the fixed episode horizon.
-Treat it as an improvement experiment and report it separately from sparse
-paper-mode runs.
-
-After completing MLP and CNN experiment directories, diagnose convergence with:
-
-```bash
-python src/analyze_multiseed.py \
-  runs/alexnet-mlp-five-seed runs/alexnet-cnn-five-seed \
-  --output runs/alexnet-agent-comparison.json
-```
-
-The analyzer reports the deterministic policy's gap from the best noisy sample,
-the first best epoch, tail cost variation, collision repairs, losses, and
-aggregate DDPG reductions relative to BS, random search and SA. The planned order
-for model-fidelity work is recorded in `NEXT_STEPS.md`.
-
-1. Reconstruct and validate block-streaming stages and communication contention with explicit assumptions.
-2. Implement compute-aware partitioning and buffer-capacity constraints; the paper's refinement formula is unspecified.
-3. Implement and validate merge arithmetic and separate CONV/FC placement regions.
-4. Replace the MLP actor/critic with the paper's CNN architecture.
-5. Validate CUDA execution and profile actual memory/throughput on the allocated slice.
-6. Automate multi-seed, matched-budget experiments and statistical reporting.
-
-Parallel GPU environments are a possible later performance change, not an implemented feature.
-
-## Repository layout
-
-~~~text
-src/
-  run_multi_chip.py          # Maintained multi-chip CLI, extraction, DDPG, RS, SA
-  compute_model.py           # Tile operation counts, arithmetic seconds, traffic bytes
-  multi_chip_environment.py  # Placement objective and dependency-level validation
-  multi_chip_topology.py     # Mesh/torus costs and physical core IDs
-  test_multi_chip.py         # Original smoke suite
-  test_reconciliation.py     # Reconciliation regression suite
-  validate_device.py         # Bounded CPU/CUDA validation and component timings
-  run_multiseed_experiment.py # Reproducible DDPG/RS/SA multi-seed comparison
-  analyze_multiseed.py        # Learning/convergence analysis across experiment directories
-  run_multi_chip_fast.py     # Historical alternative; not reconciled or validated
-  agent/, env/, runner/      # Original single-chip implementation
-RECONCILIATION.md             # Detailed assumptions and reconciliation history
-PROJECT_STATE.md              # Corrected progress, evidence and next steps
-NEXT_STEPS.md                 # Ordered paper-reproduction and improvement plan
-requirements.txt              # Historical dependency list, not current multi-chip setup
-~~~
-
-The original single-chip path is retained separately. The reconciliation and validation described here apply to the maintained multi-chip files above.
+See `PROJECT_STATE.md` for validated evidence and `NEXT_STEPS.md` for the work still required before claiming paper-comparable results.

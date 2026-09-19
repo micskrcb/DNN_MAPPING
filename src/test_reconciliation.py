@@ -46,9 +46,33 @@ class TimingTests(unittest.TestCase):
         mapper._placement[:] = [2, 4]
         np.testing.assert_array_equal(mapper.get_placement(), [4, 2])
 
+    def test_paper_xy_gateway_route_and_contention(self):
+        topo = MultiChipTopology(2, 1, 2, 2, on_chip_latency=1.0,
+                                 off_chip_latency=5.0,
+                                 routing_model="paper_xy")
+        route = topo.xy_route(0, 4)
+        self.assertEqual([kind for kind, _ in route], ["on", "off", "on"])
+        self.assertEqual(topo.comm_cost(0, 4), 7.0)
+
+        graph = np.zeros((4, 4), dtype=np.float32)
+        graph[0, 3] = graph[1, 3] = graph[2, 3] = 10.0
+        env = MultiChipEnvironment(1, 1, 1, 4, on_chip_latency=1.0,
+                                   task_graph=graph, num_tasks=4,
+                                   routing_model="paper_xy",
+                                   pipeline_model="xy_contention")
+        env.place(np.array([0, 1, 2, 3], dtype=np.int32))
+        self.assertEqual(env.evaluate(), 30.0)
+        diagnostics = env.routing_diagnostics()
+        self.assertEqual(diagnostics["communicating_edges"], 3)
+        self.assertEqual(diagnostics["mean_hops_per_edge"], 2.0)
+        self.assertEqual(diagnostics["traffic_weighted_mean_hops"], 2.0)
+        self.assertEqual(diagnostics["on_chip_links"]["max_load"], 30.0)
+        self.assertEqual(diagnostics["off_chip_links"]["used_links"], 0)
+
     def test_sa_exact_budget_and_unused_core(self):
         class Objective:
             num_tasks, total_cores = 1, 3
+            allowed_cores = np.arange(3, dtype=np.int32)
             def __init__(self): self.calls = 0
             def place(self, p): self.placement = p.copy()
             def evaluate(self):
@@ -68,6 +92,20 @@ class TimingTests(unittest.TestCase):
         cost = rm.run_sequential(env)
         self.assertTrue(np.isfinite(cost))
         np.testing.assert_array_equal(env.placement[:5], np.arange(5, dtype=np.int32))
+
+    def test_masked_region_restricts_baselines_and_mapper(self):
+        allowed = np.array([4, 5, 6], dtype=np.int32)
+        env = MultiChipEnvironment(num_chips_x=2, num_chips_y=1,
+                                   rows_per_chip=2, cols_per_chip=2,
+                                   num_tasks=2, allowed_cores=allowed)
+        rm.run_sequential(env)
+        np.testing.assert_array_equal(env.placement, [4, 5])
+        mapper = rm.MultiChipCoreMapper(env, baseline_latency=10.0, batch_z=1)
+        state = mapper.reset()
+        self.assertEqual(np.count_nonzero(state[:8] == -1), 5)
+        mapper.step(np.array([-1.0, -1.0]))
+        self.assertEqual(mapper.get_placement()[0], 4)
+        self.assertEqual(mapper.collision_repairs, 0)
 
     def test_potential_shaping_preserves_discounted_return(self):
         gamma = 0.98
@@ -94,6 +132,16 @@ class WorkloadTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 return rm.extract_model_task_graph(channels_per_partition=3, return_work=timing)
 
+    @unittest.skipUnless(rm.HAS_TORCHVISION, "torchvision required")
+    def test_paper_target_counts_alexnet(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            graph, tasks, labels = rm.extract_model_task_graph(
+                "alexnet", partition_mode="paper_targets")
+        self.assertEqual(tasks, 1115)
+        self.assertEqual(sum("_conv_" in label for label in labels), 183)
+        self.assertEqual(sum("_linear_" in label for label in labels), 932)
+        self.assertEqual(graph.shape, (1115, 1115))
+
     def test_pool_flatten_and_mac_conservation(self):
         from torch import nn
         model = nn.Sequential(nn.Conv2d(3, 5, 3), nn.ReLU(), nn.MaxPool2d(2),
@@ -106,7 +154,7 @@ class WorkloadTests(unittest.TestCase):
         # Post-pool 20 elements broadcast to each of 3 output groups.
         self.assertEqual(g[np.ix_(src, dst)].sum(), 60)
 
-    def test_residual_graph_and_timing_guard(self):
+    def test_residual_graph_and_timing_assumption(self):
         import torch
         from torch import nn
         class Residual(nn.Module):
@@ -122,8 +170,11 @@ class WorkloadTests(unittest.TestCase):
         first = labels.index("first_conv_VVA_m0")
         last = labels.index("last_conv_VMM_m0_n0")
         self.assertGreater(graph[first, last], 0)
-        with self.assertRaisesRegex(ValueError, "residual"):
-            self.extract(Residual(), (1, 3, 4, 4))
+        timed_graph, tasks, timed_labels, operations, kinds = self.extract(
+            Residual(), (1, 3, 4, 4))
+        self.assertEqual(timed_graph.shape, (tasks, tasks))
+        self.assertEqual(len(timed_labels), len(operations))
+        self.assertEqual(len(operations), len(kinds))
 
     def test_training_update_and_device(self):
         import torch
