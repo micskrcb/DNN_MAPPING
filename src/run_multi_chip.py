@@ -1237,13 +1237,23 @@ def run_random(env: MultiChipEnvironment, n_trials: int = 1000) -> float:
     return best_cost
 
 
+def run_sequential(env: MultiChipEnvironment) -> float:
+    """Paper BS baseline: assign tasks by chip index, then core index."""
+    if env.num_tasks > env.total_cores:
+        raise ValueError("Sequential placement requires at least one physical core per task")
+    placement = np.arange(env.num_tasks, dtype=np.int32)
+    env.place(placement)
+    return env.evaluate()
+
+
 # ---------------------------------------------------------------------------
 # Main Execution
 # ---------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-chip core placement")
-    parser.add_argument("--algo", choices=["ddpg", "sa", "random"], default="ddpg")
+    parser.add_argument("--algo", choices=["ddpg", "sa", "random", "bs"], default="ddpg",
+                        help="Placement method; bs is the paper's sequential baseline")
     parser.add_argument("--chips_x", type=int, default=2)
     parser.add_argument("--chips_y", type=int, default=2)
     parser.add_argument("--rows", type=int, default=4, help="Rows per chip")
@@ -1441,6 +1451,8 @@ def main():
                          agent_arch=args.agent_arch, reward_mode=args.reward_mode)
     elif args.algo == "sa":
         cost = run_sa(env, n_iter=args.iters)
+    elif args.algo == "bs":
+        cost = run_sequential(env)
     else:
         cost = run_random(env, n_trials=args.iters)
 

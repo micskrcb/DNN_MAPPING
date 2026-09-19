@@ -1,6 +1,7 @@
 # DNN Mapping with Reinforcement Learning
 
-Place DNN computation across a multi-chip many-core accelerator using DDPG, random search, or simulated annealing.
+Place DNN computation across a multi-chip many-core accelerator using DDPG,
+sequential placement, random search, or simulated annealing.
 
 The project aims to reproduce **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning** by Nan Wu, Lei Deng, Guoqi Li, and Yuan Xie, published in ACM TODAES (2020). [Read the paper's publication record](https://doi.org/10.1145/3418498).
 
@@ -195,11 +196,13 @@ Pass it with --use_cnn --custom_model path/to/model.py. Without a supplied input
 
 ## Algorithms and comparison discipline
 
-DDPG uses MLP actor/critic networks, actor/critic learning rates 0.0002/0.001, gamma 0.98, and a training minibatch of 64. These networks **do not yet match the paper's CNN policy**.
+DDPG uses actor/critic learning rates 0.0002/0.001, gamma 0.98, and a training
+minibatch of 64. Select `--agent_arch paper_cnn` for the Figure 9 architecture;
+the default MLP and junior-derived `cnn` remain comparison conditions.
 
 Each action places up to --batch_z tasks. Coordinates are floored; collisions use the nearest free grid position by Manhattan distance. Nonterminal reward is zero; completed placements receive sqrt(B) − sqrt(L), where B is the best initial random-search cost. OU noise uses assumed theta=0.15 and sigma=0.2 with a fading scale.
 
-Run either baseline on the same small workload:
+Run the paper's baselines on the same small workload:
 
 ~~~bash
 python src/run_multi_chip.py --algo random --use_cnn \
@@ -209,6 +212,10 @@ python src/run_multi_chip.py --algo random --use_cnn \
 python src/run_multi_chip.py --algo sa --use_cnn \
   --channels_per_partition 128 --timing_model full_frame \
   --iters 100 --seed 0 --report runs/sa.json
+
+python src/run_multi_chip.py --algo bs --use_cnn \
+  --channels_per_partition 128 --timing_model full_frame \
+  --seed 0 --report runs/bs.json
 ~~~
 
 SA uses a fixed 0.99 cooldown and an approximately 1% task subset (at least two when possible). Relocation to unused cores is an implementation choice; its exact neighborhood is not established by the paper.
@@ -221,7 +228,7 @@ Run python src/run_multi_chip.py --help for the complete CLI.
 
 | Option | Default / meaning |
 | --- | --- |
-| --algo | ddpg; alternatives sa and random |
+| --algo | ddpg; alternatives bs, sa and random |
 | --use_cnn | Use an extracted model; otherwise a synthetic DAG |
 | --channels_per_partition | 8; set explicitly, since small values can exceed grid capacity |
 | --chips_x / --chips_y | 2 / 2 |
@@ -278,8 +285,8 @@ CUDA mode fails explicitly if unavailable. The default CPU run passed with 120
 steps and 57 updates on 2026-09-11. This short check does not establish convergence,
 steady-state memory fit, or GPU speedup; timings include synchronization overhead.
 
-To compare DDPG with matched random-search and SA placement-evaluation budgets
-across five reproducible seeds, run this on the GPU host:
+To compare DDPG with BS and matched random-search and SA placement-evaluation
+budgets across five reproducible seeds, run this on the GPU host:
 
 ```bash
 python src/run_multiseed_experiment.py \
@@ -291,9 +298,10 @@ python src/run_multiseed_experiment.py \
 It writes a `summary.json`, one JSON report and log per method/seed, and a DDPG
 JSONL diagnostics file per seed. Diagnostics record noisy and deterministic
 policy costs, reward, OU noise, collision repairs, action distribution, and
-actor/critic losses. Each method receives 1,000 complete-placement evaluations;
-DDPG's 1,000 baseline trials are separately reported because they normalize its
-sparse reward and are not part of that matched comparison.
+actor/critic losses. DDPG, RS and SA receive 1,000 complete-placement
+evaluations; BS evaluates its one deterministic sequential placement. DDPG's
+1,000 baseline trials are separately reported because they normalize its sparse
+reward and are not part of that matched comparison.
 
 `--agent_arch mlp` is the default. `--agent_arch cnn` preserves the junior-derived
 spatial encoder that combines grid features with the task-communication vector.
@@ -319,7 +327,7 @@ python src/analyze_multiseed.py \
 
 The analyzer reports the deterministic policy's gap from the best noisy sample,
 the first best epoch, tail cost variation, collision repairs, losses, and
-aggregate DDPG reductions relative to random search and SA. The planned order
+aggregate DDPG reductions relative to BS, random search and SA. The planned order
 for model-fidelity work is recorded in `NEXT_STEPS.md`.
 
 1. Reconstruct and validate block-streaming stages and communication contention with explicit assumptions.

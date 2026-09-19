@@ -84,7 +84,7 @@ def analyze_directory(directory):
     ddpg_mean = aggregates.get("ddpg", {}).get("mean_best_cost")
     comparisons = {}
     if ddpg_mean is not None:
-        for baseline in ("random", "sa"):
+        for baseline in ("bs", "random", "sa"):
             baseline_mean = aggregates.get(baseline, {}).get("mean_best_cost")
             if baseline_mean:
                 comparisons[f"ddpg_reduction_vs_{baseline}_mean_fraction"] = 1.0 - ddpg_mean / baseline_mean

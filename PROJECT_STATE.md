@@ -46,7 +46,7 @@ competing list of current TODOs.
 Maintained files live under `src/`:
 
 - `run_multi_chip.py`: FX extraction, dynamic/custom models, MLP DDPG, mapper,
-  random search, SA, checkpointing and JSON run summaries.
+  sequential placement (BS), random search, SA, checkpointing and JSON run summaries.
 - `compute_model.py`: disjoint channel ranges, VMM MAC/VVA addition counts,
   arithmetic seconds and edge byte volumes.
 - `multi_chip_topology.py`: mesh/torus costs and chip-major physical IDs.
@@ -170,7 +170,7 @@ after the small validation passes. Compare CPU and CUDA with the same config;
 the profiler does not automatically prove or compute a speedup.
 
 `src/run_multiseed_experiment.py` now provides the next experimental step: it
-runs DDPG, random search and SA serially across a declared seed list with the
+runs BS, DDPG, random search and SA serially across a declared seed list with the
 same complete-placement evaluation count, and writes a summary with mean,
 sample standard deviation, minimum and maximum best cost. DDPG accepts an
 optional `--diagnostics` JSONL output with each episode's noisy and

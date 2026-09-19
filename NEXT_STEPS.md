@@ -1,43 +1,82 @@
-# Paper-reproduction next steps
+# Paper-reproduction execution plan
 
-This plan begins at local commit `945b14f`. Work is being prepared on local
-branch `codex/paper-next-steps` and must not be pushed until the junior's remote
-changes have been reviewed and integrated.
+The primary objective is an honest reproduction of Wu et al., *Core Placement
+Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement
+Learning*. Experimental improvements must remain separate from paper-mode runs.
 
-## Execution order
+The paper does not publish its simulator or every implementation parameter.
+Consequently, exact numerical reproduction cannot be promised. Every unspecified
+choice must be recorded, and results should first be compared using the paper's
+normalized metrics and trends.
 
-1. **Establish learning evidence.** Run five matched seeds for MLP and CNN with
-   1,000 complete-placement evaluations per method. Analyze deterministic and
-   noisy DDPG costs separately. Do not extend to 10,000 epochs unless the
-   deterministic policy is still improving near epoch 1,000.
-2. **Improve credit assignment experimentally.** Retain paper-style sparse
-   terminal reward as the default. Add potential-based shaping as an opt-in
-   condition whose discounted shaping return telescopes to zero, preserving
-   the original objective for a fixed episode horizon.
-3. **Validate architecture claims.** A Figure-9 `paper_cnn` implementation is
-   now present with the documented CONV-32/64, FC-600/300, LRN, BN and critic
-   action merge. Validate it experimentally and retain padding/LRN parameters
-   as assumptions because the paper does not specify them.
-4. **Reconstruct the timing model.** Specify block size, pipeline stages,
-   transformation work, communication startup, bandwidth sharing, contention,
-   buffering, stalls and compute/communication overlap. Add small hand-worked
-   examples before using the model in long experiments.
-5. **Improve partition fidelity.** Add compute-aware partitions, weight and
-   activation-buffer capacity checks, merge arithmetic, and any required
-   CONV/FC region constraints.
-6. **Run paper-scale baselines.** Increase RS and SA toward the paper's search
-   budget only after objective validation. Report placement evaluations,
-   runtime, seed-level results and uncertainty.
-7. **Reproduce, then improve.** Freeze a paper-mode configuration. Evaluate
-   dense reward, discrete/masked actions, graph encoders and parallel
-   environments as separately labeled improvements.
+## Gate 1: reproduce the optimization problem
 
-## Evidence required for each experiment
+Do not run long DDPG experiments until this gate passes.
 
-- Git commit and dirty/clean status.
-- Full configuration, Torch/CUDA versions and GPU name.
-- Seed-level reports and checkpoints.
-- Noisy current cost, deterministic-policy cost and best-ever cost.
-- Actor/critic losses, collision repairs and exploration scale.
-- Mean, sample standard deviation, minimum and maximum over at least five seeds.
-- Matched placement-evaluation budgets for DDPG, random search and SA.
+1. **Match the logic-core allocation.** Reproduce the Figure 6 targets and the
+   paper's compute-balancing/capacity rules instead of selecting one global
+   `channels_per_partition` value.
+
+   | Workload | CONV cores | FC cores | Total |
+   | --- | ---: | ---: | ---: |
+   | AlexNet | 183 | 932 | 1,115 |
+   | VGG16 | 1,024 | 1,924 | 2,948 |
+   | ResNet50 | 512 | 37 | 549 |
+
+2. **Separate CONV and FC placement.** Allocate distinct masked physical-core
+   regions and optimize them independently, as described in Section 3.1.2.
+3. **Implement the paper timing objective.** Model block-by-block CONV streaming,
+   layer-by-layer FC execution, pipeline stages/time phases, 8-bit activations
+   and weights, 32-bit partial sums, minimal-path XY routing, link traffic,
+   buffering, stalls and the maximum stage latency `L(P)`.
+4. **Enforce Table 1 resources.** Use the 4x4-chip, 16x16-core system, 128 MACs at
+   400 MHz, 64 KB weight buffer, 64 KB input/activation buffer, 64 GB/s/core NoC
+   and 100 GB/s/chip off-chip bandwidth. Record the interpretation of GRS because
+   its complete implementation is not specified in this paper.
+5. **Validate the evaluator.** Add hand-calculated small cases and conservation
+   checks before using the objective as an RL reward.
+
+## Gate 2: reproduce the methods
+
+1. Add the sequential-placement baseline (BS), ordered by chip index and then
+   core index.
+2. Retain the Figure 9 `paper_cnn` agent: CONV-32/64, pooling/LRN, FC-600/300,
+   batch normalization, actor FC-`2z`, and critic action merge after FC-600.
+3. Use the 2-D placement matrix alone as state, continuous `2z` coordinates,
+   floor conversion, nearest-free Manhattan repair, Adam actor learning rate
+   0.0002, critic learning rate 0.001, discount 0.98 and minibatch size 64.
+4. Keep the paper reward exactly sparse: zero until completion, then
+   `sqrt(B) - sqrt(L(P))`. Keep potential shaping out of paper-mode runs.
+5. Resolve and document unspecified values: `z`, OU parameters/fading schedule,
+   replay capacity, convolution padding, LRN parameters, target networks and
+   soft-update coefficient.
+6. Correct experiment accounting: the paper predicts 30 complete placements per
+   epoch and reports convergence after roughly 300,000-400,000 evaluated
+   placements. Record both epochs and complete-placement evaluations explicitly.
+7. Run RS with 1,000,000 sampled placements and SA with approximately 1,000,000
+   placements, cooldown 0.99 and 1% placement perturbations.
+
+## Gate 3: reproduce reported comparisons
+
+1. Run AlexNet, VGG16 and ResNet50 with batch size one for latency and a large
+   batch for throughput.
+2. Report CONV and FC results separately as well as the overall workload.
+3. Normalize latency and throughput to BS, matching Figure 10; do not compare
+   arbitrary proxy values with the paper's latency.
+4. Report seed-level DDPG results and at least five-seed mean, sample standard
+   deviation, minimum and maximum. The paper does not state uncertainty for its
+   main Figure 10 results, so our additional statistics should be identified as
+   such.
+5. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA
+   versions, GPU, checkpoints, total placement evaluations and wall-clock time.
+6. Verify hop-distance reductions and link-traffic distributions in addition to
+   final cost. These intermediate measurements help distinguish a faithful trend
+   from an accidentally similar final number.
+
+## Gate 4: improvements after reproduction
+
+Only after freezing a paper-mode configuration should we evaluate potential
+reward shaping, collision penalties, valid-action masking, discrete actions,
+graph encoders or parallel environments. Label all such results as improvements,
+and compare them against the frozen paper-mode implementation under matched
+placement-evaluation budgets.

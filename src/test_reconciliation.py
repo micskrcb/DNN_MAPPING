@@ -61,6 +61,14 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(obj.calls, 1001)  # initial plus budgeted neighbors
         self.assertEqual(result, 0)
 
+    def test_sequential_baseline_uses_chip_major_core_order(self):
+        env = MultiChipEnvironment(num_chips_x=2, num_chips_y=1,
+                                   rows_per_chip=2, cols_per_chip=2,
+                                   num_tasks=5)
+        cost = rm.run_sequential(env)
+        self.assertTrue(np.isfinite(cost))
+        np.testing.assert_array_equal(env.placement[:5], np.arange(5, dtype=np.int32))
+
     def test_potential_shaping_preserves_discounted_return(self):
         gamma = 0.98
         graph = np.array([[0, 1, 0], [0, 0, 1], [0, 0, 0]], dtype=np.float32)

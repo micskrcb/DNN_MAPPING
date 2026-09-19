@@ -1,9 +1,10 @@
-"""Run a matched-budget DDPG, random-search, and SA comparison across seeds.
+"""Run BS plus matched-budget DDPG, random-search, and SA across seeds.
 
 Example (on a CUDA host):
   python src/run_multiseed_experiment.py --device cuda --seeds 0,1,2,3,4
 
-Each method receives ``--epochs`` complete-placement evaluations per seed.
+DDPG, random search and SA receive ``--epochs`` complete-placement evaluations
+per seed. BS is a single deterministic sequential placement.
 DDPG additionally uses ``--baseline_trials`` random placements only to form its
 fixed reward normalizer; that work is reported separately and is not treated as
 an evaluation in the comparison.  Outputs are JSON reports, DDPG JSONL
@@ -61,7 +62,7 @@ def main():
               "--rows", str(args.rows), "--cols", str(args.cols)]
     results = []
     for seed in seeds:
-        for algorithm in ("ddpg", "random", "sa"):
+        for algorithm in ("bs", "ddpg", "random", "sa"):
             stem = f"{algorithm}-seed{seed}"
             report = output_dir / f"{stem}.json"
             command = [sys.executable, "src/run_multi_chip.py", "--algo", algorithm,
@@ -74,7 +75,7 @@ def main():
                                 "--reward_mode", args.reward_mode,
                                 "--diagnostics", str(output_dir / f"{stem}.jsonl"),
                                 "--save_checkpoint", str(output_dir / f"{stem}.pt")])
-            else:
+            elif algorithm != "bs":
                 command.extend(["--iters", str(args.epochs)])
             print("Running:", " ".join(command), flush=True)
             completed = subprocess.run(command, cwd=root, text=True, capture_output=True)
@@ -90,7 +91,7 @@ def main():
                             if payload.get("ddpg_metadata") else None})
 
     aggregates = {}
-    for algorithm in ("ddpg", "random", "sa"):
+    for algorithm in ("bs", "ddpg", "random", "sa"):
         costs = [item["best_cost"] for item in results if item["algorithm"] == algorithm]
         aggregates[algorithm] = {"runs": len(costs), "mean_best_cost": sum(costs) / len(costs),
                                  "sample_std_best_cost": statistics.stdev(costs) if len(costs) > 1 else 0.0,
