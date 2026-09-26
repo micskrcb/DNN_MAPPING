@@ -1,8 +1,8 @@
 # DNN Mapping with Reinforcement Learning
 
-This repository maps DNN computation tasks onto a multi-chip many-core accelerator using DDPG, random search, simulated annealing, or the sequential baseline (BS). Its reproduction target is Wu et al., **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning**, ACM TODAES 2020 ([DOI 10.1145/3418498](https://doi.org/10.1145/3418498)).
+This repository maps DNN computation tasks onto a multi-chip many-core accelerator using DDPG, random search, fixed simulated annealing, adaptive simulated annealing (ASA), a DDPG→ASA hybrid, or the sequential baseline (BS). Its reproduction target is Wu et al., **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning**, ACM TODAES 2020 ([DOI 10.1145/3418498](https://doi.org/10.1145/3418498)).
 
-The `codex/reconciled-paper-implementation` branch contains the closest current paper-mode implementation. It is runnable and tested on CPU. CUDA execution is implemented, but the H100 12 GB slice has not yet been available for validation. The paper does not publish its simulator or every parameter, so the code records reconstruction assumptions instead of claiming exact numerical reproduction.
+The `cpu` branch is the CPU-oriented continuation of the reconciled paper implementation. It is runnable and tested on CPU, explicitly controls PyTorch thread use, supports concurrent independent experiments, reduces diagnostic overhead, and uses exact affected-stage reevaluation for ASA. The paper does not publish its simulator or every parameter, so the code records reconstruction assumptions instead of claiming exact numerical reproduction.
 
 ## Present state
 
@@ -14,6 +14,7 @@ The `codex/reconciled-paper-implementation` branch contains the closest current 
 | Figure 9 actor/critic | Implemented as `--agent_arch paper_cnn` |
 | Sparse reward `sqrt(B) - sqrt(L(P))` | Implemented; zero before a complete placement |
 | BS, RS, SA, and DDPG | Implemented |
+| Adaptive SA and DDPG→ASA | Implemented as research extensions with matched-budget support |
 | 30 placements/epoch and paper search budgets | Explicitly accounted for by the paper runner |
 | XY routing and link contention | Reconstructed and implemented |
 | 64 KB weight-buffer constraint | Enforced during paper partition reconstruction |
@@ -24,8 +25,8 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
 
 ## Repository layout
 
-- `src/run_multi_chip.py` runs one BS, DDPG, random-search, or SA experiment.
-- `src/run_multiseed_experiment.py` runs all four methods across seeds.
+- `src/run_multi_chip.py` runs one BS, DDPG, random-search, SA, ASA, or DDPG→ASA experiment.
+- `src/run_multiseed_experiment.py` runs selected methods across seeds and can schedule independent CPU jobs concurrently.
 - `src/run_paper_experiment.py` runs separate CONV and FC paper-mode suites.
 - `src/compute_model.py` reconstructs partitions and converts work/traffic to physical units.
 - `src/multi_chip_topology.py` implements physical IDs and mesh/torus routing.
@@ -42,7 +43,7 @@ The older single-chip PPO/GCN programs and `run_multi_chip_fast.py` are not part
 Clone the maintained branch and create an isolated environment:
 
 ```bash
-git clone --branch codex/reconciled-paper-implementation https://github.com/micskrcb/DNN_MAPPING.git
+git clone --branch cpu https://github.com/micskrcb/DNN_MAPPING.git
 cd DNN_MAPPING
 python3 -m venv .venv
 source .venv/bin/activate
@@ -102,6 +103,27 @@ OMP_NUM_THREADS=2 python src/run_multi_chip.py \
 
 `--epochs` is a total target when resuming. Checkpoints restore models, optimizers, best placement, baseline, counters, and RNG state. Replay is not persisted, and the noise-fading schedule depends on the requested total, so a resumed run is not bit-exact.
 
+Run standalone ASA on CPU:
+
+```bash
+python src/run_multi_chip.py \
+  --algo asa --iters 100000 --seed 0 \
+  --asa_diagnostics runs/asa-seed0.jsonl \
+  --report runs/asa-seed0.json
+```
+
+Run DDPG and refine its best placement with ASA. Here DDPG evaluates 8,000 complete placements and ASA evaluates 2,000 candidates:
+
+```bash
+python src/run_multi_chip.py \
+  --algo ddpg_asa --device cpu --cpu_threads 20 \
+  --epochs 8000 --placements_per_epoch 1 --iters 2000 \
+  --baseline_trials 10000 --diagnostics_every 100 \
+  --seed 0 --report runs/ddpg-asa-seed0.json
+```
+
+ASA measures uphill cost changes to set its initial temperature. It then adapts temperature from the observed acceptance ratio, reheats after stagnant windows, and expands or contracts the fraction of moved tasks. The JSON report records accepted/improving moves, reheats, temperature, neighborhood size, initialization, and exact candidate count. `ddpg_asa` always warm-starts ASA from the best DDPG placement, so the final returned solution cannot be worse than that warm start.
+
 ## Paper-mode commands
 
 Inspect the two generated CONV/FC commands and manifest without starting a long run:
@@ -120,7 +142,17 @@ python src/run_paper_experiment.py \
   --output_dir runs/paper-alexnet
 ```
 
-The defaults are intentionally large: five seeds; 10,000 declared DDPG epochs; 30 complete placements per epoch (300,000 per seed); one million random trials to form DDPG's fixed baseline; and one million RS/SA placements. The runner executes CONV and FC separately and saves a manifest, reports, logs, checkpoints, per-placement diagnostics, and `summary.json` files. Run the dry run first and keep the SSH session in `tmux` or the cluster's job scheduler.
+The defaults are intentionally large: five seeds; 10,000 declared DDPG epochs; 30 complete placements per epoch (300,000 per seed); one million random trials to form DDPG's fixed baseline; and one million RS/SA/ASA placements. The hybrid divides the same 300,000-placement optimization budget between DDPG and ASA (80/20 by default), while its reward-normalizer trials are reported separately. The runner executes CONV and FC separately and saves a manifest, reports, logs, checkpoints, diagnostics, and `summary.json` files.
+
+For a 20-thread CPU, run two independent experiments at a time with ten threads each:
+
+```bash
+python src/run_paper_experiment.py \
+  --model alexnet --device cpu --jobs 2 --cpu_threads 10 \
+  --output_dir runs/paper-alexnet-cpu
+```
+
+Use `--algorithms bs,ddpg,asa,ddpg_asa` to select a smaller method set. Increasing `--jobs` can shorten a multi-seed campaign, but each job receives its own model and environment in memory.
 
 For a bounded end-to-end paper-mode smoke test:
 
@@ -182,6 +214,8 @@ Paper-mode DDPG uses the Figure 9 spatial CNN, the 2-D placement grid, batched `
 `--reward_mode potential` and the `mlp`/`cnn` agents are improvement conditions. Do not mix their results into the frozen paper-mode comparison. Collision repairs are expected because continuous coordinates may select the same or a masked core; diagnostics separate occupied-core repairs from mask repairs and also evaluate the deterministic policy.
 
 BS fills allowed physical cores in chip-major order. RS samples complete valid placements. SA uses current-cost acceptance, cooling factor 0.99, and roughly 1% placement perturbations that may use free cores.
+
+ASA and DDPG→ASA are project extensions, not features claimed by the source DNN-mapping paper. Keep fixed SA in result tables as the paper-aligned baseline. The runner matches the hybrid's combined candidate count to DDPG. For a direct hybrid-versus-ASA ablation, set `--search_budget` equal to `--epochs × --placements_per_epoch`; otherwise the paper-scale defaults deliberately give SA/ASA one million candidates and DDPG/hybrid 300,000.
 
 ## Interpreting results
 

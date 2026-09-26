@@ -85,6 +85,77 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(obj.calls, 1001)  # initial plus budgeted neighbors
         self.assertEqual(result, 0)
 
+    def test_adaptive_sa_exact_budget_and_warm_start(self):
+        class Objective:
+            num_tasks, total_cores = 1, 4
+            allowed_cores = np.arange(4, dtype=np.int32)
+            def __init__(self): self.calls = 0
+            def place(self, placement): self.placement = placement.copy()
+            def evaluate(self):
+                self.calls += 1
+                return float(self.placement[0])
+        obj = Objective()
+        metadata = {}
+        random.seed(7)
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = rm.run_adaptive_sa(
+                obj, n_iter=250, initial_placement=np.array([3]),
+                adapt_window=20, stall_windows=2, calibration_trials=8,
+                metadata=metadata)
+        self.assertEqual(obj.calls, 251)  # warm-start value plus candidates
+        self.assertEqual(metadata["candidate_evaluations"], 250)
+        self.assertEqual(metadata["initialization"], "supplied")
+        self.assertLessEqual(result, metadata["initial_cost"])
+        self.assertEqual(result, 0)
+
+    def test_incremental_pipeline_evaluator_matches_full_objective(self):
+        graph = np.zeros((6, 6), dtype=np.float32)
+        graph[0, 2], graph[1, 2] = 2.0, 3.0
+        graph[2, 3], graph[2, 4] = 4.0, 5.0
+        graph[3, 5], graph[4, 5] = 6.0, 7.0
+        for pipeline_model, routing_model in (("task_sum", "legacy_distance"),
+                                               ("xy_contention", "paper_xy")):
+            env = MultiChipEnvironment(
+                2, 1, 2, 2, on_chip_latency=1.0, off_chip_latency=5.0,
+                task_graph=graph, num_tasks=6, routing_model=routing_model,
+                pipeline_model=pipeline_model)
+            placement = np.array([0, 1, 2, 3, 4, 5], dtype=np.int32)
+            env.place(placement)
+            evaluator = rm.IncrementalPipelineEvaluator(env)
+            for first, second in ((0, 5), (1, 3), (2, 4)):
+                candidate = placement.copy()
+                candidate[first], candidate[second] = candidate[second], candidate[first]
+                env.place(candidate)
+                incremental = evaluator.candidate_cost([first, second])
+                full = env.evaluate()
+                self.assertAlmostEqual(incremental, full, places=12)
+                evaluator.accept()
+                placement = candidate
+
+    def test_hybrid_warm_starts_asa_from_ddpg_best(self):
+        class Objective:
+            placement = np.array([9, 9], dtype=np.int32)
+        objective = Objective()
+        seen = {}
+        def fake_ddpg(env, n_episodes, **options):
+            self.assertEqual(n_episodes, 12)
+            env.placement = np.array([2, 3], dtype=np.int32)
+            options["run_metadata"]["phase"] = "ddpg"
+            return 8.0
+        def fake_asa(env, n_iter, initial_placement, **options):
+            self.assertEqual(n_iter, 4)
+            seen["initial"] = initial_placement.copy()
+            options["metadata"]["phase"] = "asa"
+            env.placement = np.array([1, 3], dtype=np.int32)
+            return 7.0
+        metadata = {}
+        with patch.object(rm, "run_ddpg", side_effect=fake_ddpg), \
+             patch.object(rm, "run_adaptive_sa", side_effect=fake_asa):
+            result = rm.run_ddpg_asa(objective, 12, 4, metadata=metadata)
+        self.assertEqual(result, 7.0)
+        np.testing.assert_array_equal(seen["initial"], [2, 3])
+        self.assertEqual(metadata["combined_candidate_evaluations"], 16)
+
     def test_sequential_baseline_uses_chip_major_core_order(self):
         env = MultiChipEnvironment(num_chips_x=2, num_chips_y=1,
                                    rows_per_chip=2, cols_per_chip=2,

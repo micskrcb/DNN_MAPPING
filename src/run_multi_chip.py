@@ -52,12 +52,6 @@ try:
     import torch.nn.functional as F
     import torch.optim as optim
     HAS_TORCH = True
-    # PERF FIX: on CPU-only machines (no CUDA), PyTorch sometimes defaults
-    # to a single thread depending on the environment, silently leaving
-    # most cores idle. Explicitly use all available cores for the CPU
-    # matmul-heavy actor/critic forward/backward passes.
-    if not torch.cuda.is_available():
-        torch.set_num_threads(int(os.environ.get("OMP_NUM_THREADS", min(8, os.cpu_count() or 1))))
 except ImportError:
     HAS_TORCH = False
 
@@ -66,6 +60,23 @@ try:
     HAS_TORCHVISION = True
 except ImportError:
     HAS_TORCHVISION = False
+
+
+def configure_cpu_threads(cpu_threads=None, interop_threads=1):
+    """Configure PyTorch before model construction without oversubscribing CPUs."""
+    if not HAS_TORCH:
+        return None
+    threads = cpu_threads or int(os.environ.get("OMP_NUM_THREADS", os.cpu_count() or 1))
+    if threads <= 0 or interop_threads <= 0:
+        raise ValueError("CPU thread counts must be positive")
+    torch.set_num_threads(threads)
+    try:
+        torch.set_num_interop_threads(interop_threads)
+    except RuntimeError:
+        # PyTorch permits setting this only before parallel work starts. This
+        # can already have happened when main() is called repeatedly in tests.
+        pass
+    return threads
 
 
 # ---------------------------------------------------------------------------
@@ -663,9 +674,10 @@ if HAS_TORCH:
             self.ou_state = np.zeros(action_dim, dtype=np.float32)
 
         def select_action(self, state, noise_scale=0.1, explore=True):
-            state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+            state = torch.as_tensor(state, dtype=torch.float32,
+                                    device=self.device).unsqueeze(0)
             self.actor.eval()
-            with torch.no_grad():
+            with torch.inference_mode():
                 action = self.actor(state).squeeze(0).cpu().numpy()
             self.actor.train()
             if not explore:
@@ -682,11 +694,14 @@ if HAS_TORCH:
 
             states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
 
-            states = torch.FloatTensor(states).to(self.device)
-            actions = torch.FloatTensor(actions).to(self.device)
-            rewards = torch.FloatTensor(rewards).unsqueeze(1).to(self.device)
-            next_states = torch.FloatTensor(next_states).to(self.device)
-            dones = torch.FloatTensor(dones).unsqueeze(1).to(self.device)
+            states = torch.as_tensor(states, dtype=torch.float32, device=self.device)
+            actions = torch.as_tensor(actions, dtype=torch.float32, device=self.device)
+            rewards = torch.as_tensor(rewards, dtype=torch.float32,
+                                      device=self.device).unsqueeze(1)
+            next_states = torch.as_tensor(next_states, dtype=torch.float32,
+                                          device=self.device)
+            dones = torch.as_tensor(dones, dtype=torch.float32,
+                                    device=self.device).unsqueeze(1)
 
             # Critic Update
             with torch.no_grad():
@@ -971,9 +986,11 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
              device: str = None, save_checkpoint: str = None, load_checkpoint: str = None,
              checkpoint_every: int = 100, diagnostics_path: str = None,
              run_metadata: dict = None, agent_arch: str = "mlp",
-             reward_mode: str = "sparse") -> float:
+             reward_mode: str = "sparse", diagnostics_every: int = 100) -> float:
     if not HAS_TORCH:
         raise RuntimeError("DDPG requires PyTorch; refusing a random-search fallback")
+    if diagnostics_every <= 0:
+        raise ValueError("diagnostics_every must be positive")
 
     signature = hashlib.sha256()
     signature.update(np.ascontiguousarray(env.task_graph).tobytes())
@@ -1130,7 +1147,9 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
             best_grid   = grid
             best_placement = mapper.get_placement()
 
-        if diagnostics_stream is not None:
+        write_diagnostics = (diagnostics_stream is not None and
+                             (ep % diagnostics_every == 0 or ep == n_episodes))
+        if write_diagnostics:
             # Evaluate the actor without OU noise. This is deliberately a
             # separate rollout: it answers whether the trained policy itself
             # is useful, rather than whether a lucky noisy action was useful.
@@ -1209,8 +1228,340 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
 
 
 # ---------------------------------------------------------------------------
-# Simulated Annealing & Random Baseline
+# Simulated Annealing, Adaptive SA, and Random Baseline
 # ---------------------------------------------------------------------------
+
+class _FreeCorePool:
+    """O(1) random selection and replacement of currently unused cores."""
+    def __init__(self, allowed_cores, placement):
+        occupied = set(int(core) for core in placement)
+        self.items = [int(core) for core in allowed_cores if int(core) not in occupied]
+        self.positions = {core: index for index, core in enumerate(self.items)}
+
+    def __bool__(self):
+        return bool(self.items)
+
+    def choice(self):
+        return self.items[random.randrange(len(self.items))]
+
+    def accept_relocation(self, used_core, freed_core):
+        index = self.positions.pop(int(used_core))
+        self.items[index] = int(freed_core)
+        self.positions[int(freed_core)] = index
+
+
+def _placement_neighbor(placement, n_perturb, free_pool):
+    """Return a valid swap/relocation neighbor and its changed task indices."""
+    n = len(placement)
+    indices = np.asarray(random.sample(range(n), min(n_perturb, n)), dtype=np.int64)
+    candidate = placement.copy()
+    original = candidate[indices].copy()
+    permuted = original.tolist()
+    random.shuffle(permuted)
+    if len(permuted) >= 2 and np.array_equal(permuted, original):
+        permuted[0], permuted[1] = permuted[1], permuted[0]
+    candidate[indices] = permuted
+
+    relocation = None
+    if free_pool and (n == 1 or random.random() < 0.5):
+        used_core = free_pool.choice()
+        freed_core = int(candidate[indices[0]])
+        candidate[indices[0]] = used_core
+        relocation = (used_core, freed_core)
+    changed = indices[candidate[indices] != placement[indices]]
+    return candidate, changed, relocation
+
+
+class IncrementalPipelineEvaluator:
+    """Exact affected-stage evaluation for a MultiChipEnvironment candidate.
+
+    Moving task ``u`` can change its own stage and every predecessor stage
+    whose outgoing edge ends at ``u``. Other stage values are unchanged, so
+    recomputing only those stages preserves exactly the environment objective.
+    """
+    def __init__(self, env):
+        required = ("pipeline_stages", "_succ_cache", "pipeline_model",
+                    "compute_latency", "topo")
+        if not all(hasattr(env, name) for name in required):
+            raise TypeError("environment does not expose the pipeline objective")
+        self.env = env
+        self.stages = env.pipeline_stages()
+        self.task_stage = np.empty(env.num_tasks, dtype=np.int64)
+        for stage_index, stage in enumerate(self.stages):
+            self.task_stage[stage] = stage_index
+        self.predecessors = [[] for _ in range(env.num_tasks)]
+        for source, successors in enumerate(env._succ_cache):
+            for destination, _ in successors:
+                self.predecessors[destination].append(source)
+        self.stage_costs = np.asarray(
+            [self._stage_cost(index) for index in range(len(self.stages))],
+            dtype=np.float64)
+        self.pending = None
+
+    def _stage_cost(self, stage_index):
+        env = self.env
+        stage = self.stages[stage_index]
+        if env.pipeline_model == "task_sum":
+            maximum = 0.0
+            for task in stage:
+                source = int(env.placement[task])
+                if source < 0:
+                    continue
+                communication = 0.0
+                for successor, volume in env._succ_cache[task]:
+                    destination = int(env.placement[successor])
+                    if destination >= 0:
+                        communication += volume * env.topo.comm_cost(source, destination)
+                maximum = max(maximum, float(env.compute_latency[task]) + communication)
+            return maximum
+
+        compute = max((float(env.compute_latency[task]) for task in stage
+                       if env.placement[task] >= 0), default=0.0)
+        loads = {}
+        for task in stage:
+            source = int(env.placement[task])
+            if source < 0:
+                continue
+            for successor, volume in env._succ_cache[task]:
+                destination = int(env.placement[successor])
+                if destination < 0:
+                    continue
+                for kind, link in env.topo.xy_route(source, destination):
+                    key = (kind, link)
+                    loads[key] = loads.get(key, 0.0) + volume
+        communication = max(
+            (volume * (env.topo.on_chip_latency if kind == "on"
+                       else env.topo.off_chip_latency)
+             for (kind, _), volume in loads.items()), default=0.0)
+        return compute + communication
+
+    def candidate_cost(self, changed_tasks):
+        affected = set()
+        for task in np.asarray(changed_tasks, dtype=np.int64).tolist():
+            affected.add(int(self.task_stage[task]))
+            affected.update(int(self.task_stage[pred])
+                            for pred in self.predecessors[task])
+        pending = {stage: self._stage_cost(stage) for stage in affected}
+        if not pending:
+            self.pending = {}
+            return float(self.stage_costs.max(initial=0.0))
+        candidate = self.stage_costs.copy()
+        for stage, value in pending.items():
+            candidate[stage] = value
+        self.pending = pending
+        return float(candidate.max(initial=0.0))
+
+    def accept(self):
+        for stage, value in (self.pending or {}).items():
+            self.stage_costs[stage] = value
+        self.pending = None
+
+    def reject(self):
+        self.pending = None
+
+
+def run_adaptive_sa(env: MultiChipEnvironment, n_iter: int = 100000,
+                    initial_placement=None, initial_acceptance: float = 0.8,
+                    target_acceptance: float = 0.30, adapt_window: int = 100,
+                    min_perturb_frac: float = 0.005,
+                    max_perturb_frac: float = 0.05,
+                    stall_windows: int = 3, calibration_trials: int = 32,
+                    diagnostics_path: str = None, metadata: dict = None,
+                    incremental: bool = True) -> float:
+    """Adaptive SA with measured temperature, feedback control, and reheating.
+
+    Temperature is calibrated from observed uphill deltas. Every adaptation
+    window then uses the acceptance ratio as feedback. Stagnation reheats the
+    chain and expands its neighborhood; improvements contract the neighborhood.
+    All calibration proposals count toward ``n_iter``.
+    """
+    if n_iter <= 0 or adapt_window <= 0 or stall_windows <= 0:
+        raise ValueError("ASA budgets and window sizes must be positive")
+    if not (0 < initial_acceptance < 1 and 0 < target_acceptance < 1):
+        raise ValueError("ASA acceptance targets must be in (0, 1)")
+    if not (0 < min_perturb_frac <= max_perturb_frac <= 1):
+        raise ValueError("ASA perturbation fractions must satisfy 0 < min <= max <= 1")
+
+    n = env.num_tasks
+    if initial_placement is None:
+        placement = np.asarray(random.sample(env.allowed_cores.tolist(), n),
+                               dtype=np.int32)
+        initialization = "random"
+    else:
+        placement = np.asarray(initial_placement, dtype=np.int32).copy()
+        initialization = "supplied"
+    env.place(placement)
+    current_cost = float(env.evaluate())
+    initial_cost = current_cost
+    best_cost, best_placement = current_cost, placement.copy()
+    free_pool = _FreeCorePool(env.allowed_cores, placement)
+
+    evaluator = None
+    if incremental:
+        try:
+            evaluator = IncrementalPipelineEvaluator(env)
+        except (TypeError, AttributeError):
+            evaluator = None
+
+    diagnostics = None
+    if diagnostics_path:
+        parent = os.path.dirname(diagnostics_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        diagnostics = open(diagnostics_path, "w", encoding="utf-8")
+
+    evaluations = accepted = improving = reheats = 0
+    positive_deltas = []
+    perturb_fraction = min_perturb_frac
+
+    def evaluate(candidate, changed):
+        env.place(candidate)
+        return (evaluator.candidate_cost(changed) if evaluator is not None
+                else float(env.evaluate()))
+
+    def finish_proposal(candidate, new_cost, relocation, accept):
+        nonlocal placement, current_cost, best_cost, best_placement, accepted, improving
+        if accept:
+            if new_cost < current_cost:
+                improving += 1
+            accepted += 1
+            placement, current_cost = candidate, new_cost
+            if evaluator is not None:
+                evaluator.accept()
+            if relocation is not None:
+                free_pool.accept_relocation(*relocation)
+            if new_cost < best_cost:
+                best_cost, best_placement = new_cost, candidate.copy()
+        else:
+            env.place(placement)
+            if evaluator is not None:
+                evaluator.reject()
+
+    # Calibrate in objective units. Greedy acceptance during this brief phase
+    # avoids assuming a temperature before the scale of uphill moves is known.
+    calibration = min(n_iter, max(1, calibration_trials))
+    for _ in range(calibration):
+        n_perturb = max(2 if n > 1 else 1,
+                        min(n, round(perturb_fraction * n)))
+        candidate, changed, relocation = _placement_neighbor(
+            placement, n_perturb, free_pool)
+        new_cost = evaluate(candidate, changed)
+        evaluations += 1
+        delta = new_cost - current_cost
+        if delta > 0:
+            positive_deltas.append(delta)
+        finish_proposal(candidate, new_cost, relocation, delta <= 0)
+
+    scale = (float(np.median(positive_deltas)) if positive_deltas
+             else max(abs(current_cost) * 1e-3, np.finfo(float).eps))
+    initial_temperature = max(-scale / math.log(initial_acceptance),
+                              np.finfo(float).eps)
+    temperature = initial_temperature
+    min_temperature = initial_temperature * 1e-6
+    max_temperature = initial_temperature * 10.0
+    stagnant = 0
+    window_accepted = window_improving = window_evaluations = 0
+
+    while evaluations < n_iter:
+        n_perturb = max(2 if n > 1 else 1,
+                        min(n, round(perturb_fraction * n)))
+        candidate, changed, relocation = _placement_neighbor(
+            placement, n_perturb, free_pool)
+        new_cost = evaluate(candidate, changed)
+        evaluations += 1
+        window_evaluations += 1
+        delta = new_cost - current_cost
+        accept = delta <= 0 or random.random() < math.exp(
+            -delta / max(temperature, np.finfo(float).eps))
+        previous_accepted, previous_improving = accepted, improving
+        finish_proposal(candidate, new_cost, relocation, accept)
+        window_accepted += accepted - previous_accepted
+        window_improving += improving - previous_improving
+
+        end_window = window_evaluations >= adapt_window or evaluations == n_iter
+        if not end_window:
+            continue
+        acceptance_ratio = window_accepted / window_evaluations
+        if acceptance_ratio < target_acceptance * 0.5:
+            temperature *= 1.5
+        elif acceptance_ratio > min(0.95, target_acceptance * 1.5):
+            temperature *= 0.75
+        else:
+            temperature *= 0.95
+
+        if window_improving == 0:
+            stagnant += 1
+        else:
+            stagnant = 0
+            perturb_fraction = max(min_perturb_frac, perturb_fraction * 0.9)
+        if stagnant >= stall_windows:
+            temperature = max(temperature, initial_temperature * 0.5)
+            perturb_fraction = min(max_perturb_frac,
+                                   max(min_perturb_frac, perturb_fraction * 1.5))
+            reheats += 1
+            stagnant = 0
+        temperature = min(max_temperature, max(min_temperature, temperature))
+
+        record = {"evaluations": evaluations, "temperature": temperature,
+                  "acceptance_ratio": acceptance_ratio,
+                  "perturb_fraction": perturb_fraction,
+                  "current_cost": current_cost, "best_cost": best_cost,
+                  "reheats": reheats}
+        if diagnostics is not None:
+            diagnostics.write(json.dumps(record, allow_nan=False) + "\n")
+            diagnostics.flush()
+        window_accepted = window_improving = window_evaluations = 0
+
+    if diagnostics is not None:
+        diagnostics.close()
+    env.place(best_placement)
+    if metadata is not None:
+        metadata.update({
+            "method": "adaptive_simulated_annealing",
+            "initialization": initialization,
+            "initial_cost": initial_cost,
+            "best_cost": best_cost,
+            "candidate_evaluations": evaluations,
+            "accepted_moves": accepted,
+            "improving_moves": improving,
+            "reheats": reheats,
+            "initial_temperature": initial_temperature,
+            "final_temperature": temperature,
+            "final_perturb_fraction": perturb_fraction,
+            "incremental_evaluation": evaluator is not None,
+            "diagnostics_path": diagnostics_path,
+        })
+    return best_cost
+
+
+def run_ddpg_asa(env: MultiChipEnvironment, ddpg_placements: int,
+                 asa_iterations: int, ddpg_options=None, asa_options=None,
+                 metadata: dict = None) -> float:
+    """Train DDPG, then refine its best placement with adaptive SA."""
+    if ddpg_placements <= 0 or asa_iterations <= 0:
+        raise ValueError("DDPG+ASA requires positive budgets for both phases")
+    ddpg_metadata, asa_metadata = {}, {}
+    options = dict(ddpg_options or {})
+    options["run_metadata"] = ddpg_metadata
+    ddpg_cost = run_ddpg(env, n_episodes=ddpg_placements, **options)
+    ddpg_placement = env.placement.copy()
+    asa_options = dict(asa_options or {})
+    asa_options["metadata"] = asa_metadata
+    final_cost = run_adaptive_sa(
+        env, n_iter=asa_iterations, initial_placement=ddpg_placement,
+        **asa_options)
+    if metadata is not None:
+        metadata.update({
+            "method": "ddpg_then_adaptive_simulated_annealing",
+            "ddpg_best_cost": ddpg_cost,
+            "final_best_cost": final_cost,
+            "ddpg_complete_placement_evaluations": ddpg_placements,
+            "asa_candidate_evaluations": asa_iterations,
+            "combined_candidate_evaluations": ddpg_placements + asa_iterations,
+            "ddpg": ddpg_metadata,
+            "asa": asa_metadata,
+        })
+    return final_cost
 
 def run_sa(env: MultiChipEnvironment, n_iter: int = 100000,
            T_start: float = 100.0, T_end: float = 0.1, cooldown: float = 0.99,
@@ -1250,6 +1601,7 @@ def run_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     best_cost = env.evaluate()
     best_p = placement.copy()
     cur_cost = best_cost
+    free_pool = _FreeCorePool(env.allowed_cores, placement)
 
     num_temp_steps = max(1, math.ceil(math.log(T_end / T_start) / math.log(cooldown)))
     iters_per_temp = max(1, math.ceil(n_iter / num_temp_steps))
@@ -1264,26 +1616,8 @@ def run_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             # currently-assigned cores, which changes exactly that subset's
             # task->core assignments while keeping the placement a valid
             # bijection (no core assigned to two tasks).
-            idx = random.sample(range(n), min(n_perturb, n))
-            cores_subset = list(placement[idx])
-            perm = cores_subset.copy()
-            random.shuffle(perm)
-            # BUG FIX: shuffling a 1-element subset is always a no-op, and
-            # even for 2+ elements shuffle can land back on the identity --
-            # either way this would silently make the "neighbor" identical
-            # to the current placement, wasting that trial. Force an actual
-            # change by swapping the first two entries whenever the
-            # perturbation didn't change anything and there's more than one
-            # task in the subset.
-            if perm == cores_subset and len(perm) >= 2:
-                perm[0], perm[1] = perm[1], perm[0]
-            new_p = placement.copy()
-            new_p[idx] = perm
-            # Swaps alone cannot explore unused physical cores. Include a
-            # relocation proposal when spare cores exist (explicit interpretation).
-            free = np.setdiff1d(env.allowed_cores, placement)
-            if len(free) and (n == 1 or random.random() < 0.5):
-                new_p[idx[0]] = random.choice(free)
+            new_p, _, relocation = _placement_neighbor(
+                placement, n_perturb, free_pool)
 
             env.place(new_p)
             new_cost = env.evaluate()
@@ -1291,8 +1625,12 @@ def run_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             if new_cost < cur_cost or random.random() < math.exp(-(new_cost - cur_cost) / max(T, 1e-9)):
                 placement = new_p
                 cur_cost = new_cost
+                if relocation is not None:
+                    free_pool.accept_relocation(*relocation)
                 if new_cost < best_cost:
                     best_cost, best_p = new_cost, new_p.copy()
+            else:
+                env.place(placement)
 
             total_done += 1
             if total_done >= n_iter:
@@ -1313,8 +1651,9 @@ def run_random(env: MultiChipEnvironment, n_trials: int = 1000) -> float:
               f"reported RS baseline until run at closer to that scale.")
     n = env.num_tasks
     best_cost, best_p = float("inf"), None
+    allowed = env.allowed_cores.tolist()
     for _ in range(n_trials):
-        p = np.array(random.sample(env.allowed_cores.tolist(), n), dtype=np.int32)
+        p = np.array(random.sample(allowed, n), dtype=np.int32)
         env.place(p); cost = env.evaluate()
         if cost < best_cost: best_cost, best_p = cost, p.copy()
     env.place(best_p)
@@ -1336,8 +1675,10 @@ def run_sequential(env: MultiChipEnvironment) -> float:
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-chip core placement")
-    parser.add_argument("--algo", choices=["ddpg", "sa", "random", "bs"], default="ddpg",
-                        help="Placement method; bs is the paper's sequential baseline")
+    parser.add_argument("--algo", choices=["ddpg", "sa", "asa", "ddpg_asa",
+                                            "random", "bs"], default="ddpg",
+                        help="Placement method; asa is adaptive SA and ddpg_asa "
+                             "refines the best DDPG placement with ASA")
     parser.add_argument("--chips_x", type=int, default=2)
     parser.add_argument("--chips_y", type=int, default=2)
     parser.add_argument("--rows", type=int, default=4, help="Rows per chip")
@@ -1351,7 +1692,8 @@ def main():
                               "torus as an alternative topology they also tested). Other "
                               "topology families (HNoC, dragonfly, arbitrary graphs) aren't "
                               "supported -- see multi_chip_topology.py docstring.")
-    parser.add_argument("--iters", type=int, default=5000, help="SA/random iterations")
+    parser.add_argument("--iters", type=int, default=5000,
+                        help="SA/ASA/random candidate evaluations; for ddpg_asa this is the ASA phase budget")
     parser.add_argument("--epochs", type=int, default=1000,
                         help="DDPG training epochs; multiply by --placements_per_epoch "
                              "to obtain complete placements evaluated")
@@ -1392,9 +1734,12 @@ def main():
                               "forward+backward passes. Set to 1 to train on "
                               "every step (original behavior, much slower at "
                               "large task counts).")
-    parser.add_argument("--device", type=str, default=None, choices=["cpu", "cuda"],
-                         help="Force a specific device for DDPG. Default: auto-detect "
-                              "CUDA if available, else CPU.")
+    parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"],
+                         help="DDPG device. The cpu branch defaults to CPU explicitly.")
+    parser.add_argument("--cpu_threads", type=int, default=None,
+                        help="PyTorch intra-op CPU threads (default: OMP_NUM_THREADS or all logical CPUs)")
+    parser.add_argument("--cpu_interop_threads", type=int, default=1,
+                        help="PyTorch inter-op CPU threads; keep at 1 for independent multiseed jobs")
     parser.add_argument("--agent_arch", choices=["mlp", "cnn", "paper_cnn"], default="mlp",
                         help="DDPG architecture: historical MLP, junior-derived augmented CNN, or Figure-9 paper CNN.")
     parser.add_argument("--reward_mode", choices=["sparse", "potential"], default="sparse",
@@ -1415,6 +1760,24 @@ def main():
                              "are not published")
     parser.add_argument("--report", help="Write configuration, objective units, best placement and runtime as JSON")
     parser.add_argument("--diagnostics", help="Optional JSONL path for per-episode DDPG diagnostics: noisy and deterministic costs, reward, OU noise, collisions, action statistics, and losses")
+    parser.add_argument("--diagnostics_every", type=int, default=100,
+                        help="Run the costly deterministic DDPG diagnostic every N complete placements")
+    parser.add_argument("--asa_diagnostics",
+                        help="Optional JSONL path for per-window adaptive-SA diagnostics")
+    parser.add_argument("--asa_initial_acceptance", type=float, default=0.8,
+                        help="Target uphill acceptance used to calibrate ASA's initial temperature")
+    parser.add_argument("--asa_target_acceptance", type=float, default=0.30,
+                        help="Acceptance feedback target for adaptive temperature control")
+    parser.add_argument("--asa_adapt_window", type=int, default=100,
+                        help="Candidate evaluations per ASA adaptation window")
+    parser.add_argument("--asa_min_perturb_frac", type=float, default=0.005)
+    parser.add_argument("--asa_max_perturb_frac", type=float, default=0.05)
+    parser.add_argument("--asa_stall_windows", type=int, default=3,
+                        help="Non-improving windows before ASA reheats and expands its neighborhood")
+    parser.add_argument("--asa_calibration_trials", type=int, default=32,
+                        help="Budgeted proposals used to estimate an objective-scaled initial temperature")
+    parser.add_argument("--asa_full_evaluation", action="store_true",
+                        help="Disable exact affected-stage incremental evaluation (debug/reference mode)")
     parser.add_argument("--vva_ops_per_cycle", type=float, default=1.0,
                          help="Assumed VVA additions/cycle, not specified by paper (default 1)")
     parser.add_argument("--on_bandwidth_gbs", type=float, default=64.0)
@@ -1468,8 +1831,16 @@ def main():
         parser.error("full-frame timing requires an extracted workload with operation and byte metadata")
     if args.workload_region != "all" and args.partition_mode != "paper_targets":
         parser.error("--workload_region conv/fc requires --partition_mode paper_targets")
-    if args.epochs <= 0 or args.placements_per_epoch <= 0:
-        parser.error("--epochs and --placements_per_epoch must be positive")
+    if args.epochs <= 0 or args.placements_per_epoch <= 0 or args.iters <= 0:
+        parser.error("--epochs, --placements_per_epoch and --iters must be positive")
+    if args.diagnostics_every <= 0 or args.cpu_interop_threads <= 0 or (args.cpu_threads is not None and args.cpu_threads <= 0):
+        parser.error("diagnostic and CPU thread counts must be positive")
+    if args.asa_adapt_window <= 0 or args.asa_stall_windows <= 0 or args.asa_calibration_trials <= 0:
+        parser.error("ASA windows and calibration counts must be positive")
+    if not (0 < args.asa_initial_acceptance < 1 and 0 < args.asa_target_acceptance < 1):
+        parser.error("ASA acceptance targets must be in (0,1)")
+    if not (0 < args.asa_min_perturb_frac <= args.asa_max_perturb_frac <= 1):
+        parser.error("ASA perturbation fractions must satisfy 0 < min <= max <= 1")
     if args.conv_blocks <= 0:
         parser.error("--conv_blocks must be positive")
     if args.timing_model == "paper_pipeline":
@@ -1482,6 +1853,12 @@ def main():
         parser.error("utilization must be in (0,1] and VVA rate finite and positive")
     if any(not math.isfinite(v) or v <= 0 for v in (args.on_bandwidth_gbs, args.off_bandwidth_gbs)):
         parser.error("bandwidths must be finite and positive")
+
+    if args.device == "cpu":
+        configured = configure_cpu_threads(args.cpu_threads, args.cpu_interop_threads)
+        if configured is not None:
+            print(f">> CPU mode: {configured} PyTorch intra-op thread(s), "
+                  f"{args.cpu_interop_threads} inter-op thread(s)")
 
     if args.seed is not None:
         random.seed(args.seed)
@@ -1610,23 +1987,55 @@ def main():
 
     # 3. Run the algorithms
     run_started = time.perf_counter()
+    complete_placements = args.epochs * args.placements_per_epoch
+    algorithm_metadata = None
+    ddpg_options = {
+        "batch_z": args.batch_z,
+        "baseline_trials": args.baseline_trials,
+        "train_every": args.train_every,
+        "device": args.device,
+        "save_checkpoint": args.save_checkpoint,
+        "load_checkpoint": args.load_checkpoint,
+        "checkpoint_every": args.checkpoint_every,
+        "diagnostics_path": args.diagnostics,
+        "agent_arch": args.agent_arch,
+        "reward_mode": args.reward_mode,
+        "diagnostics_every": args.diagnostics_every,
+    }
+    asa_options = {
+        "initial_acceptance": args.asa_initial_acceptance,
+        "target_acceptance": args.asa_target_acceptance,
+        "adapt_window": args.asa_adapt_window,
+        "min_perturb_frac": args.asa_min_perturb_frac,
+        "max_perturb_frac": args.asa_max_perturb_frac,
+        "stall_windows": args.asa_stall_windows,
+        "calibration_trials": args.asa_calibration_trials,
+        "diagnostics_path": args.asa_diagnostics,
+        "incremental": not args.asa_full_evaluation,
+    }
     if args.algo == "ddpg":
         ddpg_metadata = {}
-        complete_placements = args.epochs * args.placements_per_epoch
         print(f">> DDPG budget: {args.epochs} epoch(s) x "
               f"{args.placements_per_epoch} placement(s) = "
               f"{complete_placements} complete placements")
-        cost = run_ddpg(env, n_episodes=complete_placements, batch_z=args.batch_z,
-                         baseline_trials=args.baseline_trials,
-                         train_every=args.train_every, device=args.device,
-                         save_checkpoint=args.save_checkpoint,
-                         load_checkpoint=args.load_checkpoint,
-                         checkpoint_every=args.checkpoint_every,
-                         diagnostics_path=args.diagnostics, run_metadata=ddpg_metadata,
-                         agent_arch=args.agent_arch, reward_mode=args.reward_mode)
+        cost = run_ddpg(env, n_episodes=complete_placements,
+                        run_metadata=ddpg_metadata, **ddpg_options)
         ddpg_metadata.update({"declared_epochs": args.epochs,
                               "placements_per_epoch": args.placements_per_epoch,
                               "complete_placement_evaluations": complete_placements})
+        algorithm_metadata = ddpg_metadata
+    elif args.algo == "ddpg_asa":
+        algorithm_metadata = {}
+        print(f">> Hybrid budget: {complete_placements} DDPG placements + "
+              f"{args.iters} adaptive-SA candidates")
+        cost = run_ddpg_asa(
+            env, ddpg_placements=complete_placements,
+            asa_iterations=args.iters, ddpg_options=ddpg_options,
+            asa_options=asa_options, metadata=algorithm_metadata)
+    elif args.algo == "asa":
+        algorithm_metadata = {}
+        cost = run_adaptive_sa(env, n_iter=args.iters,
+                               metadata=algorithm_metadata, **asa_options)
     elif args.algo == "sa":
         cost = run_sa(env, n_iter=args.iters)
     elif args.algo == "bs":
@@ -1645,7 +2054,7 @@ def main():
         if report_parent:
             os.makedirs(report_parent, exist_ok=True)
         limitations = ["replay buffer is not persisted in DDPG checkpoints"]
-        if args.agent_arch != "paper_cnn" and args.algo == "ddpg":
+        if args.agent_arch != "paper_cnn" and args.algo in ("ddpg", "ddpg_asa"):
             limitations.append("selected DDPG agent is not the Figure-9 paper CNN")
         if args.partition_mode != "paper_targets":
             limitations.append("logic-core allocation does not match Figure-6 aggregate counts")
@@ -1666,6 +2075,8 @@ def main():
         if args.model.lower() == "resnet50":
             limitations.append("residual add is assigned to the destination transformation/VVA path")
         evaluated_placements = (complete_placements if args.algo == "ddpg"
+                                else complete_placements + args.iters
+                                if args.algo == "ddpg_asa"
                                 else 1 if args.algo == "bs" else args.iters)
         with open(args.report, "w") as stream:
             json.dump({"config": vars(args), "algorithm": args.algo,
@@ -1674,7 +2085,7 @@ def main():
                        "objective_units": env.timing_units, "best_cost": cost,
                        "complete_placement_evaluations": evaluated_placements,
                        "reward_normalizer_evaluations": args.baseline_trials
-                       if args.algo == "ddpg" else 0,
+                       if args.algo in ("ddpg", "ddpg_asa") else 0,
                        "placement_chip_major": env.placement.tolist(),
                        "routing_diagnostics": routing_diagnostics,
                        "seconds_elapsed": time.perf_counter() - run_started,
@@ -1685,7 +2096,9 @@ def main():
                        "cuda_available": HAS_TORCH and torch.cuda.is_available(),
                        "cuda_device": torch.cuda.get_device_name(0)
                        if HAS_TORCH and torch.cuda.is_available() else None,
-                       "ddpg_metadata": ddpg_metadata if args.algo == "ddpg" else None,
+                       "algorithm_metadata": algorithm_metadata,
+                       "ddpg_metadata": algorithm_metadata if args.algo == "ddpg" else
+                       algorithm_metadata.get("ddpg") if args.algo == "ddpg_asa" else None,
                        "limitations": limitations},
                       stream, indent=2)
 

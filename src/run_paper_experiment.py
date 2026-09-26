@@ -39,6 +39,7 @@ def build_commands(args, output_dir):
         commands.append([
             sys.executable, "src/run_multiseed_experiment.py",
             "--device", args.device,
+            "--jobs", str(args.jobs),
             "--agent_arch", "paper_cnn",
             "--reward_mode", "sparse",
             "--seeds", args.seeds,
@@ -56,8 +57,13 @@ def build_commands(args, output_dir):
             "--rows", "16", "--cols", "16",
             "--batch_z", str(args.batch_z),
             "--train_every", "1",
+            "--diagnostics_every", str(args.diagnostics_every),
+            "--algorithms", args.algorithms,
+            "--hybrid_ddpg_fraction", str(args.hybrid_ddpg_fraction),
             "--output_dir", str(output_dir / f"{args.model}-{region}"),
         ])
+        if args.cpu_threads is not None:
+            commands[-1].extend(["--cpu_threads", str(args.cpu_threads)])
     return commands
 
 
@@ -66,7 +72,14 @@ def main():
     parser.add_argument("--output_dir", default="runs/paper-reproduction")
     parser.add_argument("--model", choices=["alexnet", "vgg16", "resnet50"],
                         default="alexnet")
-    parser.add_argument("--device", choices=["cpu", "cuda"], default="cuda")
+    parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu")
+    parser.add_argument("--jobs", type=positive, default=1,
+                        help="Concurrent multiseed subprocesses")
+    parser.add_argument("--cpu_threads", type=positive, default=None,
+                        help="Threads per CPU subprocess; defaults to CPUs divided by jobs")
+    parser.add_argument("--diagnostics_every", type=positive, default=100)
+    parser.add_argument("--algorithms", default="bs,ddpg,random,sa,asa,ddpg_asa")
+    parser.add_argument("--hybrid_ddpg_fraction", type=float, default=0.8)
     parser.add_argument("--seeds", default="0,1,2,3,4")
     parser.add_argument("--epochs", type=positive, default=10_000)
     parser.add_argument("--placements_per_epoch", type=positive, default=30)
@@ -78,6 +91,8 @@ def main():
                         help="Unpublished for evaluated workloads; default follows Figure 7's illustration")
     parser.add_argument("--dry_run", action="store_true")
     args = parser.parse_args()
+    if not 0 < args.hybrid_ddpg_fraction < 1:
+        parser.error("--hybrid_ddpg_fraction must be in (0,1)")
 
     root = Path(__file__).resolve().parents[1]
     output_dir = Path(args.output_dir)
@@ -94,6 +109,11 @@ def main():
             "ddpg_reported_convergence_placements": "approximately 300000-400000",
             "random_search_placements": 1_000_000,
             "simulated_annealing_placements": "approximately 1000000",
+        },
+        "research_extension": {
+            "asa": "temperature and neighborhood adapt from acceptance and stagnation",
+            "ddpg_asa": "DDPG best placement warm-starts ASA under a matched combined budget",
+            "status": "extension; not claimed as part of the reproduced source paper",
         },
         "reconstruction_assumptions": [
             "per-layer M/N grids reconstructed from Figure-6 aggregate counts and MAC balance",
