@@ -38,91 +38,312 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
 
 The older single-chip PPO/GCN programs and `run_multi_chip_fast.py` are not part of the validated paper reproduction path.
 
-## Installation
+## Complete CPU setup and DDPG→ASA workflow
 
-Clone the maintained branch and create an isolated environment:
+All commands in this section run from a terminal. The hybrid order is **DDPG first, then Adaptive Simulated Annealing**: DDPG constructs the warm-start placement and ASA refines the best placement found by DDPG.
+
+### 1. Clone the CPU branch
+
+For a new checkout:
 
 ```bash
 git clone --branch cpu https://github.com/micskrcb/DNN_MAPPING.git
 cd DNN_MAPPING
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
+git branch --show-current
+git log -1 --oneline
 ```
 
-For CPU-only use:
+`git branch --show-current` must print `cpu`.
+
+If the repository is already cloned and the local `cpu` branch exists:
 
 ```bash
+cd DNN_MAPPING
+git fetch origin
+git switch cpu
+git pull --ff-only origin cpu
+```
+
+If the repository is already cloned but the local `cpu` branch does not exist:
+
+```bash
+cd DNN_MAPPING
+git fetch origin
+git switch --track -c cpu origin/cpu
+```
+
+Before pulling later updates, preserve or commit any local edits. Then update with:
+
+```bash
+git switch cpu
+git pull --ff-only origin cpu
+```
+
+### 2. Create the CPU Python environment
+
+On Ubuntu/Debian, install the virtual-environment package if it is missing:
+
+```bash
+sudo apt update
+sudo apt install -y python3-venv python3-pip
+```
+
+Create and activate a project-local environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
 python -m pip install numpy
 python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 ```
 
-For the H100, install the CUDA build of PyTorch and torchvision selected for the host driver using the [official PyTorch installer](https://pytorch.org/get-started/locally/), then install NumPy. The historical root `requirements.txt` contains old pins and is not the environment specification for this path.
-
-Verify the environment:
+Activate the environment again after opening a new terminal:
 
 ```bash
-python -c "import torch, torchvision, numpy; print(torch.__version__, torchvision.__version__); print('CUDA:', torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
+cd DNN_MAPPING
+source .venv/bin/activate
 ```
 
-The local CPU checks used Python 3.13, torch 2.14.0+cpu, and torchvision 0.29.0+cpu. Those versions are evidence for this workstation only, not required CUDA pins.
-
-## Tests
-
-Run both maintained suites from the repository root:
+Verify that PyTorch is using its CPU build and inspect the available thread count:
 
 ```bash
-python src/test_multi_chip.py
-python -m unittest discover -s src -p 'test_reconciliation.py' -v
+python -c "import torch, torchvision, numpy; print('torch:', torch.__version__); print('torchvision:', torchvision.__version__); print('CUDA available:', torch.cuda.is_available()); print('PyTorch threads:', torch.get_num_threads())"
+nproc
 ```
 
-Then run the bounded device validator:
+The historical root `requirements.txt` contains old pins and is not the environment specification for this branch.
 
-```bash
-python src/validate_device.py --device cpu --output runs/cpu-validation.json
-# On the allocated GPU host:
-python src/validate_device.py --device cuda --output runs/h100-validation.json
-```
-
-The CUDA validator checks that networks and training tensors are on the GPU, records visible/peak memory, and separates action, environment, replay, and update timing. Environment evaluation, placement repair, replay storage, and experiment control remain CPU-side, so a faster GPU does not by itself improve solution quality.
-
-## Quick functional run
-
-This small CPU command checks extraction, training, checkpointing, and reports. It is not a paper comparison:
+### 3. Run validation before a long experiment
 
 ```bash
 mkdir -p runs
-OMP_NUM_THREADS=2 python src/run_multi_chip.py \
-  --algo ddpg --use_cnn --model simple \
-  --channels_per_partition 128 --timing_model full_frame \
-  --device cpu --epochs 10 --baseline_trials 10 \
-  --train_every 1 --batch_z 3 --seed 0 \
-  --save_checkpoint runs/smoke.pt \
-  --checkpoint_every 5 --report runs/smoke.json
+python src/test_multi_chip.py
+python -m unittest discover -s src -p 'test_reconciliation.py' -v
+python src/validate_device.py --device cpu --output runs/cpu-validation.json
 ```
 
-`--epochs` is a total target when resuming. Checkpoints restore models, optimizers, best placement, baseline, counters, and RNG state. Replay is not persisted, and the noise-fading schedule depends on the requested total, so a resumed run is not bit-exact.
+All tests should finish successfully before starting a paper-scale run.
 
-Run standalone ASA on CPU:
+### 4. Run a small end-to-end DDPG→ASA smoke test
+
+This validates model extraction, CPU DDPG training, checkpoint creation, ASA warm-starting, diagnostics, and the final JSON report. It is deliberately too small for scientific conclusions.
+
+```bash
+mkdir -p runs/smoke
+
+python src/run_multi_chip.py \
+  --algo ddpg_asa \
+  --device cpu \
+  --cpu_threads 4 \
+  --use_cnn \
+  --model simple \
+  --channels_per_partition 128 \
+  --timing_model full_frame \
+  --agent_arch paper_cnn \
+  --reward_mode sparse \
+  --epochs 10 \
+  --placements_per_epoch 1 \
+  --iters 50 \
+  --baseline_trials 10 \
+  --batch_z 3 \
+  --train_every 1 \
+  --diagnostics_every 5 \
+  --checkpoint_every 5 \
+  --seed 0 \
+  --save_checkpoint runs/smoke/ddpg.pt \
+  --diagnostics runs/smoke/ddpg.jsonl \
+  --asa_diagnostics runs/smoke/asa.jsonl \
+  --report runs/smoke/report.json
+```
+
+Inspect the main result:
+
+```bash
+python -m json.tool runs/smoke/report.json | less
+```
+
+### 5. Run exactly 500,000 combined DDPG→ASA candidates
+
+This configuration retains the paper's **30 DDPG placements per declared epoch**. It assigns approximately 80% of the matched budget to DDPG and 20% to ASA:
+
+```text
+13,334 epochs × 30 DDPG placements = 400,020
+ASA candidate evaluations             =  99,980
+Combined optimization candidates      = 500,000
+```
+
+The following one-shot command runs the AlexNet CONV region using the paper-oriented topology, partitioning, objective, and Figure 9 network. Replace `$(nproc)` with a smaller number if the machine is shared.
+
+```bash
+mkdir -p runs/alexnet-conv-500k
+
+python src/run_multi_chip.py \
+  --algo ddpg_asa \
+  --device cpu \
+  --cpu_threads "$(nproc)" \
+  --cpu_interop_threads 1 \
+  --use_cnn \
+  --model alexnet \
+  --partition_mode paper_targets \
+  --workload_region conv \
+  --timing_model paper_pipeline \
+  --routing_model paper_xy \
+  --chips_x 4 --chips_y 4 \
+  --rows 16 --cols 16 \
+  --agent_arch paper_cnn \
+  --reward_mode sparse \
+  --epochs 13334 \
+  --placements_per_epoch 30 \
+  --iters 99980 \
+  --baseline_trials 1000000 \
+  --batch_z 3 \
+  --train_every 1 \
+  --diagnostics_every 1000 \
+  --checkpoint_every 1000 \
+  --seed 0 \
+  --save_checkpoint runs/alexnet-conv-500k/ddpg-seed0.pt \
+  --diagnostics runs/alexnet-conv-500k/ddpg-seed0.jsonl \
+  --asa_diagnostics runs/alexnet-conv-500k/asa-seed0.jsonl \
+  --report runs/alexnet-conv-500k/report-seed0.json
+```
+
+The run can take a long time on CPU. The safer method is to train DDPG in cumulative checkpointed targets and run ASA after the final DDPG target.
+
+### 6. Run the 500,000-candidate experiment in resumable stages
+
+The targets below are cumulative. They train DDPG to 99,990, 199,980, 300,000, and finally 400,020 placements. `--epochs` is a total target when loading a checkpoint, not an additional number of epochs.
+
+```bash
+mkdir -p runs/alexnet-conv-500k
+
+for TARGET_EPOCHS in 3333 6666 10000 13334
+do
+  python src/run_multi_chip.py \
+    --algo ddpg \
+    --device cpu \
+    --cpu_threads "$(nproc)" \
+    --cpu_interop_threads 1 \
+    --use_cnn \
+    --model alexnet \
+    --partition_mode paper_targets \
+    --workload_region conv \
+    --timing_model paper_pipeline \
+    --routing_model paper_xy \
+    --chips_x 4 --chips_y 4 \
+    --rows 16 --cols 16 \
+    --agent_arch paper_cnn \
+    --reward_mode sparse \
+    --epochs "$TARGET_EPOCHS" \
+    --placements_per_epoch 30 \
+    --baseline_trials 1000000 \
+    --batch_z 3 \
+    --train_every 1 \
+    --diagnostics_every 1000 \
+    --checkpoint_every 1000 \
+    --seed 0 \
+    --load_checkpoint runs/alexnet-conv-500k/ddpg-seed0.pt \
+    --save_checkpoint runs/alexnet-conv-500k/ddpg-seed0.pt \
+    --diagnostics "runs/alexnet-conv-500k/ddpg-seed0-${TARGET_EPOCHS}.jsonl" \
+    --report "runs/alexnet-conv-500k/ddpg-seed0-${TARGET_EPOCHS}.json"
+done
+```
+
+If the checkpoint does not exist on the first invocation, training starts from scratch and creates it. Later invocations restore the actor, critic, target networks, optimizers, best DDPG placement, exploration state, RNG state, counters, and the random-search reward baseline. The replay buffer is not persisted, so it refills after each restart and a resumed run is not bit-exact.
+
+After the DDPG checkpoint reaches 400,020 placements, refine its saved best placement with exactly 99,980 ASA candidate evaluations:
 
 ```bash
 python src/run_multi_chip.py \
-  --algo asa --iters 100000 --seed 0 \
-  --asa_diagnostics runs/asa-seed0.jsonl \
-  --report runs/asa-seed0.json
+  --algo ddpg_asa \
+  --device cpu \
+  --cpu_threads "$(nproc)" \
+  --cpu_interop_threads 1 \
+  --use_cnn \
+  --model alexnet \
+  --partition_mode paper_targets \
+  --workload_region conv \
+  --timing_model paper_pipeline \
+  --routing_model paper_xy \
+  --chips_x 4 --chips_y 4 \
+  --rows 16 --cols 16 \
+  --agent_arch paper_cnn \
+  --reward_mode sparse \
+  --epochs 13334 \
+  --placements_per_epoch 30 \
+  --iters 99980 \
+  --baseline_trials 1000000 \
+  --batch_z 3 \
+  --train_every 1 \
+  --seed 0 \
+  --load_checkpoint runs/alexnet-conv-500k/ddpg-seed0.pt \
+  --asa_diagnostics runs/alexnet-conv-500k/asa-seed0.jsonl \
+  --report runs/alexnet-conv-500k/hybrid-seed0.json
 ```
 
-Run DDPG and refine its best placement with ASA. Here DDPG evaluates 8,000 complete placements and ASA evaluates 2,000 candidates:
+Because the checkpoint has already reached the requested DDPG target, this final command restores the best DDPG placement without retraining and starts ASA from it. ASA always retains the warm start, so its reported best result cannot be worse than the saved DDPG best.
+
+### 7. Run standalone ASA
+
+This starts ASA from a random valid placement for the paper-oriented AlexNet CONV workload and performs 100,000 adaptive candidate evaluations:
 
 ```bash
+mkdir -p runs/asa
+
 python src/run_multi_chip.py \
-  --algo ddpg_asa --device cpu --cpu_threads 20 \
-  --epochs 8000 --placements_per_epoch 1 --iters 2000 \
-  --baseline_trials 10000 --diagnostics_every 100 \
-  --seed 0 --report runs/ddpg-asa-seed0.json
+  --algo asa \
+  --device cpu \
+  --cpu_threads "$(nproc)" \
+  --use_cnn \
+  --model alexnet \
+  --partition_mode paper_targets \
+  --workload_region conv \
+  --timing_model paper_pipeline \
+  --routing_model paper_xy \
+  --chips_x 4 --chips_y 4 \
+  --rows 16 --cols 16 \
+  --iters 100000 \
+  --seed 0 \
+  --asa_diagnostics runs/asa/seed0.jsonl \
+  --report runs/asa/seed0.json
 ```
 
-ASA measures uphill cost changes to set its initial temperature. It then adapts temperature from the observed acceptance ratio, reheats after stagnant windows, and expands or contracts the fraction of moved tasks. The JSON report records accepted/improving moves, reheats, temperature, neighborhood size, initialization, and exact candidate count. `ddpg_asa` always warm-starts ASA from the best DDPG placement, so the final returned solution cannot be worse than that warm start.
+ASA calibrates its initial temperature from observed uphill cost changes. It then adapts temperature using the measured acceptance ratio, reheats after stagnant windows, and expands or contracts the moved-task fraction. Reports record accepted and improving moves, reheats, temperatures, neighborhood size, initialization, and exact candidate count.
+
+### 8. Run multiple seeds and methods on CPU
+
+For a machine with 20 logical CPU threads, this example runs two independent subprocesses at a time and gives ten PyTorch threads to each subprocess:
+
+```bash
+python src/run_multiseed_experiment.py \
+  --device cpu \
+  --jobs 2 \
+  --cpu_threads 10 \
+  --seeds 0,1,2,3,4 \
+  --algorithms bs,ddpg,random,sa,asa,ddpg_asa \
+  --model alexnet \
+  --partition_mode paper_targets \
+  --workload_region conv \
+  --timing_model paper_pipeline \
+  --routing_model paper_xy \
+  --epochs 1000 \
+  --placements_per_epoch 30 \
+  --search_budget 30000 \
+  --baseline_trials 10000 \
+  --output_dir runs/alexnet-conv-multiseed
+```
+
+Keep `jobs × cpu_threads` at or below the machine's logical CPU count to avoid oversubscription. Start with `--jobs 1` if memory is limited.
+
+### 9. Understand the output files
+
+- `*.pt` is a resumable DDPG checkpoint.
+- DDPG `*.jsonl` contains periodic noisy-policy and deterministic-policy diagnostics, losses, exploration noise, and collision repairs.
+- ASA `*.jsonl` contains temperature, acceptance ratio, perturbation fraction, current/best cost, and reheat count per adaptation window.
+- The final `*.json` report contains configuration, best cost and placement, objective units, evaluation counts, runtime, routing diagnostics, and algorithm metadata.
+- `summary.json` from the multi-seed runner contains per-method means, sample standard deviations, minima, maxima, and BS-normalized comparisons.
+
+The CPU branch reduces diagnostic rollouts, controls PyTorch thread allocation, avoids repeated free-core scans, and uses an exact affected-stage evaluator for ASA. In a controlled 100-task test, incremental ASA returned the identical placement and cost as full reevaluation while running about 9.6 times faster; actual speedup depends on graph structure and neighborhood size.
 
 ## Paper-mode commands
 
