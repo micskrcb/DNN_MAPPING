@@ -48,6 +48,7 @@ def build_commands(args, output_dir):
             "--search_budget", str(args.search_budget),
             "--model", args.model,
             "--partition_mode", "paper_targets",
+            "--partition_balance_weight", str(args.partition_balance_weight),
             "--workload_region", region,
             "--timing_model", "paper_pipeline",
             "--routing_model", "paper_xy",
@@ -56,8 +57,14 @@ def build_commands(args, output_dir):
             "--rows", "16", "--cols", "16",
             "--batch_z", str(args.batch_z),
             "--train_every", "1",
+            "--sensitivity_trials", str(args.sensitivity_trials),
+            "--min_relative_objective_span", str(args.min_relative_objective_span),
             "--output_dir", str(output_dir / f"{args.model}-{region}"),
         ])
+        if args.reward_scale is not None:
+            commands[-1].extend(["--reward_scale", str(args.reward_scale)])
+        if args.allow_flat_objective:
+            commands[-1].append("--allow_flat_objective")
     return commands
 
 
@@ -76,8 +83,17 @@ def main():
                         help="Unpublished by the paper; default retains the documented project assumption")
     parser.add_argument("--conv_blocks", type=positive, default=4,
                         help="Unpublished for evaluated workloads; default follows Figure 7's illustration")
+    parser.add_argument("--partition_balance_weight", type=float, default=1.0)
+    parser.add_argument("--reward_scale", type=float, default=None)
+    parser.add_argument("--sensitivity_trials", type=positive, default=64)
+    parser.add_argument("--min_relative_objective_span", type=float, default=0.001)
+    parser.add_argument("--allow_flat_objective", action="store_true")
     parser.add_argument("--dry_run", action="store_true")
     args = parser.parse_args()
+    if args.partition_balance_weight < 0 or args.min_relative_objective_span < 0:
+        parser.error("partition balance and sensitivity threshold must be nonnegative")
+    if args.reward_scale is not None and args.reward_scale <= 0:
+        parser.error("--reward_scale must be positive")
 
     root = Path(__file__).resolve().parents[1]
     output_dir = Path(args.output_dir)
@@ -97,11 +113,13 @@ def main():
         },
         "reconstruction_assumptions": [
             "per-layer M/N grids reconstructed from Figure-6 aggregate counts and MAC balance",
+            "per-layer grids also balance estimated VMM/VVA cycles with a configurable unpublished weight",
             "CONV and FC regions use the minimum number of contiguous chip-major whole chips",
             "inter-chip traffic uses a lower-left Figure-3 chip-periphery gateway",
             "CONV block count is configurable because workload-specific values are unpublished",
             "residual addition executes in the destination transformation/VVA path",
             "batch_z, OU parameters, replay capacity, padding, LRN and target-update details are unpublished",
+            "seconds-based latency is scaled to 400-MHz cycles before the square-root DDPG reward by default",
         ],
     }
     (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

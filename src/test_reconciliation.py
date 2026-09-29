@@ -5,7 +5,8 @@ import random
 import unittest
 from unittest.mock import patch
 import numpy as np
-from compute_model import channel_ranges, tile_work, compute_seconds, edge_bytes
+from compute_model import (channel_ranges, tile_work, compute_seconds, edge_bytes,
+                           paper_partition_grids)
 from multi_chip_environment import MultiChipEnvironment
 from multi_chip_topology import MultiChipTopology
 import run_multi_chip as rm
@@ -17,6 +18,28 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(sum(o for o, k in zip(ops, kinds) if k == "vmm"), 5*7*2*3*9)
         self.assertEqual(sum(o for o, k in zip(ops, kinds) if k == "vva"), 7*2*3)
         self.assertEqual(channel_ranges(7, 3), [(0, 2), (2, 4), (4, 7)])
+        one_group_ops, one_group_kinds = tile_work(4, 8, 2, 2, 1, 1, 1)
+        self.assertEqual(one_group_ops[one_group_kinds.index("vva")], 8 * 2 * 2)
+
+    def test_paper_partitions_balance_vmm_and_vva_without_changing_count(self):
+        layers = [
+            {"name": "conv1", "cin": 3, "cout": 64, "height": 55,
+             "width": 55, "kernel_area": 121},
+            {"name": "conv2", "cin": 64, "cout": 192, "height": 27,
+             "width": 27, "kernel_area": 25},
+            {"name": "conv3", "cin": 192, "cout": 384, "height": 13,
+             "width": 13, "kernel_area": 9},
+            {"name": "conv4", "cin": 384, "cout": 256, "height": 13,
+             "width": 13, "kernel_area": 9},
+            {"name": "conv5", "cin": 256, "cout": 256, "height": 13,
+             "width": 13, "kernel_area": 9},
+        ]
+        grids = paper_partition_grids(layers, 183)
+        self.assertEqual(sum(m * (n + 1) for m, n in grids), 183)
+        # The old count-only tie-break produced (M=1,N=61), leaving one VVA
+        # task as a placement-independent 5.2488-ms bottleneck.
+        self.assertNotEqual(grids[1], (1, 61))
+        self.assertGreater(grids[1][0], 1)
 
     def test_seconds_and_bytes(self):
         times = compute_seconds([128, 2], ["vmm", "vva"], vva_ops_per_cycle=1)
@@ -68,6 +91,26 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(diagnostics["traffic_weighted_mean_hops"], 2.0)
         self.assertEqual(diagnostics["on_chip_links"]["max_load"], 30.0)
         self.assertEqual(diagnostics["off_chip_links"]["used_links"], 0)
+        breakdown = env.pipeline_breakdown()
+        self.assertEqual(breakdown["total"], env.evaluate())
+        self.assertEqual(breakdown["compute"], 0.0)
+        self.assertEqual(breakdown["communication"], 30.0)
+
+    def test_objective_sensitivity_reports_range_without_changing_rng(self):
+        graph = np.zeros((4, 4), dtype=np.float32)
+        graph[0, 3] = graph[1, 3] = graph[2, 3] = 10.0
+        env = MultiChipEnvironment(1, 1, 1, 5, on_chip_latency=1.0,
+                                   task_graph=graph, num_tasks=4)
+        random.seed(19)
+        state = random.getstate()
+        result = rm.measure_objective_sensitivity(env, n_trials=20)
+        after = random.random()
+        random.setstate(state)
+        expected = random.random()
+        self.assertEqual(after, expected)
+        self.assertEqual(result["trials"], 20)
+        self.assertGreater(result["relative_span"], 0)
+        self.assertIn("compute_fraction", result["best_sample_breakdown"])
 
     def test_sa_exact_budget_and_unused_core(self):
         class Objective:
@@ -122,6 +165,22 @@ class TimingTests(unittest.TestCase):
             returns.append(sum((gamma ** index) * reward
                                for index, reward in enumerate(rewards)))
         self.assertAlmostEqual(returns[0], returns[1], places=10)
+
+    def test_reward_scale_changes_magnitude_not_placement_objective(self):
+        graph = np.array([[0, 1], [0, 0]], dtype=np.float32)
+        action_sequence = [np.array([-1.0, -1.0]), np.array([1.0, 1.0])]
+        rewards = []
+        for scale in (1.0, 400.0):
+            env = MultiChipEnvironment(1, 1, 1, 2, task_graph=graph, num_tasks=2)
+            mapper = rm.MultiChipCoreMapper(env, baseline_latency=10.0, batch_z=1,
+                                             reward_scale=scale)
+            mapper.reset()
+            for action in action_sequence:
+                reward, done, _, cost = mapper.step(action)
+            self.assertTrue(done)
+            self.assertEqual(cost, env.evaluate())
+            rewards.append(reward)
+        self.assertAlmostEqual(rewards[1], rewards[0] * 20.0, places=10)
 
 
 @unittest.skipUnless(rm.HAS_TORCH, "PyTorch required")

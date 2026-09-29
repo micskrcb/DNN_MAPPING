@@ -14,6 +14,7 @@ The `codex/reconciled-paper-implementation` branch contains the closest current 
 | Figure 9 actor/critic | Implemented as `--agent_arch paper_cnn` |
 | Sparse reward `sqrt(B) - sqrt(L(P))` | Implemented; zero before a complete placement |
 | BS, RS, SA, and DDPG | Implemented |
+| Objective sensitivity preflight | Implemented; flat paper-mode objectives stop before long optimization |
 | 30 placements/epoch and paper search budgets | Explicitly accounted for by the paper runner |
 | XY routing and link contention | Reconstructed and implemented |
 | 64 KB weight-buffer constraint | Enforced during paper partition reconstruction |
@@ -85,6 +86,12 @@ python src/validate_device.py --device cuda --output runs/h100-validation.json
 
 The CUDA validator checks that networks and training tensors are on the GPU, records visible/peak memory, and separates action, environment, replay, and update timing. Environment evaluation, placement repair, replay storage, and experiment control remain CPU-side, so a faster GPU does not by itself improve solution quality.
 
+Paper-mode runs sample 64 valid placements before optimization and print the
+minimum, median, maximum, relative objective span, and bottleneck
+compute/communication split. The run stops when the sampled relative span is
+below 0.1%. `--allow_flat_objective` is reserved for deliberate diagnostic
+runs.
+
 ## Quick functional run
 
 This small CPU command checks extraction, training, checkpointing, and reports. It is not a paper comparison:
@@ -101,6 +108,10 @@ OMP_NUM_THREADS=2 python src/run_multi_chip.py \
 ```
 
 `--epochs` is a total target when resuming. Checkpoints restore models, optimizers, best placement, baseline, counters, and RNG state. Replay is not persisted, and the noise-fading schedule depends on the requested total, so a resumed run is not bit-exact.
+
+Checkpoints from before the balanced-partition and cycle-scaled-reward fix are
+intentionally incompatible. Start a fresh checkpoint after pulling this
+revision.
 
 ## Paper-mode commands
 
@@ -155,11 +166,11 @@ Valid paper-target workloads are `alexnet`, `vgg16`, and `resnet50`. Their exact
 
 ## What paper mode reconstructs
 
-FX traces Conv2d/Linear dependencies. For each layer, deterministic integer `(M,N)` output/input partitions are selected so that total VMM plus VVA tasks match Figure 6 exactly, approximate MAC-balanced allocation, and keep every 8-bit weight tile within 64 KB. The paper publishes only aggregate counts, so these per-layer grids are assumptions.
+FX traces Conv2d/Linear dependencies. For each layer, deterministic integer `(M,N)` output/input partitions are selected so that total VMM plus VVA tasks match Figure 6 exactly, approximate MAC-balanced allocation, balance estimated VMM/VVA cycles, and keep every 8-bit weight tile within 64 KB. The paper publishes only aggregate counts, so these per-layer grids and the balance trade-off are assumptions.
 
 CONV and FC are optimized independently. Each uses the minimum number of contiguous whole chips that can hold its tasks. CONV begins at chip row zero and FC begins at the next chip row. This preserves disjoint regions but is a reconstruction because the exact masks are not published.
 
-Same-chip messages take deterministic X-then-Y routes. Inter-chip messages run from the source core to a lower-left chip-periphery gateway, traverse the chip grid X then Y, then travel from the destination gateway to its core. A time phase combines the maximum task compute time with the bottleneck serialized load on any shared directed link. The gateway is inferred from Figure 3; the paper's complete GRS implementation is unavailable.
+Same-chip messages take deterministic X-then-Y routes. Inter-chip messages run from the source core to a lower-left chip-periphery gateway, traverse the chip grid X then Y, then travel from the destination gateway to its core. A time phase combines the maximum task compute time with the larger of the maximum routed per-source byte-hop time and the bottleneck serialized load on a shared directed link. The gateway is inferred from Figure 3; the paper's complete GRS implementation is unavailable.
 
 CONV work and traffic are divided across `--conv_blocks` (default 4, taken from the illustrative Figure 7). FC uses one layer work unit. Workload-specific block counts are not published. ResNet branch dependencies are retained; residual addition is assigned to the destination transformation/VVA path without adding a Figure 6 core.
 
@@ -171,9 +182,14 @@ CONV work and traffic are divided across `--conv_blocks` (default 4, taken from 
 | `full_frame` | Ideal arithmetic plus per-task byte-hop serialization | Seconds |
 | `paper_pipeline` | Reconstructed block/layer phases with XY shared-link contention | Seconds |
 
-`paper_pipeline` requires `paper_targets`, `workload_region conv|fc`, and `paper_xy`. It uses Table 1's 128 MACs at 400 MHz, 64 GB/s/core on-chip links, 100 GB/s/chip off-chip links, 8-bit activations/weights, and 32-bit partial sums. VVA defaults to one addition/cycle because its throughput is unpublished.
+`paper_pipeline` requires `paper_targets`, `workload_region conv|fc`, and `paper_xy`. It uses Table 1's 128 MACs at 400 MHz, 64 GB/s/core on-chip links, 100 GB/s/chip off-chip links, 8-bit activations/weights, and 32-bit partial sums. VVA defaults to one operation/cycle because its throughput is unpublished. `--partition_balance_weight` exposes the unpublished VMM/VVA balance trade-off.
 
-The remaining simulator gaps are material: 64 KB input/activation-buffer stalls, exact multicast/GRS behavior, router startup, transformation costs, compute/communication overlap, and workload-specific block schedules. Results must therefore be called a documented reconstruction, not an exact replay of the authors' simulator.
+The objective remains in seconds for reporting. Before the square-root DDPG
+reward, latency is multiplied by 400 MHz by default so the critic sees the
+cycle units used in the paper. `--reward_scale` records any deliberate
+override.
+
+The remaining simulator gaps are material: 64 KB input/activation-buffer stalls, exact multicast/GRS behavior, router startup and packet scheduling, exact transformation-unit costs, compute/communication overlap, and workload-specific block schedules. Results must therefore be called a documented reconstruction, not an exact replay of the authors' simulator.
 
 ## DDPG and baselines
 
