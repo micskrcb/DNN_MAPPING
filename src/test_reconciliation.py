@@ -185,6 +185,7 @@ class TimingTests(unittest.TestCase):
             self.assertEqual(n_episodes, 12)
             env.placement = np.array([2, 3], dtype=np.int32)
             options["run_metadata"]["phase"] = "ddpg"
+            options["run_metadata"]["total_candidate_evaluations"] = 18
             return 8.0
         def fake_asa(env, n_iter, initial_placement, **options):
             self.assertEqual(n_iter, 4)
@@ -198,7 +199,9 @@ class TimingTests(unittest.TestCase):
             result = rm.run_ddpg_asa(objective, 12, 4, metadata=metadata)
         self.assertEqual(result, 7.0)
         np.testing.assert_array_equal(seen["initial"], [2, 3])
-        self.assertEqual(metadata["combined_candidate_evaluations"], 16)
+        self.assertEqual(metadata["ddpg_complete_placement_evaluations"], 12)
+        self.assertEqual(metadata["ddpg_total_candidate_evaluations"], 18)
+        self.assertEqual(metadata["combined_candidate_evaluations"], 22)
 
     def test_sequential_baseline_uses_chip_major_core_order(self):
         env = MultiChipEnvironment(num_chips_x=2, num_chips_y=1,

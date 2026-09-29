@@ -1621,13 +1621,16 @@ def run_ddpg_asa(env: MultiChipEnvironment, ddpg_placements: int,
         env, n_iter=asa_iterations, initial_placement=ddpg_placement,
         **asa_options)
     if metadata is not None:
+        ddpg_total_evaluations = ddpg_metadata.get(
+            "total_candidate_evaluations", ddpg_placements)
         metadata.update({
             "method": "ddpg_then_adaptive_simulated_annealing",
             "ddpg_best_cost": ddpg_cost,
             "final_best_cost": final_cost,
             "ddpg_complete_placement_evaluations": ddpg_placements,
+            "ddpg_total_candidate_evaluations": ddpg_total_evaluations,
             "asa_candidate_evaluations": asa_iterations,
-            "combined_candidate_evaluations": ddpg_placements + asa_iterations,
+            "combined_candidate_evaluations": ddpg_total_evaluations + asa_iterations,
             "ddpg": ddpg_metadata,
             "asa": asa_metadata,
         })
