@@ -15,6 +15,7 @@ The `cpu` branch is the CPU-oriented continuation of the reconciled paper implem
 | Sparse reward `sqrt(B) - sqrt(L(P))` | Implemented; zero before a complete placement |
 | BS, RS, SA, and DDPG | Implemented |
 | Adaptive SA and DDPG→ASA | Implemented as research extensions with matched-budget support |
+| Objective sensitivity preflight | Implemented; flat paper-mode objectives stop before long optimization |
 | 30 placements/epoch and paper search budgets | Explicitly accounted for by the paper runner |
 | XY routing and link contention | Reconstructed and implemented |
 | 64 KB weight-buffer constraint | Enforced during paper partition reconstruction |
@@ -125,6 +126,13 @@ python src/validate_device.py --device cpu --output runs/cpu-validation.json
 
 All tests should finish successfully before starting a paper-scale run.
 
+Paper-mode runs now sample 64 valid placements before optimization and print
+the minimum, median, maximum, relative objective span, and bottleneck
+compute/communication split. The run stops when the sampled relative span is
+below 0.1%, because a nearly placement-independent objective cannot validate a
+placement algorithm. `--allow_flat_objective` is available only for deliberate
+diagnostic work.
+
 ### 4. Run a small end-to-end DDPG→ASA smoke test
 
 This validates model extraction, CPU DDPG training, checkpoint creation, ASA warm-starting, diagnostics, and the final JSON report. It is deliberately too small for scientific conclusions.
@@ -164,6 +172,12 @@ python -m json.tool runs/smoke/report.json | less
 ```
 
 ### 5. Run exactly 500,000 combined DDPG→ASA candidates
+
+Do not start this command until the smoke test reports a credible objective
+range and runtime. On the measured 20-thread CPU, the earlier implementation
+required about 43 seconds per DDPG placement; a 400,020-placement DDPG phase
+would therefore take roughly 200 days. Use a bounded run or CUDA after the
+preflight gate passes.
 
 This configuration retains the paper's **30 DDPG placements per declared epoch**. It assigns approximately 80% of the matched budget to DDPG and 20% to ASA:
 
@@ -250,6 +264,11 @@ done
 ```
 
 If the checkpoint does not exist on the first invocation, training starts from scratch and creates it. Later invocations restore the actor, critic, target networks, optimizers, best DDPG placement, exploration state, RNG state, counters, and the random-search reward baseline. The replay buffer is not persisted, so it refills after each restart and a resumed run is not bit-exact.
+
+Checkpoints created before the balanced-partition and cycle-scaled-reward fix
+are intentionally incompatible. Start a new checkpoint after pulling this
+revision; the old placement-2000 checkpoint used the flat objective and must
+remain historical evidence rather than a training warm start.
 
 After the DDPG checkpoint reaches 400,020 placements, refine its saved best placement with exactly 99,980 ASA candidate evaluations:
 
@@ -412,7 +431,7 @@ FX traces Conv2d/Linear dependencies. For each layer, deterministic integer `(M,
 
 CONV and FC are optimized independently. Each uses the minimum number of contiguous whole chips that can hold its tasks. CONV begins at chip row zero and FC begins at the next chip row. This preserves disjoint regions but is a reconstruction because the exact masks are not published.
 
-Same-chip messages take deterministic X-then-Y routes. Inter-chip messages run from the source core to a lower-left chip-periphery gateway, traverse the chip grid X then Y, then travel from the destination gateway to its core. A time phase combines the maximum task compute time with the bottleneck serialized load on any shared directed link. The gateway is inferred from Figure 3; the paper's complete GRS implementation is unavailable.
+Same-chip messages take deterministic X-then-Y routes. Inter-chip messages run from the source core to a lower-left chip-periphery gateway, traverse the chip grid X then Y, then travel from the destination gateway to its core. A time phase combines the maximum task compute time with the larger of the routed per-source byte-hop time and the bottleneck serialized load on any shared directed link. The gateway is inferred from Figure 3; the paper's complete GRS implementation is unavailable.
 
 CONV work and traffic are divided across `--conv_blocks` (default 4, taken from the illustrative Figure 7). FC uses one layer work unit. Workload-specific block counts are not published. ResNet branch dependencies are retained; residual addition is assigned to the destination transformation/VVA path without adding a Figure 6 core.
 
@@ -424,9 +443,13 @@ CONV work and traffic are divided across `--conv_blocks` (default 4, taken from 
 | `full_frame` | Ideal arithmetic plus per-task byte-hop serialization | Seconds |
 | `paper_pipeline` | Reconstructed block/layer phases with XY shared-link contention | Seconds |
 
-`paper_pipeline` requires `paper_targets`, `workload_region conv|fc`, and `paper_xy`. It uses Table 1's 128 MACs at 400 MHz, 64 GB/s/core on-chip links, 100 GB/s/chip off-chip links, 8-bit activations/weights, and 32-bit partial sums. VVA defaults to one addition/cycle because its throughput is unpublished.
+`paper_pipeline` requires `paper_targets`, `workload_region conv|fc`, and `paper_xy`. It uses Table 1's 128 MACs at 400 MHz, 64 GB/s/core on-chip links, 100 GB/s/chip off-chip links, 8-bit activations/weights, and 32-bit partial sums. VVA defaults to one addition/cycle because its throughput is unpublished. The reconstructed per-layer grids now balance estimated VMM and VVA cycles while preserving the exact Figure 6 aggregate counts and 64 KB weight constraint; `--partition_balance_weight` exposes the unpublished trade-off.
 
-The remaining simulator gaps are material: 64 KB input/activation-buffer stalls, exact multicast/GRS behavior, router startup, transformation costs, compute/communication overlap, and workload-specific block schedules. Results must therefore be called a documented reconstruction, not an exact replay of the authors' simulator.
+For routed communication, a phase uses the larger of the busiest shared-link serialization time and the maximum routed byte-hop time emitted by one source task. This retains both hop-distance and contention effects. Router startup, exact packet scheduling, GRS behavior, and cycle-accurate streaming remain unavailable.
+
+The objective continues to be reported in seconds. Before applying the paper's square-root reward, seconds-based latency is multiplied by 400 MHz by default so the critic sees cycle-scaled rewards. Override this only for a documented experiment with `--reward_scale`.
+
+The remaining simulator gaps are material: 64 KB input/activation-buffer stalls, exact multicast/GRS behavior, router startup, exact transformation-unit costs, compute/communication overlap, and workload-specific block schedules. Results must therefore be called a documented reconstruction, not an exact replay of the authors' simulator.
 
 ## DDPG and baselines
 

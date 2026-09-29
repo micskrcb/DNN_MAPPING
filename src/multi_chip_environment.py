@@ -249,47 +249,79 @@ class MultiChipEnvironment:
         step's reward computation and every RS/SA trial, so at hundreds to
         thousands of tasks this was previously the dominant runtime cost.
         """
+        return self.pipeline_breakdown()["total"]
+
+    def pipeline_breakdown(self) -> dict:
+        """Return the bottleneck objective split into compute and communication.
+
+        This is a diagnostic decomposition of the same exact objective used by
+        ``evaluate``. It makes placement-insensitive compute bottlenecks visible
+        before an expensive optimization run is launched.
+        """
         stages = self.pipeline_stages()  # also populates self._succ_cache
         if self.pipeline_model == "xy_contention":
-            return self._xy_contention_latency(stages)
-        stage_latencies = []
-        for stage in stages:
-            task_latencies = []
-            for i in stage:
-                ci = self.placement[i]
-                if ci < 0:
-                    task_latencies.append(0.0)
-                    continue
-                comm = 0.0
-                for j, vol in self._succ_cache[i]:
-                    cj = self.placement[j]
-                    if cj < 0:
+            rows = self._xy_contention_components(stages)
+        else:
+            rows = []
+            for stage_index, stage in enumerate(stages):
+                best = (0.0, 0.0, 0.0)
+                for task in stage:
+                    source = self.placement[task]
+                    if source < 0:
                         continue
-                    comm += vol * self.topo.comm_cost(ci, cj)
-                task_latencies.append(float(self.compute_latency[i]) + comm)
-            stage_latencies.append(max(task_latencies) if task_latencies else 0.0)
-        return max(stage_latencies) if stage_latencies else 0.0
+                    communication = 0.0
+                    for successor, volume in self._succ_cache[task]:
+                        destination = self.placement[successor]
+                        if destination >= 0:
+                            communication += volume * self.topo.comm_cost(
+                                source, destination)
+                    compute = float(self.compute_latency[task])
+                    candidate = (compute + communication, compute, communication)
+                    if candidate[0] > best[0]:
+                        best = candidate
+                rows.append((stage_index, *best))
+        if not rows:
+            return {"total": 0.0, "compute": 0.0, "communication": 0.0,
+                    "compute_fraction": 0.0, "bottleneck_stage": None,
+                    "compute_only_floor": 0.0}
+        stage_index, total, compute, communication = max(rows, key=lambda row: row[1])
+        compute_floor = max(row[2] for row in rows)
+        return {
+            "total": float(total),
+            "compute": float(compute),
+            "communication": float(communication),
+            "compute_fraction": float(compute / total) if total > 0 else 0.0,
+            "bottleneck_stage": int(stage_index),
+            "compute_only_floor": float(compute_floor),
+        }
 
     def _xy_contention_latency(self, stages) -> float:
-        """Maximum time phase with shared-link load under reconstructed XY routes.
+        """Maximum time phase under reconstructed XY routes and contention.
 
         Tasks in a topological stage execute in parallel. A time phase is the
-        maximum task compute time plus the maximum serialization time of any
-        directed on-chip or off-chip link used by that stage's outgoing data.
-        This is closer to the paper's traffic-sensitive objective than summing
-        independent byte-hop costs, while the exact GRS gateway and block
-        schedule remain documented reconstruction assumptions.
+        maximum task compute time plus the larger of (a) the maximum routed
+        byte-hop time emitted by one source task and (b) the maximum shared-link
+        serialization load. This retains the paper's hop-distance effect while
+        also accounting for contention. Exact packet scheduling, router startup,
+        GRS behavior and block timing remain reconstruction gaps.
         """
+        return max((row[1] for row in self._xy_contention_components(stages)),
+                   default=0.0)
+
+    def _xy_contention_components(self, stages):
+        """Return ``(stage, total, compute, communication)`` rows."""
         phase_latencies = []
-        for stage in stages:
+        for stage_index, stage in enumerate(stages):
             compute = max((float(self.compute_latency[index])
                            for index in stage if self.placement[index] >= 0),
                           default=0.0)
             loads = {}
+            routed_task_times = []
             for index in stage:
                 source = self.placement[index]
                 if source < 0:
                     continue
+                routed_time = 0.0
                 for successor, volume in self._succ_cache[index]:
                     destination = self.placement[successor]
                     if destination < 0:
@@ -297,14 +329,21 @@ class MultiChipEnvironment:
                     for kind, link in self.topo.xy_route(int(source), int(destination)):
                         key = (kind, link)
                         loads[key] = loads.get(key, 0.0) + volume
-            communication = max(
+                        routed_time += volume * (
+                            self.topo.on_chip_latency if kind == "on"
+                            else self.topo.off_chip_latency)
+                routed_task_times.append(routed_time)
+            link_bottleneck = max(
                 (volume * (self.topo.on_chip_latency if kind == "on"
                            else self.topo.off_chip_latency)
                  for (kind, _), volume in loads.items()),
                 default=0.0,
             )
-            phase_latencies.append(compute + communication)
-        return max(phase_latencies, default=0.0)
+            communication = max(link_bottleneck,
+                                max(routed_task_times, default=0.0))
+            phase_latencies.append((stage_index, compute + communication,
+                                    compute, communication))
+        return phase_latencies
 
     @staticmethod
     def estimate_compute_latency(

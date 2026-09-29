@@ -7,11 +7,12 @@ The paper does not publish its simulator or every implementation parameter. Exac
 ## Gate 1: optimization problem — partially complete
 
 - [x] Match Figure 6 aggregate logic-core counts exactly for AlexNet, VGG16, and ResNet50.
-- [x] Reconstruct deterministic per-layer input/output grids and enforce the 64 KB weight buffer.
+- [x] Reconstruct deterministic per-layer input/output grids, balance estimated VMM/VVA cycles, and enforce the 64 KB weight buffer.
 - [x] Optimize CONV and FC independently in disjoint physical regions.
 - [x] Use Table 1 compute rates, precisions, and link bandwidths.
-- [x] Add block scaling, deterministic XY routes, and shared directed-link contention.
+- [x] Add block scaling, deterministic XY routes, routed per-source byte-hop time, and shared directed-link contention.
 - [x] Validate routes/contention with hand-calculated tests and conservation tests.
+- [x] Add a placement-sensitivity preflight and compute/communication bottleneck report.
 - [ ] Model the 64 KB input/activation buffer, stalls, and compute/communication overlap.
 - [ ] Establish a better validated GRS/multicast reconstruction if evidence becomes available.
 - [ ] Validate or replace the assumed workload block counts and VVA rate.
@@ -30,7 +31,7 @@ Current paper targets:
 - [x] Figure 9 `paper_cnn` actor and critic.
 - [x] Grid-only paper state, `2z` continuous coordinates, floor conversion, and nearest-free Manhattan repair.
 - [x] Actor/critic learning rates 0.0002/0.001, gamma 0.98, and minibatch 64.
-- [x] Sparse terminal `sqrt(B) - sqrt(L(P))` reward.
+- [x] Sparse terminal `sqrt(B) - sqrt(L(P))` reward in 400-MHz cycle units.
 - [x] Explicit 30 complete placements per declared epoch.
 - [x] Independent DDPG, reward-baseline, RS, and SA accounting.
 - [x] Default paper budgets: 300,000 DDPG placements and 1,000,000 RS/SA placements.
@@ -39,14 +40,16 @@ Current paper targets:
 
 ## Gate 3: comparisons — pending GPU experiments
 
-1. Run the bounded H100 validator and AlexNet CONV/FC smoke suite.
-2. Measure per-placement and optimizer-update time before committing the allocation window.
-3. Run AlexNet across at least five DDPG seeds plus BS, RS, and SA.
-4. Report CONV/FC latency separately, normalized to BS, with seed mean, sample standard deviation, minimum, and maximum.
-5. Inspect noisy/deterministic learning curves, losses, intended-core diversity, collision repairs, hop-distance reductions, and link-load distributions.
-6. Proceed to VGG16 and ResNet50 only after the AlexNet evaluator and learning behavior are credible.
-7. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
-8. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
+1. Install the pinned dependencies and rerun both test suites in a Torch-enabled environment.
+2. Run the objective-sensitivity preflight for every model/region and inspect the compute/communication split before training.
+3. Run the bounded H100 validator and AlexNet CONV/FC smoke suite.
+4. Measure per-placement and optimizer-update time before committing the allocation window.
+5. Run AlexNet across at least five DDPG seeds plus BS, RS, and SA.
+6. Report CONV/FC latency separately, normalized to BS, with seed mean, sample standard deviation, minimum, and maximum.
+7. Inspect noisy/deterministic learning curves, losses, intended-core diversity, collision repairs, hop-distance reductions, and link-load distributions.
+8. Proceed to VGG16 and ResNet50 only after the AlexNet evaluator and learning behavior are credible.
+9. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
+10. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
 
 ## Gate 4: improvements after reproduction
 

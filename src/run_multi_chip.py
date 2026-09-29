@@ -195,7 +195,9 @@ if HAS_TORCH:
 
     def extract_model_task_graph(model_name: str = "simple", channels_per_partition: int = 8,
                                   custom_model_path: str = None, return_work: bool = False,
-                                  partition_mode: str = "uniform"):
+                                  partition_mode: str = "uniform",
+                                  partition_balance_weight: float = 1.0,
+                                  vva_ops_per_cycle: float = 1.0):
         """
         PAPER FIX (Sec 3.1.1, Fig. 5-6): partition each CONV/FC layer's
         weights along the input channel C and output channel K into a grid
@@ -355,7 +357,10 @@ if HAS_TORCH:
                                         "height": height, "width": width,
                                         "kernel_area": kernels[node]})
                 target = PAPER_LOGIC_CORE_TARGETS[normalized_model][region_kind]
-                grids = paper_partition_grids(layer_specs, target)
+                grids = paper_partition_grids(
+                    layer_specs, target,
+                    compute_balance_weight=partition_balance_weight,
+                    vva_ops_per_cycle=vva_ops_per_cycle)
                 paper_grids.update(zip(region_nodes, grids))
 
         # --- Channel-partitioned extraction (paper Sec 3.1.1), generalized
@@ -757,7 +762,8 @@ if HAS_TORCH:
 
 class MultiChipCoreMapper:
     def __init__(self, env: MultiChipEnvironment, baseline_latency: float = None, batch_z: int = 3,
-                 reward_mode: str = "sparse", shaping_gamma: float = 0.98):
+                 reward_mode: str = "sparse", shaping_gamma: float = 0.98,
+                 reward_scale: float = 1.0):
         """
         Args:
             baseline_latency: B in the paper's reward r_t = sqrt(B) - sqrt(L(P))
@@ -802,6 +808,9 @@ class MultiChipCoreMapper:
             raise ValueError("reward_mode must be sparse or potential")
         self.reward_mode = reward_mode
         self.shaping_gamma = shaping_gamma
+        if not math.isfinite(reward_scale) or reward_scale <= 0:
+            raise ValueError("reward_scale must be finite and positive")
+        self.reward_scale = reward_scale
         self._potential = 0.0
         self.baseline_latency = baseline_latency
         if baseline_latency is None:
@@ -938,12 +947,15 @@ class MultiChipCoreMapper:
             # with Phi(terminal)=0. Across a fixed episode the discounted
             # shaping terms telescope to zero, so the sparse objective is
             # preserved while the critic receives intermediate feedback.
-            next_potential = 0.0 if done else -math.sqrt(max(final_cost, 0.0))
+            next_potential = (0.0 if done else
+                              -math.sqrt(max(self.reward_scale * final_cost, 0.0)))
             base_reward = 0.0
             if done:
-                base_reward = (math.sqrt(max(self.baseline_latency, 0.0)) -
-                               math.sqrt(max(final_cost, 0.0))) if self.baseline_latency is not None \
-                              else -math.sqrt(max(final_cost, 0.0))
+                base_reward = (
+                    math.sqrt(max(self.reward_scale * self.baseline_latency, 0.0)) -
+                    math.sqrt(max(self.reward_scale * final_cost, 0.0))
+                ) if self.baseline_latency is not None else \
+                    -math.sqrt(max(self.reward_scale * final_cost, 0.0))
             step_reward = base_reward + self.shaping_gamma * next_potential - self._potential
             self._potential = next_potential
             return step_reward, done, self._render() if done else "", final_cost if done else 0.0
@@ -951,9 +963,11 @@ class MultiChipCoreMapper:
         grid = self._render()
 
         if self.baseline_latency is not None:
-            step_reward = math.sqrt(max(self.baseline_latency, 0.0)) - math.sqrt(max(final_cost, 0.0))
+            step_reward = (
+                math.sqrt(max(self.reward_scale * self.baseline_latency, 0.0)) -
+                math.sqrt(max(self.reward_scale * final_cost, 0.0)))
         else:
-            step_reward = -math.sqrt(max(final_cost, 0.0))
+            step_reward = -math.sqrt(max(self.reward_scale * final_cost, 0.0))
 
         return step_reward, done, grid, final_cost
 
@@ -986,7 +1000,8 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
              device: str = None, save_checkpoint: str = None, load_checkpoint: str = None,
              checkpoint_every: int = 100, diagnostics_path: str = None,
              run_metadata: dict = None, agent_arch: str = "mlp",
-             reward_mode: str = "sparse", diagnostics_every: int = 100) -> float:
+             reward_mode: str = "sparse", diagnostics_every: int = 100,
+             reward_scale: float = 1.0) -> float:
     if not HAS_TORCH:
         raise RuntimeError("DDPG requires PyTorch; refusing a random-search fallback")
     if diagnostics_every <= 0:
@@ -998,7 +1013,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     signature.update(np.ascontiguousarray(env.allowed_cores).tobytes())
     signature.update(repr((env.topo, env.topo.on_chip_latency, env.topo.off_chip_latency,
                            batch_z, env.timing_units, agent_arch, reward_mode,
-                           "chip-major-v2-ou")).encode())
+                           reward_scale, "chip-major-v3-balanced-reward")).encode())
     fingerprint = signature.hexdigest()
     # Reject old or incompatible checkpoints, including changed objective units.
     # instead of starting fresh -- restores the trained networks, optimizer
@@ -1046,7 +1061,8 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
           + (f" ({torch.get_num_threads()} CPU threads)" if agent.device.type == "cpu" else ""))
     replay_buffer = ReplayBuffer()
     mapper = MultiChipCoreMapper(env, baseline_latency=baseline_latency, batch_z=batch_z,
-                                 reward_mode=reward_mode, shaping_gamma=agent.gamma)
+                                 reward_mode=reward_mode, shaping_gamma=agent.gamma,
+                                 reward_scale=reward_scale)
     diagnostics_stream = None
     if diagnostics_path is not None:
         parent = os.path.dirname(diagnostics_path)
@@ -1155,7 +1171,8 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
             # is useful, rather than whether a lucky noisy action was useful.
             evaluation_mapper = MultiChipCoreMapper(env, baseline_latency=baseline_latency,
                                                      batch_z=batch_z, reward_mode=reward_mode,
-                                                     shaping_gamma=agent.gamma)
+                                                     shaping_gamma=agent.gamma,
+                                                     reward_scale=reward_scale)
             evaluation_state = evaluation_mapper.reset()
             evaluation_done = False
             while not evaluation_done:
@@ -1212,6 +1229,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
         diagnostics_stream.close()
     if run_metadata is not None:
         run_metadata.update({"agent_arch": agent_arch, "reward_mode": reward_mode,
+                             "reward_scale": reward_scale,
                              "baseline_cost": baseline_latency, "start_episode": start_episode,
                              "end_episode": n_episodes, "global_steps": global_step,
                              "final_noise_scale": noise_scale, "diagnostics_path": diagnostics_path})
@@ -1318,10 +1336,12 @@ class IncrementalPipelineEvaluator:
         compute = max((float(env.compute_latency[task]) for task in stage
                        if env.placement[task] >= 0), default=0.0)
         loads = {}
+        routed_task_times = []
         for task in stage:
             source = int(env.placement[task])
             if source < 0:
                 continue
+            routed_time = 0.0
             for successor, volume in env._succ_cache[task]:
                 destination = int(env.placement[successor])
                 if destination < 0:
@@ -1329,10 +1349,16 @@ class IncrementalPipelineEvaluator:
                 for kind, link in env.topo.xy_route(source, destination):
                     key = (kind, link)
                     loads[key] = loads.get(key, 0.0) + volume
-        communication = max(
+                    routed_time += volume * (
+                        env.topo.on_chip_latency if kind == "on"
+                        else env.topo.off_chip_latency)
+            routed_task_times.append(routed_time)
+        link_bottleneck = max(
             (volume * (env.topo.on_chip_latency if kind == "on"
                        else env.topo.off_chip_latency)
              for (kind, _), volume in loads.items()), default=0.0)
+        communication = max(link_bottleneck,
+                            max(routed_task_times, default=0.0))
         return compute + communication
 
     def candidate_cost(self, changed_tasks):
@@ -1660,6 +1686,45 @@ def run_random(env: MultiChipEnvironment, n_trials: int = 1000) -> float:
     return best_cost
 
 
+def measure_objective_sensitivity(env: MultiChipEnvironment, n_trials: int = 64) -> dict:
+    """Sample valid placements without perturbing the caller's RNG stream."""
+    if n_trials <= 1:
+        raise ValueError("objective sensitivity requires at least two trials")
+    random_state = random.getstate()
+    numpy_state = np.random.get_state()
+    costs, best_cost, best_placement = [], float("inf"), None
+    allowed = env.allowed_cores.tolist()
+    try:
+        for _ in range(n_trials):
+            placement = np.asarray(random.sample(allowed, env.num_tasks),
+                                   dtype=np.int32)
+            env.place(placement)
+            cost = float(env.evaluate())
+            costs.append(cost)
+            if cost < best_cost:
+                best_cost, best_placement = cost, placement.copy()
+    finally:
+        random.setstate(random_state)
+        np.random.set_state(numpy_state)
+    env.place(best_placement)
+    values = np.asarray(costs, dtype=np.float64)
+    breakdown = env.pipeline_breakdown()
+    median = float(np.median(values))
+    minimum, maximum = float(values.min()), float(values.max())
+    relative_span = ((maximum - minimum) / median if median > 0 else 0.0)
+    compute_floor = float(breakdown["compute_only_floor"])
+    return {
+        "trials": n_trials,
+        "minimum": minimum,
+        "median": median,
+        "maximum": maximum,
+        "relative_span": relative_span,
+        "best_sample_breakdown": breakdown,
+        "best_headroom_above_compute_floor": (
+            (minimum - compute_floor) / minimum if minimum > 0 else 0.0),
+    }
+
+
 def run_sequential(env: MultiChipEnvironment) -> float:
     """Paper BS baseline: assign tasks by chip index, then core index."""
     if env.num_tasks > len(env.allowed_cores):
@@ -1744,6 +1809,9 @@ def main():
                         help="DDPG architecture: historical MLP, junior-derived augmented CNN, or Figure-9 paper CNN.")
     parser.add_argument("--reward_mode", choices=["sparse", "potential"], default="sparse",
                         help="DDPG reward: paper-style sparse terminal reward, or opt-in potential-based shaping with the same fixed-horizon discounted objective.")
+    parser.add_argument("--reward_scale", type=float, default=None,
+                        help="Multiply latency before sqrt reward. Default: 400e6 for "
+                             "seconds-based timing (400-MHz cycle units), otherwise 1")
     parser.add_argument("--compute_ops", type=str, default=None,
                          help="Optional .npy file containing MAC operations per task; "
                               "converted with Table 1's 128 MACs/core at 400 MHz.")
@@ -1778,6 +1846,12 @@ def main():
                         help="Budgeted proposals used to estimate an objective-scaled initial temperature")
     parser.add_argument("--asa_full_evaluation", action="store_true",
                         help="Disable exact affected-stage incremental evaluation (debug/reference mode)")
+    parser.add_argument("--sensitivity_trials", type=int, default=64,
+                        help="Random placements used to measure objective sensitivity before paper-mode optimization")
+    parser.add_argument("--min_relative_objective_span", type=float, default=0.001,
+                        help="Minimum sampled (max-min)/median required before a long paper-mode optimization")
+    parser.add_argument("--allow_flat_objective", action="store_true",
+                        help="Continue despite a failed placement-sensitivity gate")
     parser.add_argument("--vva_ops_per_cycle", type=float, default=1.0,
                          help="Assumed VVA additions/cycle, not specified by paper (default 1)")
     parser.add_argument("--on_bandwidth_gbs", type=float, default=64.0)
@@ -1811,6 +1885,9 @@ def main():
                         help="uniform uses --channels_per_partition; paper_targets "
                              "matches Figure 6 aggregate CONV/FC core counts with "
                              "documented reconstructed per-layer grids")
+    parser.add_argument("--partition_balance_weight", type=float, default=1.0,
+                        help="Weight given to per-core VMM/VVA cycle balance when "
+                             "reconstructing unpublished paper-target layer grids")
     parser.add_argument("--workload_region", choices=["all", "conv", "fc"], default="all",
                         help="Optimize the whole extracted graph or, with paper_targets, "
                              "a separately masked CONV/FC region as in Section 3.1.2")
@@ -1841,6 +1918,14 @@ def main():
         parser.error("ASA acceptance targets must be in (0,1)")
     if not (0 < args.asa_min_perturb_frac <= args.asa_max_perturb_frac <= 1):
         parser.error("ASA perturbation fractions must satisfy 0 < min <= max <= 1")
+    if args.sensitivity_trials < 0 or args.sensitivity_trials == 1:
+        parser.error("--sensitivity_trials must be 0 or at least 2")
+    if (not math.isfinite(args.min_relative_objective_span) or
+            args.min_relative_objective_span < 0):
+        parser.error("--min_relative_objective_span must be finite and nonnegative")
+    if args.reward_scale is not None and (not math.isfinite(args.reward_scale) or
+                                          args.reward_scale <= 0):
+        parser.error("--reward_scale must be finite and positive")
     if args.conv_blocks <= 0:
         parser.error("--conv_blocks must be positive")
     if args.timing_model == "paper_pipeline":
@@ -1849,10 +1934,16 @@ def main():
                 args.routing_model != "paper_xy"):
             parser.error("paper_pipeline requires --partition_mode paper_targets, "
                          "--workload_region conv|fc and --routing_model paper_xy")
-    if not 0 < args.mac_utilization <= 1 or not math.isfinite(args.vva_ops_per_cycle) or args.vva_ops_per_cycle <= 0:
+    if (not 0 < args.mac_utilization <= 1 or
+            not math.isfinite(args.vva_ops_per_cycle) or args.vva_ops_per_cycle <= 0):
         parser.error("utilization must be in (0,1] and VVA rate finite and positive")
+    if not math.isfinite(args.partition_balance_weight) or args.partition_balance_weight < 0:
+        parser.error("--partition_balance_weight must be finite and nonnegative")
     if any(not math.isfinite(v) or v <= 0 for v in (args.on_bandwidth_gbs, args.off_bandwidth_gbs)):
         parser.error("bandwidths must be finite and positive")
+
+    if args.reward_scale is None:
+        args.reward_scale = 400e6 if args.timing_model != "proxy" else 1.0
 
     if args.device == "cpu":
         configured = configure_cpu_threads(args.cpu_threads, args.cpu_interop_threads)
@@ -1882,7 +1973,9 @@ def main():
         extracted = extract_model_task_graph(
             model_name=args.model, channels_per_partition=args.channels_per_partition,
             custom_model_path=args.custom_model, return_work=args.timing_model != "proxy",
-            partition_mode=args.partition_mode
+            partition_mode=args.partition_mode,
+            partition_balance_weight=args.partition_balance_weight,
+            vva_ops_per_cycle=args.vva_ops_per_cycle,
         )
         real_task_graph, num_tasks, task_labels = extracted[:3]
         operations = extracted[3] if args.timing_model != "proxy" else None
@@ -1983,7 +2076,34 @@ def main():
     print(f"System : {env.topo}")
     print(f"Tasks  : {env.num_tasks}")
     print(f"Algo   : {args.algo}")
+    if args.algo in ("ddpg", "ddpg_asa"):
+        print(f"Reward : sqrt({args.reward_scale:g} * latency)")
     print("-" * 50)
+
+    objective_sensitivity = None
+    if args.timing_model == "paper_pipeline" and args.sensitivity_trials:
+        objective_sensitivity = measure_objective_sensitivity(
+            env, n_trials=args.sensitivity_trials)
+        sample = objective_sensitivity
+        split = sample["best_sample_breakdown"]
+        print(
+            f">> Objective sensitivity ({sample['trials']} random placements): "
+            f"min={sample['minimum']:.9g}, median={sample['median']:.9g}, "
+            f"max={sample['maximum']:.9g}, relative span={sample['relative_span']:.3%}")
+        print(
+            f">> Best sampled bottleneck: compute={split['compute']:.9g}, "
+            f"communication={split['communication']:.9g}, "
+            f"compute fraction={split['compute_fraction']:.3%}, "
+            f"headroom above compute floor="
+            f"{sample['best_headroom_above_compute_floor']:.3%}")
+        if (args.algo != "bs" and
+                sample["relative_span"] < args.min_relative_objective_span and
+                not args.allow_flat_objective):
+            parser.error(
+                "paper-mode objective is effectively placement-insensitive: "
+                f"sampled relative span {sample['relative_span']:.6g} is below "
+                f"{args.min_relative_objective_span:.6g}. Fix/validate timing "
+                "assumptions or pass --allow_flat_objective for a deliberate diagnostic run")
 
     # 3. Run the algorithms
     run_started = time.perf_counter()
@@ -2000,6 +2120,7 @@ def main():
         "diagnostics_path": args.diagnostics,
         "agent_arch": args.agent_arch,
         "reward_mode": args.reward_mode,
+        "reward_scale": args.reward_scale,
         "diagnostics_every": args.diagnostics_every,
     }
     asa_options = {
@@ -2088,6 +2209,7 @@ def main():
                        if args.algo in ("ddpg", "ddpg_asa") else 0,
                        "placement_chip_major": env.placement.tolist(),
                        "routing_diagnostics": routing_diagnostics,
+                       "objective_sensitivity": objective_sensitivity,
                        "seconds_elapsed": time.perf_counter() - run_started,
                        "python_version": sys.version,
                        "git": git_provenance(),

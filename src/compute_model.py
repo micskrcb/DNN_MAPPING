@@ -27,7 +27,13 @@ def tile_work(cin, cout, height, width, kernel_area, input_groups, output_groups
         for il, ih in inputs:
             work.append((ih - il) * (hi - lo) * height * width * kernel_area)
             kinds.append("vmm")
-        work.append(max(input_groups - 1, 0) * (hi - lo) * height * width)
+        # A VVA core performs N-1 partial-sum additions. With N=1 it still
+        # executes one output-vector transformation pass (bias/activation/
+        # output generation in the paper's functional-core description).
+        # The exact transformation-unit operation mix is unpublished; one
+        # pass is the smallest nonzero reconstruction and prevents an N=1
+        # VVA task from being treated as free computation.
+        work.append(max(input_groups - 1, 1) * (hi - lo) * height * width)
         kinds.append("vva")
     return work, kinds
 
@@ -62,7 +68,8 @@ def edge_bytes(graph, kinds):
 
 
 def paper_partition_grids(layers, target_count, weight_buffer_bytes=64 * 1024,
-                          candidate_limit=512):
+                          candidate_limit=512, compute_balance_weight=1.0,
+                          vva_ops_per_cycle=1.0, macs_per_cycle=128.0):
     """Choose per-layer ``(M, N)`` grids summing to a Figure-6 core count.
 
     A layer with ``M`` output groups and ``N`` input groups consumes
@@ -70,15 +77,19 @@ def paper_partition_grids(layers, target_count, weight_buffer_bytes=64 * 1024,
     CONV/FC counts and says that work is balanced, but does not publish its
     per-layer grids. This deterministic reconstruction allocates counts in
     proportion to layer MACs, enforces the Table-1 64-KB weight buffer for
-    every VMM tile, and finds the minimum-error exact integer allocation.
+    every VMM tile, and balances the estimated VMM and VVA cycles per logic
+    core as required qualitatively by Section 3.1.1. The exact trade-off and
+    VVA rate are unpublished reconstruction parameters.
 
     ``layers`` contains dictionaries with ``cin``, ``cout``, ``height``,
     ``width`` and ``kernel_area``. The returned list follows input order.
     """
     if not layers or target_count < 2 * len(layers):
         raise ValueError("target_count cannot provide at least one VMM and VVA per layer")
-    if weight_buffer_bytes <= 0:
-        raise ValueError("weight_buffer_bytes must be positive")
+    if weight_buffer_bytes <= 0 or compute_balance_weight < 0:
+        raise ValueError("weight buffer must be positive and balance weight nonnegative")
+    if vva_ops_per_cycle <= 0 or macs_per_cycle <= 0:
+        raise ValueError("VMM/VVA rates must be positive")
 
     macs = [layer["cin"] * layer["cout"] * layer["height"] *
             layer["width"] * layer["kernel_area"] for layer in layers]
@@ -98,8 +109,14 @@ def paper_partition_grids(layers, target_count, weight_buffer_bytes=64 * 1024,
                 if max_cin * max_cout * kernel > weight_buffer_bytes:
                     continue
                 relative_error = ((count - ideal) / max(ideal, 1.0)) ** 2
-                # For equally close counts, prefer fewer VVA reduction cores.
-                score = relative_error + 1e-9 * m_groups / count
+                vmm_cycles = (max_cin * max_cout * layer["height"] *
+                              layer["width"] * kernel / macs_per_cycle)
+                vva_cycles = (max(n_groups - 1, 1) * max_cout *
+                              layer["height"] * layer["width"] /
+                              vva_ops_per_cycle)
+                cycle_ratio = max(vmm_cycles, vva_cycles) / min(vmm_cycles, vva_cycles)
+                balance_error = math.log(cycle_ratio) ** 2
+                score = relative_error + compute_balance_weight * balance_error
                 previous = by_count.get(count)
                 if previous is None or score < previous[0]:
                     by_count[count] = (score, m_groups, n_groups)

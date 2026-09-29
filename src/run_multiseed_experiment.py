@@ -46,6 +46,7 @@ def main():
     parser.add_argument("--channels_per_partition", type=positive, default=512)
     parser.add_argument("--partition_mode", choices=["uniform", "paper_targets"],
                         default="uniform")
+    parser.add_argument("--partition_balance_weight", type=float, default=1.0)
     parser.add_argument("--workload_region", choices=["all", "conv", "fc"], default="all")
     parser.add_argument("--timing_model", choices=["full_frame", "paper_pipeline"],
                         default="full_frame")
@@ -70,6 +71,11 @@ def main():
                         help="Fraction of the matched hybrid budget assigned to DDPG; ASA gets the remainder")
     parser.add_argument("--agent_arch", choices=["mlp", "cnn", "paper_cnn"], default="mlp")
     parser.add_argument("--reward_mode", choices=["sparse", "potential"], default="sparse")
+    parser.add_argument("--reward_scale", type=float, default=None,
+                        help="Override latency scaling before the sqrt reward")
+    parser.add_argument("--sensitivity_trials", type=positive, default=64)
+    parser.add_argument("--min_relative_objective_span", type=float, default=0.001)
+    parser.add_argument("--allow_flat_objective", action="store_true")
     args = parser.parse_args()
     try:
         seeds = [int(part.strip()) for part in args.seeds.split(",") if part.strip()]
@@ -83,6 +89,10 @@ def main():
         parser.error(f"--algorithms must be a unique comma-separated subset of {sorted(supported)}")
     if not 0 < args.hybrid_ddpg_fraction < 1:
         parser.error("--hybrid_ddpg_fraction must be in (0,1)")
+    if args.partition_balance_weight < 0 or args.min_relative_objective_span < 0:
+        parser.error("partition balance and sensitivity threshold must be nonnegative")
+    if args.reward_scale is not None and args.reward_scale <= 0:
+        parser.error("--reward_scale must be positive")
 
     root = Path(__file__).resolve().parents[1]
     output_dir = Path(args.output_dir)
@@ -90,12 +100,18 @@ def main():
     common = ["--use_cnn", "--model", args.model,
               "--channels_per_partition", str(args.channels_per_partition),
               "--partition_mode", args.partition_mode,
+              "--partition_balance_weight", str(args.partition_balance_weight),
               "--timing_model", args.timing_model,
               "--routing_model", args.routing_model,
               "--workload_region", args.workload_region,
               "--conv_blocks", str(args.conv_blocks),
               "--chips_x", str(args.chips_x), "--chips_y", str(args.chips_y),
               "--rows", str(args.rows), "--cols", str(args.cols)]
+    common.extend(["--sensitivity_trials", str(args.sensitivity_trials),
+                   "--min_relative_objective_span",
+                   str(args.min_relative_objective_span)])
+    if args.allow_flat_objective:
+        common.append("--allow_flat_objective")
     results = []
     placement_budget = args.epochs * args.placements_per_epoch
     search_budget = args.search_budget or placement_budget
@@ -121,6 +137,8 @@ def main():
                             "--diagnostics_every", str(args.diagnostics_every),
                             "--diagnostics", str(output_dir / f"{stem}-ddpg.jsonl"),
                             "--save_checkpoint", str(output_dir / f"{stem}.pt")])
+            if args.reward_scale is not None:
+                command.extend(["--reward_scale", str(args.reward_scale)])
             if args.device == "cpu":
                 command.extend(["--cpu_threads", str(cpu_threads), "--cpu_interop_threads", "1"])
             if algorithm == "ddpg_asa":
