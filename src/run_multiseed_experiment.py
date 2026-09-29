@@ -71,6 +71,8 @@ def main():
                         help="Fraction of the matched hybrid budget assigned to DDPG; ASA gets the remainder")
     parser.add_argument("--agent_arch", choices=["mlp", "cnn", "paper_cnn"], default="mlp")
     parser.add_argument("--reward_mode", choices=["sparse", "potential"], default="sparse")
+    parser.add_argument("--retain_deterministic_candidates", action="store_true",
+                        help="Let diagnostic policy rollouts compete for saved best; reports count them")
     parser.add_argument("--reward_scale", type=float, default=None,
                         help="Override latency scaling before the sqrt reward")
     parser.add_argument("--exploration_decay_placements", type=positive, default=None,
@@ -144,6 +146,8 @@ def main():
             if args.exploration_decay_placements is not None:
                 command.extend(["--exploration_decay_placements",
                                 str(args.exploration_decay_placements)])
+            if args.retain_deterministic_candidates:
+                command.append("--retain_deterministic_candidates")
             if args.device == "cpu":
                 command.extend(["--cpu_threads", str(cpu_threads), "--cpu_interop_threads", "1"])
             if algorithm == "ddpg_asa":

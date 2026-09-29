@@ -2,6 +2,7 @@
 import contextlib
 import io
 import random
+import tempfile
 import unittest
 from unittest.mock import patch
 import numpy as np
@@ -261,6 +262,59 @@ class TimingTests(unittest.TestCase):
             self.assertEqual(cost, env.evaluate())
             rewards.append(reward)
         self.assertAlmostEqual(rewards[1], rewards[0] * 20.0, places=10)
+
+    @unittest.skipUnless(rm.HAS_TORCH, "PyTorch required")
+    def test_deterministic_candidate_retention_is_explicit_and_counted(self):
+        import torch
+
+        graph = np.array([[0, 10, 0], [0, 0, 0], [0, 0, 0]], dtype=np.float32)
+        env = MultiChipEnvironment(1, 1, 2, 2, task_graph=graph, num_tasks=3)
+
+        class FakeAgent:
+            gamma = 0.98
+
+            def __init__(self, *args, **kwargs):
+                self.device = torch.device("cpu")
+                self.ou_state = np.zeros(2, dtype=np.float32)
+                self._explore_index = 0
+                self._deterministic_index = 0
+
+            def select_action(self, state, noise_scale=0.1, explore=True):
+                # Noisy rollout puts communicating tasks on opposite corners;
+                # deterministic rollout puts them next to each other.
+                noisy = [(-1, -1), (1, 1), (1, -1)]
+                deterministic = [(-1, -1), (1, -1), (1, 1)]
+                if explore:
+                    action = noisy[self._explore_index]
+                    self._explore_index += 1
+                else:
+                    action = deterministic[self._deterministic_index]
+                    self._deterministic_index += 1
+                return np.asarray(action, dtype=np.float32)
+
+            def train(self, replay_buffer, batch_size=64):
+                return None
+
+        def fake_baseline(target, n_trials):
+            target.place(np.array([0, 3, 1], dtype=np.int32))
+            return target.evaluate()
+
+        metadata = {}
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(rm, "DDPGAgent", FakeAgent), \
+             patch.object(rm, "run_random", side_effect=fake_baseline):
+            cost = rm.run_ddpg(
+                env, n_episodes=1, baseline_trials=1, batch_z=1,
+                device="cpu", diagnostics_path=f"{directory}/diagnostics.jsonl",
+                diagnostics_every=1, retain_deterministic_candidates=True,
+                run_metadata=metadata)
+
+        self.assertEqual(metadata["training_candidate_evaluations"], 1)
+        self.assertEqual(metadata["deterministic_candidate_evaluations"], 1)
+        self.assertEqual(metadata["total_candidate_evaluations"], 2)
+        self.assertEqual(metadata["best_candidate_source"], "deterministic_diagnostic")
+        self.assertEqual(cost, env.evaluate())
+        np.testing.assert_array_equal(env.placement, [0, 1, 3])
 
 
 @unittest.skipUnless(rm.HAS_TORCH, "PyTorch required")

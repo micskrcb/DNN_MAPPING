@@ -462,13 +462,15 @@ Paper-mode DDPG uses the Figure 9 spatial CNN, the 2-D placement grid, batched `
 
 `--reward_mode potential` and the `mlp`/`cnn` agents are improvement conditions. The shaping potential is normalized by the fixed random-search baseline so intermediate rewards remain near unit scale while the shaping terms still telescope to zero. Do not mix these results into the frozen paper-mode comparison. Collision repairs are expected because continuous coordinates may select the same or a masked core; diagnostics separate occupied-core repairs from mask repairs and also evaluate the deterministic policy.
 
+`--retain_deterministic_candidates` is another explicit improvement condition. When enabled, a deterministic diagnostic rollout may update the saved best placement. Reports separate `training_candidate_evaluations`, `deterministic_candidate_evaluations`, and `total_candidate_evaluations`, preventing those additional objective evaluations from being hidden. Without the flag, diagnostics remain monitoring-only and cannot change the saved result.
+
 BS fills allowed physical cores in chip-major order. RS samples complete valid placements. SA uses current-cost acceptance, cooling factor 0.99, and roughly 1% placement perturbations that may use free cores.
 
 ASA and DDPG→ASA are project extensions, not features claimed by the source DNN-mapping paper. Keep fixed SA in result tables as the paper-aligned baseline. The runner matches the hybrid's combined candidate count to DDPG. For a direct hybrid-versus-ASA ablation, set `--search_budget` equal to `--epochs × --placements_per_epoch`; otherwise the paper-scale defaults deliberately give SA/ASA one million candidates and DDPG/hybrid 300,000.
 
 ## Interpreting results
 
-A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets.
+A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.
 
 Report CONV and FC separately. Normalize latency to BS as in the paper, include seed mean/sample standard deviation/minimum/maximum, and examine hop counts and link loads. Do not compare old proxy scores, full-frame scores, and paper-pipeline seconds as though they were the same metric.
 

@@ -1013,7 +1013,8 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
              run_metadata: dict = None, agent_arch: str = "mlp",
              reward_mode: str = "sparse", diagnostics_every: int = 100,
              reward_scale: float = 1.0,
-             exploration_decay_placements: int = None) -> float:
+             exploration_decay_placements: int = None,
+             retain_deterministic_candidates: bool = False) -> float:
     if not HAS_TORCH:
         raise RuntimeError("DDPG requires PyTorch; refusing a random-search fallback")
     if diagnostics_every <= 0:
@@ -1030,7 +1031,8 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     signature.update(repr((env.topo, env.topo.on_chip_latency, env.topo.off_chip_latency,
                            batch_z, env.timing_units, agent_arch, reward_mode,
                            reward_scale, exploration_decay_placements,
-                           "chip-major-v5-normalized-potential")).encode())
+                           retain_deterministic_candidates,
+                           "chip-major-v6-retained-deterministic")).encode())
     fingerprint = signature.hexdigest()
     # Reject old or incompatible checkpoints, including changed objective units.
     # instead of starting fresh -- restores the trained networks, optimizer
@@ -1100,6 +1102,9 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
         best_grid = checkpoint.get("best_grid")
         noise_scale = checkpoint["noise_scale"]
         global_step = checkpoint["global_step"]
+        deterministic_candidate_evaluations = checkpoint.get(
+            "deterministic_candidate_evaluations", 0)
+        best_candidate_source = checkpoint.get("best_candidate_source", "training")
         start_episode = checkpoint["episode"]
     else:
         best_cost = baseline_latency
@@ -1107,6 +1112,8 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
         best_grid = None
         noise_scale = 1.0
         global_step = 0
+        deterministic_candidate_evaluations = 0
+        best_candidate_source = "random_baseline"
         start_episode = 0
 
     # Compute exploration from the absolute placement index. An explicit
@@ -1131,6 +1138,8 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
             "best_grid": best_grid,
             "noise_scale": noise_scale,
             "global_step": global_step,
+            "deterministic_candidate_evaluations": deterministic_candidate_evaluations,
+            "best_candidate_source": best_candidate_source,
             "episode": ep,
             "baseline_latency": baseline_latency,
         }, save_checkpoint)
@@ -1179,6 +1188,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
             best_cost = final_cost          
             best_grid   = grid
             best_placement = mapper.get_placement()
+            best_candidate_source = "noisy_training"
 
         write_diagnostics = (diagnostics_stream is not None and
                              (ep % diagnostics_every == 0 or ep == n_episodes))
@@ -1192,10 +1202,20 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
                                                      reward_scale=reward_scale)
             evaluation_state = evaluation_mapper.reset()
             evaluation_done = False
+            evaluation_grid = ""
             while not evaluation_done:
                 deterministic_action = agent.select_action(evaluation_state, explore=False)
-                _, evaluation_done, _, deterministic_cost = evaluation_mapper.step(deterministic_action)
+                _, evaluation_done, evaluation_grid, deterministic_cost = evaluation_mapper.step(
+                    deterministic_action)
                 evaluation_state = evaluation_mapper._occ_map()
+            deterministic_candidate_evaluations += 1
+            retained_deterministic_candidate = False
+            if retain_deterministic_candidates and deterministic_cost < best_cost:
+                best_cost = deterministic_cost
+                best_grid = evaluation_grid
+                best_placement = evaluation_mapper.get_placement()
+                best_candidate_source = "deterministic_diagnostic"
+                retained_deterministic_candidate = True
             # Preserve the noisy episode placement for checkpointing/final output.
             env.place(mapper.get_placement())
             action_values = np.concatenate(actions) if actions else np.array([], dtype=np.float32)
@@ -1204,6 +1224,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
                 "current_cost": final_cost,
                 "best_cost": best_cost,
                 "deterministic_cost": deterministic_cost,
+                "retained_deterministic_candidate": retained_deterministic_candidate,
                 "reward": reward,
                 "episode_return": episode_return,
                 "episode_discounted_return": episode_discounted_return,
@@ -1248,8 +1269,13 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
         run_metadata.update({"agent_arch": agent_arch, "reward_mode": reward_mode,
                              "reward_scale": reward_scale,
                              "exploration_decay_placements": exploration_decay_placements,
+                             "retain_deterministic_candidates": retain_deterministic_candidates,
                              "baseline_cost": baseline_latency, "start_episode": start_episode,
                              "end_episode": n_episodes, "global_steps": global_step,
+                             "training_candidate_evaluations": n_episodes,
+                             "deterministic_candidate_evaluations": deterministic_candidate_evaluations,
+                             "total_candidate_evaluations": n_episodes + deterministic_candidate_evaluations,
+                             "best_candidate_source": best_candidate_source,
                              "final_noise_scale": noise_scale, "diagnostics_path": diagnostics_path})
 
     if best_grid:
@@ -1833,6 +1859,9 @@ def main():
     parser.add_argument("--exploration_decay_placements", type=int, default=None,
                         help="Absolute complete-placement horizon at which OU noise reaches 0.01. "
                              "Set one fixed value for every stage of a resumed run")
+    parser.add_argument("--retain_deterministic_candidates", action="store_true",
+                        help="Allow deterministic diagnostic rollouts to update the saved best "
+                             "placement; their extra objective evaluations are reported separately")
     parser.add_argument("--compute_ops", type=str, default=None,
                          help="Optional .npy file containing MAC operations per task; "
                               "converted with Table 1's 128 MACs/core at 400 MHz.")
@@ -2146,6 +2175,7 @@ def main():
         "reward_mode": args.reward_mode,
         "reward_scale": args.reward_scale,
         "exploration_decay_placements": args.exploration_decay_placements,
+        "retain_deterministic_candidates": args.retain_deterministic_candidates,
         "diagnostics_every": args.diagnostics_every,
     }
     asa_options = {
