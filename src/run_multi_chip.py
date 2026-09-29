@@ -813,6 +813,11 @@ class MultiChipCoreMapper:
         self.reward_scale = reward_scale
         self._potential = 0.0
         self.baseline_latency = baseline_latency
+        self._potential_normalizer = (
+            math.sqrt(max(self.reward_scale * baseline_latency, 0.0))
+            if baseline_latency is not None else 1.0)
+        if self._potential_normalizer == 0:
+            self._potential_normalizer = 1.0
         if baseline_latency is None:
             print("[WARN] MultiChipCoreMapper created without baseline_latency -- "
                   "reward will use unnormalized -sqrt(L(P)), not the paper's "
@@ -947,8 +952,14 @@ class MultiChipCoreMapper:
             # with Phi(terminal)=0. Across a fixed episode the discounted
             # shaping terms telescope to zero, so the sparse objective is
             # preserved while the critic receives intermediate feedback.
-            next_potential = (0.0 if done else
-                              -math.sqrt(max(self.reward_scale * final_cost, 0.0)))
+            # Normalize the shaping potential to approximately unit scale.
+            # The gamma*Phi(s')-Phi(s) terms still telescope to zero over a
+            # fixed episode, while avoiding cycle-scaled intermediate rewards
+            # two orders of magnitude larger than the terminal objective.
+            next_potential = (
+                0.0 if done else
+                -math.sqrt(max(self.reward_scale * final_cost, 0.0)) /
+                self._potential_normalizer)
             base_reward = 0.0
             if done:
                 base_reward = (
@@ -1001,11 +1012,16 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
              checkpoint_every: int = 100, diagnostics_path: str = None,
              run_metadata: dict = None, agent_arch: str = "mlp",
              reward_mode: str = "sparse", diagnostics_every: int = 100,
-             reward_scale: float = 1.0) -> float:
+             reward_scale: float = 1.0,
+             exploration_decay_placements: int = None) -> float:
     if not HAS_TORCH:
         raise RuntimeError("DDPG requires PyTorch; refusing a random-search fallback")
     if diagnostics_every <= 0:
         raise ValueError("diagnostics_every must be positive")
+    if exploration_decay_placements is None:
+        exploration_decay_placements = max(1, int(0.8 * n_episodes))
+    if exploration_decay_placements <= 0:
+        raise ValueError("exploration_decay_placements must be positive")
 
     signature = hashlib.sha256()
     signature.update(np.ascontiguousarray(env.task_graph).tobytes())
@@ -1013,7 +1029,8 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     signature.update(np.ascontiguousarray(env.allowed_cores).tobytes())
     signature.update(repr((env.topo, env.topo.on_chip_latency, env.topo.off_chip_latency,
                            batch_z, env.timing_units, agent_arch, reward_mode,
-                           reward_scale, "chip-major-v3-balanced-reward")).encode())
+                           reward_scale, exploration_decay_placements,
+                           "chip-major-v5-normalized-potential")).encode())
     fingerprint = signature.hexdigest()
     # Reject old or incompatible checkpoints, including changed objective units.
     # instead of starting fresh -- restores the trained networks, optimizer
@@ -1092,12 +1109,12 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
         global_step = 0
         start_episode = 0
 
-    # Decay so noise_scale reaches ~0.01 by 80% of training, regardless of
-    # n_episodes -- a fixed 0.995 barely decays (~8% remaining) over a
-    # 500-1000 episode run, which was masking whether the policy had
-    # actually converged versus still being exploration-noise-dominated.
-    target_episode = max(1, int(0.8 * n_episodes))
-    noise_decay = 0.01 ** (1.0 / target_episode)
+    # Compute exploration from the absolute placement index. An explicit
+    # horizon stays identical across cumulative checkpoint stages; deriving
+    # it from each stage's temporary target would exhaust exploration in the
+    # first stage and leave every resumed stage at the minimum noise level.
+    def noise_at(episode):
+        return max(0.01, 0.01 ** (episode / exploration_decay_placements))
 
     def _save_checkpoint(ep):
         if save_checkpoint is None:
@@ -1156,7 +1173,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
                     losses.append(loss)
             state = next_state
 
-        noise_scale = max(0.01, noise_scale * noise_decay)
+        noise_scale = noise_at(ep)
 
         if final_cost < best_cost:
             best_cost = final_cost          
@@ -1230,6 +1247,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     if run_metadata is not None:
         run_metadata.update({"agent_arch": agent_arch, "reward_mode": reward_mode,
                              "reward_scale": reward_scale,
+                             "exploration_decay_placements": exploration_decay_placements,
                              "baseline_cost": baseline_latency, "start_episode": start_episode,
                              "end_episode": n_episodes, "global_steps": global_step,
                              "final_noise_scale": noise_scale, "diagnostics_path": diagnostics_path})
@@ -1812,6 +1830,9 @@ def main():
     parser.add_argument("--reward_scale", type=float, default=None,
                         help="Multiply latency before sqrt reward. Default: 400e6 for "
                              "seconds-based timing (400-MHz cycle units), otherwise 1")
+    parser.add_argument("--exploration_decay_placements", type=int, default=None,
+                        help="Absolute complete-placement horizon at which OU noise reaches 0.01. "
+                             "Set one fixed value for every stage of a resumed run")
     parser.add_argument("--compute_ops", type=str, default=None,
                          help="Optional .npy file containing MAC operations per task; "
                               "converted with Table 1's 128 MACs/core at 400 MHz.")
@@ -1926,6 +1947,9 @@ def main():
     if args.reward_scale is not None and (not math.isfinite(args.reward_scale) or
                                           args.reward_scale <= 0):
         parser.error("--reward_scale must be finite and positive")
+    if (args.exploration_decay_placements is not None and
+            args.exploration_decay_placements <= 0):
+        parser.error("--exploration_decay_placements must be positive")
     if args.conv_blocks <= 0:
         parser.error("--conv_blocks must be positive")
     if args.timing_model == "paper_pipeline":
@@ -2121,6 +2145,7 @@ def main():
         "agent_arch": args.agent_arch,
         "reward_mode": args.reward_mode,
         "reward_scale": args.reward_scale,
+        "exploration_decay_placements": args.exploration_decay_placements,
         "diagnostics_every": args.diagnostics_every,
     }
     asa_options = {

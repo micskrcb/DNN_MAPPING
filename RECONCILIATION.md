@@ -1,6 +1,6 @@
 # Reconciliation and validation status
 
-Status date: 2026-09-29
+Status date: 2026-09-30
 
 This branch began by reconciling GitHub commit `41f9d02` with the user-supplied Gemini archives `files (4).zip` and `files (5).zip`. Their three shared files were byte-identical; archive 4 also contained topology and environment files. Archive prose and old logs are historical evidence, not proof of current behavior.
 
@@ -15,6 +15,7 @@ This branch began by reconciling GitHub commit `41f9d02` with the user-supplied 
 - SA accepts relative to current cost, uses 0.99 cooling, and can move into free cores.
 - Invalid capacity, cyclic graphs, unavailable devices, and incompatible checkpoints fail explicitly.
 - Checkpoints store networks, optimizers, baseline, best placement, counters, and RNG state. Replay remains unpersisted, so resume is not bit-exact.
+- OU noise can use one explicit absolute placement horizon, preventing early checkpoint stages from exhausting exploration for later resumed stages.
 
 ## Paper-mode additions
 
@@ -32,6 +33,8 @@ Input/activation-buffer occupancy and stalls, exact multicast, router startup, t
 
 The paper also leaves `z`, OU details, replay capacity, CNN padding, LRN parameters, and target-update details incomplete. Reports and the paper-run manifest identify these choices. Potential reward shaping and the `mlp`/`cnn` agents are improvement conditions, not paper mode.
 
+Potential shaping uses a baseline-normalized potential. This preserves the fixed-horizon terminal objective through telescoping while avoiding the unstable, cycle-scaled intermediate rewards observed in the initial diagnostic.
+
 ## Validation
 
 The original 2,080-placement AlexNet CONV run used the earlier objective. Its reported `0.00524885` latency was almost exactly the placement-independent CONV2 VVA compute time (`0.0052488` seconds), and random placements varied by only about `0.0015%`. That checkpoint is incompatible with the corrected objective and is retained only as historical evidence.
@@ -44,6 +47,7 @@ Current local validation uses torch 2.14.0+cpu and torchvision 0.29.0+cpu:
 - Real torchvision AlexNet extraction returns the corrected 183 CONV and 932 FC partitions. Across 64 placements, the CONV objective spans `13.89%` and FC spans `4.05%`.
 - A three-placement CPU `paper_cnn` smoke completed 120 optimizer updates, checkpointing, deterministic diagnostics, and reporting at about 62 seconds per placement. The noisy best was `7.29%` below BS, but the deterministic policy worsened by placement three; the run validates mechanics, not learning.
 - At a 2,000-candidate CONV budget, BS-normalized results were RS `0.9697`, fixed SA `0.9899`, and ASA `0.9697`. These are single-seed bounded execution checks.
+- A staged-training diagnostic showed that stage-relative noise decay collapsed exploration. With a fixed 1,000-placement horizon, intended-core diversity at placement six increased from 45 to 117 and occupied-core repairs decreased from 177 to 101. Baseline-normalized potential shaping reduced the placement-six mean critic loss from `294` to `0.111` and held deterministic cost at `3.9148e-05`; the unnormalized condition worsened to `4.3780e-05`. These short diagnostics establish numerical behavior only.
 
 These are functionality checks. They do not demonstrate learning, convergence, H100 performance, or agreement with the paper's percentages. CUDA tensor placement is implemented, but the planned H100 12 GB slice has not been available locally.
 

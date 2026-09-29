@@ -1,6 +1,6 @@
 # Project state: paper-faithful DNN core placement
 
-Updated 2026-09-29.
+Updated 2026-09-30.
 
 ## Goal and branch
 
@@ -18,6 +18,7 @@ The maintained development branch is `cpu` in `micskrcb/DNN_MAPPING`; it is a de
 - Reconstructed X-then-Y routes, lower-left periphery gateway for inter-chip traffic, routed byte-hop time, and shared directed-link contention per time phase.
 - Configurable CONV block scaling; default four follows Figure 7's illustration.
 - Figure 9 `paper_cnn`, sparse terminal reward, paper learning rates/gamma/batch size, batched actions, coordinate conversion, and Manhattan collision repair.
+- Absolute-placement OU exploration scheduling that remains stable across cumulative checkpoint stages.
 - Sequential BS, random search, fixed simulated annealing, adaptive simulated annealing, DDPG, and DDPG→ASA.
 - Explicit placement accounting: DDPG epochs × placements/epoch, separate reward-normalizer trials, and independently configurable RS/SA budgets.
 - Five-seed orchestration, periodic JSONL diagnostics, checkpoints, JSON reports, BS-normalized summaries, hop counts, link-load summaries, and a placement-sensitivity preflight.
@@ -54,6 +55,8 @@ Batch-one latency can be compared after validation. True large-batch throughput 
 - The corrected pure-model AlexNet-FC audit preserves 932 cores with grids `(16,36), (16,16), (4,16)`. Across 64 seeded random placements the objective span was 4.05%; the best sample was 92.29% compute and 7.71% communication.
 - In a bounded 2,000-candidate comparison on that reconstructed graph, normalized-to-BS costs were RS 0.9697, fixed SA 0.9899, and ASA 0.9697. These small-budget single-seed numbers validate execution only.
 - Real torchvision extraction reproduces the same partitions. With 64 sampled placements, AlexNet CONV spans 13.89% and FC spans 4.05%. A three-placement CPU `paper_cnn` smoke completed 120 optimizer updates, checkpointing, deterministic diagnostics, and reporting at about 62 seconds per placement. Its noisy best was 7.29% below BS, but its deterministic policy worsened by placement three, so this is not evidence of learning.
+- A 12-placement diagnostic found that deriving OU decay from each temporary checkpoint target exhausted exploration in the first stage. The fixed absolute-placement schedule retained noise and increased intended-core diversity; in a matched six-placement run, unique intended cores rose from 45 to 117 and occupied-core repairs fell from 177 to 101.
+- An initial potential-shaping diagnostic produced critic losses in the hundreds because cycle scaling also inflated every intermediate potential. Baseline normalization reduced mean critic loss from `294` at placement six to `0.111`; the deterministic cost held at `3.9148e-05` instead of worsening to `4.3780e-05`. This is bounded stability evidence for an optional improvement condition, not a convergence claim.
 
 Earlier 1,445-task AlexNet logs, decimal-valued junior runs, and old proxy/full-frame best costs were produced by different extraction or objective versions. They remain useful historical diagnostics but are not evidence of paper result reproduction.
 

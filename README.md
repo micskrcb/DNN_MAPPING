@@ -209,6 +209,7 @@ python src/run_multi_chip.py \
   --reward_mode sparse \
   --epochs 13334 \
   --placements_per_epoch 30 \
+  --exploration_decay_placements 320016 \
   --iters 99980 \
   --baseline_trials 1000000 \
   --batch_z 3 \
@@ -226,7 +227,7 @@ The run can take a long time on CPU. The safer method is to train DDPG in cumula
 
 ### 6. Run the 500,000-candidate experiment in resumable stages
 
-The targets below are cumulative. They train DDPG to 99,990, 199,980, 300,000, and finally 400,020 placements. `--epochs` is a total target when loading a checkpoint, not an additional number of epochs.
+The targets below are cumulative. They train DDPG to 99,990, 199,980, 300,000, and finally 400,020 placements. `--epochs` is a total target when loading a checkpoint, not an additional number of epochs. Every stage uses the same `--exploration_decay_placements 320016`, so OU noise reaches its minimum at 80% of the final DDPG budget instead of being exhausted during the first checkpoint stage.
 
 ```bash
 mkdir -p runs/alexnet-conv-500k
@@ -250,6 +251,7 @@ do
     --reward_mode sparse \
     --epochs "$TARGET_EPOCHS" \
     --placements_per_epoch 30 \
+    --exploration_decay_placements 320016 \
     --baseline_trials 1000000 \
     --batch_z 3 \
     --train_every 1 \
@@ -269,6 +271,8 @@ Checkpoints created before the balanced-partition and cycle-scaled-reward fix
 are intentionally incompatible. Start a new checkpoint after pulling this
 revision; the old placement-2000 checkpoint used the flat objective and must
 remain historical evidence rather than a training warm start.
+Checkpoints made before the fixed absolute exploration schedule are also
+incompatible because their noise history depends on the temporary stage target.
 
 After the DDPG checkpoint reaches 400,020 placements, refine its saved best placement with exactly 99,980 ASA candidate evaluations:
 
@@ -290,6 +294,7 @@ python src/run_multi_chip.py \
   --reward_mode sparse \
   --epochs 13334 \
   --placements_per_epoch 30 \
+  --exploration_decay_placements 320016 \
   --iters 99980 \
   --baseline_trials 1000000 \
   --batch_z 3 \
@@ -455,7 +460,7 @@ The remaining simulator gaps are material: 64 KB input/activation-buffer stalls,
 
 Paper-mode DDPG uses the Figure 9 spatial CNN, the 2-D placement grid, batched `2z` continuous coordinates, floor conversion, nearest-free Manhattan repair, actor learning rate 0.0002, critic learning rate 0.001, gamma 0.98, minibatch 64, and sparse terminal reward. `batch_z`, OU parameters, replay capacity, padding, LRN parameters, target networks, and soft-update coefficient are not fully specified by the paper and remain recorded assumptions.
 
-`--reward_mode potential` and the `mlp`/`cnn` agents are improvement conditions. Do not mix their results into the frozen paper-mode comparison. Collision repairs are expected because continuous coordinates may select the same or a masked core; diagnostics separate occupied-core repairs from mask repairs and also evaluate the deterministic policy.
+`--reward_mode potential` and the `mlp`/`cnn` agents are improvement conditions. The shaping potential is normalized by the fixed random-search baseline so intermediate rewards remain near unit scale while the shaping terms still telescope to zero. Do not mix these results into the frozen paper-mode comparison. Collision repairs are expected because continuous coordinates may select the same or a masked core; diagnostics separate occupied-core repairs from mask repairs and also evaluate the deterministic policy.
 
 BS fills allowed physical cores in chip-major order. RS samples complete valid placements. SA uses current-cost acceptance, cooling factor 0.99, and roughly 1% placement perturbations that may use free cores.
 

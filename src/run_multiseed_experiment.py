@@ -73,6 +73,8 @@ def main():
     parser.add_argument("--reward_mode", choices=["sparse", "potential"], default="sparse")
     parser.add_argument("--reward_scale", type=float, default=None,
                         help="Override latency scaling before the sqrt reward")
+    parser.add_argument("--exploration_decay_placements", type=positive, default=None,
+                        help="Fixed absolute OU-noise decay horizon for resumable DDPG runs")
     parser.add_argument("--sensitivity_trials", type=positive, default=64)
     parser.add_argument("--min_relative_objective_span", type=float, default=0.001)
     parser.add_argument("--allow_flat_objective", action="store_true")
@@ -139,6 +141,9 @@ def main():
                             "--save_checkpoint", str(output_dir / f"{stem}.pt")])
             if args.reward_scale is not None:
                 command.extend(["--reward_scale", str(args.reward_scale)])
+            if args.exploration_decay_placements is not None:
+                command.extend(["--exploration_decay_placements",
+                                str(args.exploration_decay_placements)])
             if args.device == "cpu":
                 command.extend(["--cpu_threads", str(cpu_threads), "--cpu_interop_threads", "1"])
             if algorithm == "ddpg_asa":
