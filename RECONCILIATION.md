@@ -38,11 +38,11 @@ The earlier 2,080-placement AlexNet CONV run used a nearly flat objective: its `
 
 The corrected pure-model AlexNet audits preserve Figure 6 counts. CONV uses grids `(7,2), (12,4), (6,4), (6,6), (5,5)` and spans `16.34%` across 256 random placements; the best sample is `86.60%` compute. FC uses `(16,36), (16,16), (4,16)` and spans `4.05%` across 64 placements; the best sample is `92.29%` compute. These prove placement sensitivity, not learning or paper-result reproduction.
 
-Current local validation does not have PyTorch installed:
+Current local validation uses torch 2.14.0+cpu and torchvision 0.29.0+cpu:
 
-- The dependency-free suites pass 11 tests, with five Torch-dependent tests skipped.
-- Balanced-grid selection, nonzero `N=1` VVA work, reward scaling, objective decomposition/sensitivity, topology, and routing are regression-tested.
-- Earlier Torch-enabled checks predate this objective correction and must be repeated on the target environment.
+- `src/test_multi_chip.py`, all 16 reconciliation tests, and the bounded CPU device validator pass with no skipped tests.
+- The validator completed 57 measured optimizer updates and a checkpoint round trip.
+- Balanced-grid selection, nonzero `N=1` VVA work, reward scaling, objective decomposition/sensitivity, topology, extraction, and optimizer updates are regression-tested.
 
 These are functionality checks. They do not demonstrate learning, convergence, H100 performance, or agreement with the paper's percentages. CUDA tensor placement is implemented, but the planned H100 12 GB slice has not been available locally.
 

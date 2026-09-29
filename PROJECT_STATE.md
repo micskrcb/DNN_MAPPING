@@ -41,6 +41,7 @@ Batch-one latency can be compared after validation. True large-batch throughput 
 
 ## Evidence completed locally
 
+- The corrected GPU/Codex head passes `src/test_multi_chip.py`, all 16 reconciliation tests with no skips, and the bounded CPU device validator under torch 2.14.0+cpu and torchvision 0.29.0+cpu. The validator completed 57 measured optimizer updates and a checkpoint round trip.
 - Paper-target extraction returns all six exact CONV/FC counts.
 - Hand-calculated XY gateway and shared-link contention tests pass.
 - Masked-region tests confirm that baselines and the mapper cannot use other cores.
