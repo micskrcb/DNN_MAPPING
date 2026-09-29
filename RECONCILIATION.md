@@ -38,11 +38,12 @@ The original 2,080-placement AlexNet CONV run used the earlier objective. Its re
 
 The corrected pure-model AlexNet CONV audit produces exact Figure 6 count `183` with grids `(7,2), (12,4), (6,4), (6,6), (5,5)`. Across 256 seeded random placements, latency spanned `16.34%`; the best sample's bottleneck was `86.60%` compute and `13.40%` communication. The corresponding FC audit preserves 932 cores with grids `(16,36), (16,16), (4,16)`; 64 random placements spanned `4.05%`, with the best sample `92.29%` compute and `7.71%` communication. A bounded 2,000-candidate CONV execution check gave BS-normalized values RS `0.9697`, fixed SA `0.9899`, and ASA `0.9697`. These figures prove the evaluator is placement-sensitive; they are not convergence or paper-result claims.
 
-Current local validation does not have PyTorch installed:
+Current local validation uses torch 2.14.0+cpu and torchvision 0.29.0+cpu:
 
-- The dependency-free suites pass 14 tests, with five Torch-dependent tests skipped.
-- Exact AlexNet count and balanced-grid selection, nonzero `N=1` VVA work, reward scaling, objective decomposition/sensitivity, topology, and incremental ASA equivalence are regression-tested.
-- Earlier Torch-enabled validation completed extraction, optimizer updates, masked regions, residual dependencies, all agent architectures, AlexNet CONV/FC smokes, and ResNet50 BS. Those earlier checks predate the latest objective correction and must be repeated in the target environment.
+- `src/test_multi_chip.py`, all 19 reconciliation tests, and the bounded CPU device validator pass with no skipped tests. The validator completed 57 measured optimizer updates and a checkpoint round trip.
+- Real torchvision AlexNet extraction returns the corrected 183 CONV and 932 FC partitions. Across 64 placements, the CONV objective spans `13.89%` and FC spans `4.05%`.
+- A three-placement CPU `paper_cnn` smoke completed 120 optimizer updates, checkpointing, deterministic diagnostics, and reporting at about 62 seconds per placement. The noisy best was `7.29%` below BS, but the deterministic policy worsened by placement three; the run validates mechanics, not learning.
+- At a 2,000-candidate CONV budget, BS-normalized results were RS `0.9697`, fixed SA `0.9899`, and ASA `0.9697`. These are single-seed bounded execution checks.
 
 These are functionality checks. They do not demonstrate learning, convergence, H100 performance, or agreement with the paper's percentages. CUDA tensor placement is implemented, but the planned H100 12 GB slice has not been available locally.
 
