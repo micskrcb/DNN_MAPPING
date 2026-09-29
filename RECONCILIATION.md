@@ -1,6 +1,6 @@
 # Reconciliation and validation status
 
-Status date: 2026-09-29
+Status date: 2026-09-30
 
 This branch began by reconciling GitHub commit `41f9d02` with the user-supplied Gemini archives `files (4).zip` and `files (5).zip`. Their three shared files were byte-identical; archive 4 also contained topology and environment files. Archive prose and old logs are historical evidence, not proof of current behavior.
 
@@ -15,6 +15,7 @@ This branch began by reconciling GitHub commit `41f9d02` with the user-supplied 
 - SA accepts relative to current cost, uses 0.99 cooling, and can move into free cores.
 - Invalid capacity, cyclic graphs, unavailable devices, and incompatible checkpoints fail explicitly.
 - Checkpoints store networks, optimizers, baseline, best placement, counters, and RNG state. Replay remains unpersisted, so resume is not bit-exact.
+- OU noise uses an explicit absolute placement horizon so cumulative checkpoint stages share one exploration schedule.
 
 ## Paper-mode additions
 
@@ -32,6 +33,8 @@ Input/activation-buffer occupancy and stalls, exact multicast, router startup an
 
 The paper also leaves `z`, OU details, replay capacity, CNN padding, LRN parameters, and target-update details incomplete. Reports and the paper-run manifest identify these choices. Potential reward shaping and the `mlp`/`cnn` agents are improvement conditions, not paper mode.
 
+Potential shaping uses a baseline-normalized potential. Its fixed-horizon shaping terms still telescope to zero, while intermediate feedback remains near unit scale under the 400-MHz reward conversion.
+
 ## Validation
 
 The earlier 2,080-placement AlexNet CONV run used a nearly flat objective: its `0.00524885` latency was almost exactly the placement-independent 5.2488-ms CONV2 VVA compute time. That checkpoint is incompatible with the corrected model.
@@ -43,6 +46,7 @@ Current local validation uses torch 2.14.0+cpu and torchvision 0.29.0+cpu:
 - `src/test_multi_chip.py`, all 16 reconciliation tests, and the bounded CPU device validator pass with no skipped tests.
 - The validator completed 57 measured optimizer updates and a checkpoint round trip.
 - Balanced-grid selection, nonzero `N=1` VVA work, reward scaling, objective decomposition/sensitivity, topology, extraction, and optimizer updates are regression-tested.
+- A short staged-training diagnostic showed that a fixed exploration horizon increased intended-core diversity from 45 to 117 and reduced occupied-core repairs from 177 to 101 at placement six. Normalized potential shaping reduced mean critic loss from `294` to `0.111` and avoided the deterministic-cost degradation seen in the unnormalized condition. These are numerical checks, not learning or convergence claims.
 
 These are functionality checks. They do not demonstrate learning, convergence, H100 performance, or agreement with the paper's percentages. CUDA tensor placement is implemented, but the planned H100 12 GB slice has not been available locally.
 

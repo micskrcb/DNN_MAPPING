@@ -152,19 +152,25 @@ class TimingTests(unittest.TestCase):
 
     def test_potential_shaping_preserves_discounted_return(self):
         gamma = 0.98
+        reward_scale = 400.0
         graph = np.array([[0, 1, 0], [0, 0, 1], [0, 0, 0]], dtype=np.float32)
         actions = [np.array([-1.0, -1.0]), np.array([1.0, -1.0]),
                    np.array([1.0, 1.0])]
         returns = []
+        potential_rewards = None
         for mode in ("sparse", "potential"):
             env = MultiChipEnvironment(1, 1, 2, 2, task_graph=graph, num_tasks=3)
             mapper = rm.MultiChipCoreMapper(env, baseline_latency=10.0, batch_z=1,
-                                             reward_mode=mode, shaping_gamma=gamma)
+                                             reward_mode=mode, shaping_gamma=gamma,
+                                             reward_scale=reward_scale)
             mapper.reset()
             rewards = [mapper.step(action)[0] for action in actions]
+            if mode == "potential":
+                potential_rewards = rewards
             returns.append(sum((gamma ** index) * reward
                                for index, reward in enumerate(rewards)))
         self.assertAlmostEqual(returns[0], returns[1], places=10)
+        self.assertLess(max(abs(value) for value in potential_rewards[:-1]), 2.0)
 
     def test_reward_scale_changes_magnitude_not_placement_objective(self):
         graph = np.array([[0, 1], [0, 0]], dtype=np.float32)

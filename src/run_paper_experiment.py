@@ -63,6 +63,9 @@ def build_commands(args, output_dir):
         ])
         if args.reward_scale is not None:
             commands[-1].extend(["--reward_scale", str(args.reward_scale)])
+        if args.exploration_decay_placements is not None:
+            commands[-1].extend(["--exploration_decay_placements",
+                                 str(args.exploration_decay_placements)])
         if args.allow_flat_objective:
             commands[-1].append("--allow_flat_objective")
     return commands
@@ -85,11 +88,16 @@ def main():
                         help="Unpublished for evaluated workloads; default follows Figure 7's illustration")
     parser.add_argument("--partition_balance_weight", type=float, default=1.0)
     parser.add_argument("--reward_scale", type=float, default=None)
+    parser.add_argument("--exploration_decay_placements", type=positive, default=None,
+                        help="Fixed OU-noise horizon; defaults to 80%% of the DDPG budget")
     parser.add_argument("--sensitivity_trials", type=positive, default=64)
     parser.add_argument("--min_relative_objective_span", type=float, default=0.001)
     parser.add_argument("--allow_flat_objective", action="store_true")
     parser.add_argument("--dry_run", action="store_true")
     args = parser.parse_args()
+    if args.exploration_decay_placements is None:
+        args.exploration_decay_placements = max(
+            1, int(0.8 * args.epochs * args.placements_per_epoch))
     if args.partition_balance_weight < 0 or args.min_relative_objective_span < 0:
         parser.error("partition balance and sensitivity threshold must be nonnegative")
     if args.reward_scale is not None and args.reward_scale <= 0:
@@ -120,6 +128,7 @@ def main():
             "residual addition executes in the destination transformation/VVA path",
             "batch_z, OU parameters, replay capacity, padding, LRN and target-update details are unpublished",
             "seconds-based latency is scaled to 400-MHz cycles before the square-root DDPG reward by default",
+            "OU exploration uses one absolute placement horizon across cumulative checkpoint stages",
         ],
     }
     (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

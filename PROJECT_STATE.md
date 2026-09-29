@@ -1,6 +1,6 @@
 # Project state: paper-faithful DNN core placement
 
-Updated 2026-09-29.
+Updated 2026-09-30.
 
 ## Goal and branch
 
@@ -18,6 +18,7 @@ The maintained remote branch is `codex/reconciled-paper-implementation` in `mics
 - Reconstructed X-then-Y routes, lower-left periphery gateway for inter-chip traffic, routed byte-hop time, and shared directed-link contention per time phase.
 - Configurable CONV block scaling; default four follows Figure 7's illustration.
 - Figure 9 `paper_cnn`, sparse terminal reward, paper learning rates/gamma/batch size, batched actions, coordinate conversion, and Manhattan collision repair.
+- Absolute-placement OU exploration scheduling that remains stable across cumulative checkpoint stages.
 - Sequential BS, random search, simulated annealing, and DDPG.
 - Explicit placement accounting: DDPG epochs × placements/epoch, separate reward-normalizer trials, and independently configurable RS/SA budgets.
 - Five-seed orchestration, per-placement JSONL diagnostics, checkpoints, JSON reports, BS-normalized summaries, hop counts, link-load summaries, and a placement-sensitivity preflight.
@@ -52,6 +53,8 @@ Batch-one latency can be compared after validation. True large-batch throughput 
 - A 2,080-placement AlexNet-CONV CPU run exposed a flat objective: the old `(M=1,N=61)` reconstruction made a 5.2488-ms VVA task placement-independent, limiting visible headroom to roughly 0.001%. That checkpoint is incompatible with the corrected model.
 - The corrected pure-model AlexNet-CONV audit preserves 183 cores with grids `(7,2), (12,4), (6,4), (6,6), (5,5)`. Across 256 seeded random placements the objective span was 16.34%; the best sample was 86.60% compute and 13.40% communication.
 - The corrected AlexNet-FC audit preserves 932 cores with grids `(16,36), (16,16), (4,16)`. Across 64 random placements the objective span was 4.05%; the best sample was 92.29% compute and 7.71% communication.
+- A staged-training diagnostic found that stage-relative OU decay exhausted exploration in the first stage. With a fixed horizon, intended-core diversity at placement six increased from 45 to 117 and occupied-core repairs decreased from 177 to 101.
+- Baseline-normalized potential shaping reduced mean critic loss at placement six from `294` to `0.111`; deterministic cost held at `3.9148e-05` instead of worsening to `4.3780e-05`. This is short-run stability evidence for an optional extension, not a convergence result.
 
 Earlier 1,445-task AlexNet logs, decimal-valued junior runs, and old proxy/full-frame best costs were produced by different extraction or objective versions. They remain useful historical diagnostics but are not evidence of paper result reproduction.
 

@@ -107,11 +107,13 @@ OMP_NUM_THREADS=2 python src/run_multi_chip.py \
   --checkpoint_every 5 --report runs/smoke.json
 ```
 
-`--epochs` is a total target when resuming. Checkpoints restore models, optimizers, best placement, baseline, counters, and RNG state. Replay is not persisted, and the noise-fading schedule depends on the requested total, so a resumed run is not bit-exact.
+`--epochs` is a total target when resuming. Checkpoints restore models, optimizers, best placement, baseline, counters, and RNG state. Replay is not persisted, so a resumed run is not bit-exact. Set one `--exploration_decay_placements` value for every cumulative stage; the paper runner defaults it to 80% of the final DDPG placement budget so early stages cannot prematurely exhaust exploration.
 
 Checkpoints from before the balanced-partition and cycle-scaled-reward fix are
 intentionally incompatible. Start a fresh checkpoint after pulling this
 revision.
+Checkpoints made before the absolute exploration schedule and normalized
+potential-shaping fix are also intentionally incompatible.
 
 ## Paper-mode commands
 
@@ -195,7 +197,7 @@ The remaining simulator gaps are material: 64 KB input/activation-buffer stalls,
 
 Paper-mode DDPG uses the Figure 9 spatial CNN, the 2-D placement grid, batched `2z` continuous coordinates, floor conversion, nearest-free Manhattan repair, actor learning rate 0.0002, critic learning rate 0.001, gamma 0.98, minibatch 64, and sparse terminal reward. `batch_z`, OU parameters, replay capacity, padding, LRN parameters, target networks, and soft-update coefficient are not fully specified by the paper and remain recorded assumptions.
 
-`--reward_mode potential` and the `mlp`/`cnn` agents are improvement conditions. Do not mix their results into the frozen paper-mode comparison. Collision repairs are expected because continuous coordinates may select the same or a masked core; diagnostics separate occupied-core repairs from mask repairs and also evaluate the deterministic policy.
+`--reward_mode potential` and the `mlp`/`cnn` agents are improvement conditions. Potential shaping is normalized by the fixed random-search baseline, keeping intermediate rewards near unit scale while preserving the original fixed-horizon objective. Do not mix these results into the frozen paper-mode comparison. Collision repairs are expected because continuous coordinates may select the same or a masked core; diagnostics separate occupied-core repairs from mask repairs and also evaluate the deterministic policy.
 
 BS fills allowed physical cores in chip-major order. RS samples complete valid placements. SA uses current-cost acceptance, cooling factor 0.99, and roughly 1% placement perturbations that may use free cores.
 
