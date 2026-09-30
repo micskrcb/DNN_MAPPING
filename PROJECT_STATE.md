@@ -81,3 +81,7 @@ The planned device is an H100 12 GB slice accessed through SSH. Access was not a
 9. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
 
 Potential reward shaping, different agents, collision penalties, discrete actions, graph encoders, and parallel environments remain improvement experiments and should be run only after freezing the paper-mode configuration.
+
+## Five-seed local control study (2026-09-30)
+
+Completed five AlexNet-CONV seeds with 12 training placements and six retained deterministic evaluations per seed. DDPG also used 64 baseline samples (82 selectable candidates total). RS used 82 samples; SA/ASA used 82 proposals plus initialization. Mean best latency: trained DDPG 38.24062 µs, untrained control 38.46750 µs, RS 41.13328 µs, fixed SA 42.99555 µs, ASA 42.32438 µs, sequential 42.12586 µs. Training beat its untrained control in two seeds, tied two, and lost one. Its mean benefit was only 0.22687 µs (about 0.59%); the exploratory paired 95% interval [-0.33818, 0.79193] µs includes zero. The initial policy and collision repair already yield strong layouts, so gains over RS/SA do not establish learning. Short annealing budgets and temperature calibration limit that comparison. See `runs/local-cpu-5seed-2026-09-30/STUDY.md` and raw reports. Next priority: improve and validate learning against the untrained control before scaling the training budget.

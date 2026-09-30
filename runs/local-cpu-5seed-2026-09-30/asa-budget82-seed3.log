@@ -1,0 +1,39 @@
+>> CPU mode: 2 PyTorch intra-op thread(s), 1 inter-op thread(s)
+>> Seeded RNGs with --seed 3 (random search baseline B and DDPG exploration noise are now reproducible for this run)
+
+>> Extracting alexnet Workload via torch.fx graph tracing...
+>> Per-layer VMM/VVA breakdown (alexnet, Figure-6 aggregate targets with explicit reconstructed per-layer grids, extracted via torch.fx true computational-graph tracing):
+   Layer                          Type        Cin   Cout    M    N    VMM   VVA
+   features.0                     conv          3     64    7    2     14     7
+   features.3                     conv         64    192   12    4     48    12
+   features.6                     conv        192    384    6    4     24     6
+   features.8                     conv        384    256    6    6     36     6
+   features.10                    conv        256    256    5    5     25     5
+   classifier.1                   linear     9216   4096   16   36    576    16
+   classifier.4                   linear     4096   4096   16   16    256    16
+   classifier.6                   linear     4096   1000    4   16     64     4
+>> Paper-target partitioning: CONV=183, FC=932 -> 183 logic cores (VMM+VVA)
+
+>> Paper-pipeline reconstruction: 4 block(s), XY routing and shared-link contention; GRS gateway/block count are assumptions
+>> Masked CONV region: chips [0], 256 physical cores for 183 logic cores (minimal whole-chip reconstruction)
+System : MultiChipTopology(4x4 chips, 16x16 cores/chip, total=4096 cores, topology=mesh, routing=paper_xy)
+Tasks  : 183
+Algo   : asa
+--------------------------------------------------
+>> Objective sensitivity (64 random placements): min=4.17004688e-05, median=4.42528125e-05, max=4.94520312e-05, relative span=17.517%
+>> Best sampled bottleneck: compute=3.5745e-05, communication=5.95546875e-06, compute fraction=85.718%, headroom above compute floor=14.282%
+
+Final placement cost : 4.17005e-05
+  On-chip  comm cost : 0.000315629
+  Off-chip comm cost : 0
+  Chip placement     : [121 210 139  33  94 166 101 255 155 148  16 103  88 232 214 120  66 147
+  59  49  41 240 138 241 140 248  90 163 220  38 237 115 151 222 133  99
+ 189 243 171 213 245  40 194   6  10  77 199   7  68 230 152 198 227 182
+ 201 109 229 186 100 113  34  93  24   9 195 126  55 239  53 192 247  83
+ 107 129 168 146  63 136 149 104 159 225  86 208  71  57 183 226 218 180
+ 145  26  54 224 177 207  72  31 215 123 156  22 221  17 105 223   5  98
+ 200 106  37 190 144  96  84 111 202  60 217  79   1  19  48   8  50 176
+  74  67 254 153 175 216 122 242  36 160 162  46  69 117  58 124 188  11
+  82 118  76  30 231  13 233  89  64 191 219  81  92  91 165 150 209 252
+ 196 142  70 170 131 179 253  43   2 116 244 246  80 250 187  42 135  45
+ 197  35  62]

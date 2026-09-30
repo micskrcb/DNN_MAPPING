@@ -1,0 +1,40 @@
+>> CPU mode: 2 PyTorch intra-op thread(s), 1 inter-op thread(s)
+>> Seeded RNGs with --seed 1 (random search baseline B and DDPG exploration noise are now reproducible for this run)
+
+>> Extracting alexnet Workload via torch.fx graph tracing...
+>> Per-layer VMM/VVA breakdown (alexnet, Figure-6 aggregate targets with explicit reconstructed per-layer grids, extracted via torch.fx true computational-graph tracing):
+   Layer                          Type        Cin   Cout    M    N    VMM   VVA
+   features.0                     conv          3     64    7    2     14     7
+   features.3                     conv         64    192   12    4     48    12
+   features.6                     conv        192    384    6    4     24     6
+   features.8                     conv        384    256    6    6     36     6
+   features.10                    conv        256    256    5    5     25     5
+   classifier.1                   linear     9216   4096   16   36    576    16
+   classifier.4                   linear     4096   4096   16   16    256    16
+   classifier.6                   linear     4096   1000    4   16     64     4
+>> Paper-target partitioning: CONV=183, FC=932 -> 183 logic cores (VMM+VVA)
+
+>> Paper-pipeline reconstruction: 4 block(s), XY routing and shared-link contention; GRS gateway/block count are assumptions
+>> Masked CONV region: chips [0], 256 physical cores for 183 logic cores (minimal whole-chip reconstruction)
+System : MultiChipTopology(4x4 chips, 16x16 cores/chip, total=4096 cores, topology=mesh, routing=paper_xy)
+Tasks  : 183
+Algo   : random
+--------------------------------------------------
+>> Objective sensitivity (64 random placements): min=4.21258594e-05, median=4.42528125e-05, max=4.72305469e-05, relative span=11.535%
+>> Best sampled bottleneck: compute=3.5745e-05, communication=6.38085938e-06, compute fraction=84.853%, headroom above compute floor=15.147%
+[RS] WARNING: n_trials=82 is far below the paper's 1,000,000-sample search budget (Sec 4.2). Results are not directly comparable to the paper's reported RS baseline until run at closer to that scale.
+
+Final placement cost : 4.04243e-05
+  On-chip  comm cost : 0.00031369
+  Off-chip comm cost : 0
+  Chip placement     : [ 85 110  57 189 220  93  99 194 179  25 178 120 156 227 102  83 202 167
+ 184 251 191 232 163 174  58  14  19  67 188 230 146  54 254 224 140 159
+ 187  50   9  16  78 164 193  17 236   0 135 170 207   6 192 173  37 115
+  40  12 233  11 238 196  61 253 218 221   7 239  62 108 231 165 203 250
+ 226 134 205  91 111   8 180   2  56 122 225 103  55 244  71  43  94 166
+  74  27   1 149 182 139 241 142 100 152 145 150  28  33  41 169  92 198
+  72  49  98 229 117 200  39 158 141  35 116  44  38 136 138  80  60  31
+ 162  64 153 206  22  15 126  79 114  97  89  30 123 209  18  69 210  88
+  84 125 219   4 171 199 124  23  10   5 157 211 168 195  77 248  34 155
+ 154 181  65  87 237 215 130 127 160  70  52 197 176 185  73  82 175 246
+ 213 190 223]

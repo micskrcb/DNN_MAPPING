@@ -475,3 +475,61 @@ A successful run proves that the program executed; it does not prove that DDPG l
 Report CONV and FC separately. Normalize latency to BS as in the paper, include seed mean/sample standard deviation/minimum/maximum, and examine hop counts and link loads. Do not compare old proxy scores, full-frame scores, and paper-pipeline seconds as though they were the same metric.
 
 See `PROJECT_STATE.md` for validated evidence and `NEXT_STEPS.md` for the work still required before claiming paper-comparable results.
+
+## Bounded local CPU study (September 2026)
+
+After the CPU setup above, this runs five small AlexNet CONV diagnostics:
+
+```bash
+source .venv/bin/activate
+mkdir -p runs/local-study
+for SEED in 0 1 2 3 4; do
+  python src/run_multi_chip.py \
+    --algo ddpg --device cpu --cpu_threads 2 --cpu_interop_threads 1 \
+    --use_cnn --model alexnet --partition_mode paper_targets \
+    --workload_region conv --timing_model paper_pipeline --routing_model paper_xy \
+    --chips_x 4 --chips_y 4 --rows 16 --cols 16 \
+    --agent_arch paper_cnn --reward_mode potential \
+    --epochs 12 --placements_per_epoch 1 --baseline_trials 64 \
+    --batch_z 3 --train_every 10 --exploration_decay_placements 1000 \
+    --diagnostics_every 2 --retain_deterministic_candidates \
+    --checkpoint_every 2 --sensitivity_trials 64 --seed "$SEED" \
+    --save_checkpoint "runs/local-study/ddpg-seed${SEED}.pt" \
+    --diagnostics "runs/local-study/ddpg-seed${SEED}.jsonl" \
+    --report "runs/local-study/ddpg-seed${SEED}.json"
+done
+```
+
+Start with one job and two CPU threads. More threads or simultaneous CNN jobs
+can be slower; benchmark on the actual machine before increasing either.
+This command starts fresh. To continue an interrupted seed, run its command
+with `--load_checkpoint runs/local-study/ddpg-seedN.pt`, retaining the same
+exploration horizon and using a new diagnostics filename. Replay is not saved,
+so resumed runs are not equivalent to uninterrupted experiments. Checkpoints
+from before deterministic-retention accounting are incompatible with this code.
+
+Each uninterrupted seed evaluates 12 training placements, six deterministic
+rollouts, and 64 reward-baseline samples: **82 selectable candidates**, plus
+64 preflight samples used only to check sensitivity. Potential shaping and
+retention are optional project extensions. These very short runs assess
+repeatability and execution; they cannot establish convergence or reproduce
+the paper's benchmark results.
+
+For comparable small search baselines, run `--algo random --iters 82` or
+`--algo sa --iters 82` / `--algo asa --iters 82` with the same workload,
+topology, seed, and preflight settings. SA and ASA additionally evaluate one
+initial placement (83 candidates including initialization). ASA's 32
+calibration proposals are included in its 82 proposals. Record this accounting
+instead of calling the experiments exactly budget-matched. DDPG's
+`total_candidate_evaluations` excludes its 64 reward-baseline samples.
+
+An untrained-policy control is essential: repeat the same bounded command with
+`--train_every 100000000`, fresh output names, and no checkpoint loading.
+With only 732 environment steps, this performs zero optimizer updates while
+keeping exploration and deterministic evaluation. Compare its best layouts to
+the trained policy before attributing an advantage over RS/SA to learning.
+
+Completed results and per-seed settings are in
+[runs/local-cpu-5seed-2026-09-30/STUDY.md](runs/local-cpu-5seed-2026-09-30/STUDY.md).
+The trained mean was 38.24 µs versus 38.47 µs untrained; this short study does
+not establish a reliable learning advantage.

@@ -1,0 +1,39 @@
+>> CPU mode: 2 PyTorch intra-op thread(s), 1 inter-op thread(s)
+>> Seeded RNGs with --seed 1 (random search baseline B and DDPG exploration noise are now reproducible for this run)
+
+>> Extracting alexnet Workload via torch.fx graph tracing...
+>> Per-layer VMM/VVA breakdown (alexnet, Figure-6 aggregate targets with explicit reconstructed per-layer grids, extracted via torch.fx true computational-graph tracing):
+   Layer                          Type        Cin   Cout    M    N    VMM   VVA
+   features.0                     conv          3     64    7    2     14     7
+   features.3                     conv         64    192   12    4     48    12
+   features.6                     conv        192    384    6    4     24     6
+   features.8                     conv        384    256    6    6     36     6
+   features.10                    conv        256    256    5    5     25     5
+   classifier.1                   linear     9216   4096   16   36    576    16
+   classifier.4                   linear     4096   4096   16   16    256    16
+   classifier.6                   linear     4096   1000    4   16     64     4
+>> Paper-target partitioning: CONV=183, FC=932 -> 183 logic cores (VMM+VVA)
+
+>> Paper-pipeline reconstruction: 4 block(s), XY routing and shared-link contention; GRS gateway/block count are assumptions
+>> Masked CONV region: chips [0], 256 physical cores for 183 logic cores (minimal whole-chip reconstruction)
+System : MultiChipTopology(4x4 chips, 16x16 cores/chip, total=4096 cores, topology=mesh, routing=paper_xy)
+Tasks  : 183
+Algo   : asa
+--------------------------------------------------
+>> Objective sensitivity (64 random placements): min=4.21258594e-05, median=4.42528125e-05, max=4.72305469e-05, relative span=11.535%
+>> Best sampled bottleneck: compute=3.5745e-05, communication=6.38085938e-06, compute fraction=84.853%, headroom above compute floor=15.147%
+
+Final placement cost : 4.3402e-05
+  On-chip  comm cost : 0.000325508
+  Off-chip comm cost : 0
+  Chip placement     : [ 68 145 151  60 138  18  89  30 126  92 115 120  48  97 201  43  24 124
+   7 236 213 239 110 155  79 196 180  25 114  19 184 252   5 216  99  81
+ 237 127   6 243 179  51 242  57  55 108 185 219 135  56 231 112 247 111
+ 161 234  17  16 206 246 249  74 218 106 142 139 178  47 140 209  75 248
+  85 182 128 199  65 171 166 119  72 150  52 195 100 174   8 122  96 103
+ 192  44  93  59 164  22 194 130  27  41 133  34  94 125 208 244  11  78
+ 154 101 146 181 223   3   2 215 210 255 131 200  90 224 226   1  98  33
+ 227 109  14  61 141  46 212  70 189 170 117 172 167 104  45 240 190 229
+ 123  88 228 147 148  42 143  76 191 102  64 220 160 168 230  23 149 241
+  32   4  86   9  10 214 175 132  35  31 251 198 144  62 113  37 169  21
+  20 163  67]
