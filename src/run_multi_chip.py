@@ -708,6 +708,12 @@ if HAS_TORCH:
             dones = torch.as_tensor(dones, dtype=torch.float32,
                                     device=self.device).unsqueeze(1)
 
+            # Target values must use fixed running statistics, not depend on
+            # the other transitions sampled into the minibatch.
+            self.actor_target.eval()
+            self.critic_target.eval()
+            self.critic.train()
+            self.actor.train()
             # Critic Update
             with torch.no_grad():
                 next_actions = self.actor_target(next_states)
@@ -721,18 +727,31 @@ if HAS_TORCH:
             critic_loss.backward()
             self.critic_optimizer.step()
 
+            # Evaluate the critic without updating its BatchNorm statistics
+            # or accumulating critic gradients during the actor-only step.
+            self.critic.eval()
+            self.critic.requires_grad_(False)
             # Actor Update
             actor_loss = -self.critic(states, self.actor(states)).mean()
 
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
             self.actor_optimizer.step()
+            self.critic.requires_grad_(True)
+            self.critic.train()
 
             # Soft Update Targets
             for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
                 target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
             for param, target_param in zip(self.critic.parameters(), self.critic_target.parameters()):
                 target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            # BatchNorm buffers are state too; synchronize running means,
+            # variances and counters with the online models.
+            with torch.no_grad():
+                for online, target in ((self.actor, self.actor_target),
+                                       (self.critic, self.critic_target)):
+                    for source, destination in zip(online.buffers(), target.buffers()):
+                        destination.copy_(source)
             return {"actor_loss": float(actor_loss.detach().cpu()),
                     "critic_loss": float(critic_loss.detach().cpu())}
 
@@ -1032,7 +1051,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
                            batch_z, env.timing_units, agent_arch, reward_mode,
                            reward_scale, exploration_decay_placements,
                            retain_deterministic_candidates,
-                           "chip-major-v6-retained-deterministic")).encode())
+                           "chip-major-v7-target-normalization")).encode())
     fingerprint = signature.hexdigest()
     # Reject old or incompatible checkpoints, including changed objective units.
     # instead of starting fresh -- restores the trained networks, optimizer

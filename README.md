@@ -533,3 +533,22 @@ Completed results and per-seed settings are in
 [runs/local-cpu-5seed-2026-09-30/STUDY.md](runs/local-cpu-5seed-2026-09-30/STUDY.md).
 The trained mean was 38.24 µs versus 38.47 µs untrained; this short study does
 not establish a reliable learning advantage.
+
+## Target-network normalization fix (September 2026)
+
+`paper_cnn` uses BatchNorm. The DDPG target actor and critic now stay in
+evaluation mode when calculating the Bellman target, so a target value does not
+change merely because different transitions share its minibatch. Target
+BatchNorm buffers are synchronized with their online networks after each
+update, and the critic's BatchNorm statistics are not changed during the
+actor-only update. This is a correctness and stability repair, not a change to
+the paper's stated hyperparameters.
+
+A matched five-seed, 12-placement CPU diagnostic produced a mean best latency
+of **38.10 µs**, compared with **38.24 µs** before the repair (0.14 µs, or
+0.37%, lower). Among the four seeds run with the same two-thread setting, three
+improved and one regressed. The sample is far too small to claim convergence,
+but the fix removes a definite source of target noise. Old DDPG checkpoints are
+intentionally incompatible; start a new checkpoint after pulling this revision.
+The reports and exact command are in
+[runs/local-cpu-batchnorm-2026-09-30/STUDY.md](runs/local-cpu-batchnorm-2026-09-30/STUDY.md).

@@ -372,6 +372,34 @@ class WorkloadTests(unittest.TestCase):
         self.assertEqual(len(timed_labels), len(operations))
         self.assertEqual(len(operations), len(kinds))
 
+    def test_target_batchnorm_is_stable_and_synchronized(self):
+        import torch
+        torch.set_num_threads(2)
+        agent = rm.DDPGAgent(19, 2, device="cpu", agent_arch="paper_cnn",
+                             rows=4, cols=4, num_tasks=3)
+        replay = rm.ReplayBuffer(64)
+        rng = np.random.default_rng(42)
+        for _ in range(64):
+            replay.add(rng.normal(size=19).astype(np.float32),
+                       np.zeros(2, dtype=np.float32), 0.2,
+                       rng.normal(size=19).astype(np.float32), False)
+        agent.train(replay)
+        self.assertFalse(agent.actor_target.training)
+        self.assertFalse(agent.critic_target.training)
+        # The critic sees one statistics update per replay batch, not another
+        # update during actor optimization.
+        self.assertEqual(agent.critic.bn1.num_batches_tracked.item(), 1)
+        for online, target in ((agent.actor, agent.actor_target),
+                               (agent.critic, agent.critic_target)):
+            for source, destination in zip(online.buffers(), target.buffers()):
+                torch.testing.assert_close(source, destination)
+        sample = torch.randn(1, 19)
+        with torch.no_grad():
+            alone = agent.actor_target(sample)
+            batched = agent.actor_target(torch.cat([sample, torch.randn(7, 19)]))[:1]
+        torch.testing.assert_close(alone, batched, atol=1e-6, rtol=1e-5)
+        self.assertTrue(all(p.requires_grad for p in agent.critic.parameters()))
+
     def test_training_update_and_device(self):
         import torch
         torch.set_num_threads(2)
