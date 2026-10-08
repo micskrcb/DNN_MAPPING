@@ -478,6 +478,20 @@ class WorkloadTests(unittest.TestCase):
         self.assertTrue(np.array_equal(demonstrations[0][0], state))
         self.assertTrue(np.array_equal(demonstrations[1][0], state + 1))
 
+    def test_guided_replay_has_an_independent_random_stream(self):
+        np.random.seed(193)
+        expected = np.random.random(4)
+        np.random.seed(193)
+        replay = rm.GuidedReplayBuffer(capacity=8, seed=7)
+        for index in range(4):
+            replay.add(np.array([index], dtype=np.float32),
+                       np.array([index], dtype=np.float32), float(index),
+                       is_demo=index == 0)
+        for _ in range(10):
+            replay.sample(4)
+        actual = np.random.random(4)
+        np.testing.assert_array_equal(actual, expected)
+
     def test_cnn_agent_spatial_state_and_update(self):
         import torch
         torch.set_num_threads(2)

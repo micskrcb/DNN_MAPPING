@@ -39,6 +39,10 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
 - `RESEARCH_FINDINGS.md` audits the failed Kaggle run, Gemini's findings,
   primary literature, forum leads, implemented repairs, and the staged
   learning-validation plan.
+- `DDPG_REFERENCE_AUDIT.md` compares this implementation with OpenAI Spinning
+  Up, Stable Baselines3, TD3, Wolpertinger, and DDPGfD reference algorithms.
+- `scripts/run_kaggle_guided_ablation.sh` runs reproducible trained/control
+  Kaggle experiments and packages their reports.
 - `prev version readmes/` preserves earlier README snapshots.
 
 The older single-chip PPO/GCN programs and `run_multi_chip_fast.py` are not part of the validated paper reproduction path.
@@ -529,6 +533,25 @@ to establish learning.
 
 The evidence and decision rules behind this experiment are documented in
 [RESEARCH_FINDINGS.md](RESEARCH_FINDINGS.md).
+
+The implementation comparison with maintained public DDPG code is documented
+in [DDPG_REFERENCE_AUDIT.md](DDPG_REFERENCE_AUDIT.md). The audit also found and
+fixed shared replay/exploration randomness: trained and no-learning conditions
+now use identical seeded action randomness while replay sampling has an
+independent stream.
+
+On Kaggle, the following repository script runs a paired one-seed check and
+creates `runs/kaggle-guided-short.zip`:
+
+```bash
+bash scripts/run_kaggle_guided_ablation.sh short
+```
+
+For the five-seed follow-up, use:
+
+```bash
+bash scripts/run_kaggle_guided_ablation.sh extensive
+```
 
 ## Interpreting results
 

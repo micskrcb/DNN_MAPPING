@@ -203,6 +203,8 @@ The separately labelled `--algo ddpg_guided` now implements:
 - deterministic zero-noise evaluation and explicit evaluation accounting;
 - initial uniformly random legal placements to broaden replay support before
   relying on actor proposals;
+- independent seeded action and replay random streams, so learning does not
+  change the random exploration sequence used by its paired control;
 - `--guided_disable_learning`, which supplies a matched control with the same
   environment, demonstration generation, legal selection, exploration schedule,
   and candidate accounting but no pretraining or gradient updates;
@@ -265,3 +267,7 @@ and comparison against masked PPO or another modern discrete placement policy.
 Until those experiments exist, the correct statement is that the implementation
 is internally consistent and ready for learning validation—not that it has
 already reproduced the paper's reported improvements.
+
+The detailed source-code comparison with maintained public DDPG
+implementations and the remaining algorithmic differences are recorded in
+[`DDPG_REFERENCE_AUDIT.md`](DDPG_REFERENCE_AUDIT.md).

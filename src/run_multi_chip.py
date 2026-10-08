@@ -645,13 +645,19 @@ if HAS_TORCH:
         sampled explicitly so that a single ASA trajectory cannot disappear
         in a much larger online replay buffer.
         """
-        def __init__(self, capacity=100000, demo_fraction=0.25, alpha=0.6):
+        def __init__(self, capacity=100000, demo_fraction=0.25, alpha=0.6,
+                     seed=None):
             self.buffer = []
             self.priorities = np.zeros(capacity, dtype=np.float64)
             self.ptr = 0
             self.capacity = capacity
             self.demo_fraction = demo_fraction
             self.alpha = alpha
+            # Keep replay sampling separate from environment exploration.
+            # Training performs many more replay draws than a no-learning
+            # control; sharing NumPy's global RNG would therefore give the
+            # two conditions different exploration despite the same seed.
+            self.rng = np.random.default_rng(seed)
 
         def add(self, state, action, return_target, is_demo=False, priority=None):
             entry = (np.asarray(state, dtype=np.float32),
@@ -685,13 +691,14 @@ if HAS_TORCH:
             demo_count = min(len(demo_indices), int(round(batch_size * self.demo_fraction)))
             chosen = []
             if demo_count:
-                chosen.extend(np.random.choice(demo_indices, demo_count, replace=True).tolist())
+                chosen.extend(self.rng.choice(
+                    demo_indices, demo_count, replace=True).tolist())
             remaining = batch_size - len(chosen)
             scaled = np.maximum(self.priorities[:size], 1e-6) ** self.alpha
             probabilities = scaled / scaled.sum()
             if remaining:
-                chosen.extend(np.random.choice(size, remaining, replace=True,
-                                               p=probabilities).tolist())
+                chosen.extend(self.rng.choice(
+                    size, remaining, replace=True, p=probabilities).tolist())
             indices = np.asarray(chosen, dtype=np.int64)
             batch = [self.buffer[index] for index in indices]
             states, actions, returns, demos = map(np.asarray, zip(*batch))
@@ -869,7 +876,7 @@ if HAS_TORCH:
                 "actor_grad_norm": actor_grad_value,
             }
 
-        def select_action(self, state, noise_scale=0.1, explore=True):
+        def select_action(self, state, noise_scale=0.1, explore=True, rng=None):
             state = torch.as_tensor(state, dtype=torch.float32,
                                     device=self.device).unsqueeze(0)
             self.actor.eval()
@@ -880,7 +887,9 @@ if HAS_TORCH:
                 return action
             # Add exploration noise.
             # Ornstein-Uhlenbeck exploration used by the paper (Sec. 3.2).
-            self.ou_state += 0.15 * (0.0 - self.ou_state) + 0.2 * np.random.randn(self.action_dim)
+            noise = (np.random.randn(self.action_dim) if rng is None else
+                     rng.standard_normal(self.action_dim))
+            self.ou_state += 0.15 * (0.0 - self.ou_state) + 0.2 * noise
             action += noise_scale * self.ou_state
             return np.clip(action, -1.0, 1.0)
 
@@ -1951,7 +1960,7 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
                     bc_decay_placements: int = 2000,
                     retain_deterministic_candidates: bool = True,
                     asa_options=None, random_start_placements: int = 100,
-                    disable_learning: bool = False) -> float:
+                    disable_learning: bool = False, seed: int = None) -> float:
     """Sample-efficient DDPG variant for the discrete placement interface.
 
     This experimental mode keeps a deterministic continuous actor but fixes
@@ -1987,7 +1996,7 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
                            agent_arch, reward_scale, exploration_decay_placements,
                            train_every, top_k, demo_iterations, pretrain_updates,
                            bc_decay_placements, random_start_placements,
-                           disable_learning, asa_fingerprint_options,
+                           disable_learning, seed, asa_fingerprint_options,
                            "ddpg-guided-v1")).encode())
     fingerprint = signature.hexdigest()
     checkpoint = None
@@ -2014,7 +2023,10 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
         state_dim=state_dim, action_dim=action_dim, device=device,
         agent_arch=agent_arch, rows=mapper.state_rows, cols=mapper.state_cols,
         num_tasks=env.num_tasks, stable=True, lr_critic=3e-4)
-    replay_buffer = GuidedReplayBuffer()
+    stream_sequence = np.random.SeedSequence(seed)
+    action_sequence, replay_sequence = stream_sequence.spawn(2)
+    action_rng = np.random.default_rng(action_sequence)
+    replay_buffer = GuidedReplayBuffer(seed=replay_sequence)
     reward_normalizer = max(mapper._potential_normalizer, np.finfo(float).eps)
     print(f"[GUIDED] Compact state: {mapper.state_rows}x{mapper.state_cols}; "
           f"legal top-k={top_k}; twin critics; episode-return replay")
@@ -2056,7 +2068,7 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
                 free = np.asarray(
                     [core for core in mapper._allowed_grid
                      if int(core) not in mapper._occupied], dtype=np.int32)
-                selected_cores = np.random.choice(free, n_this, replace=False)
+                selected_cores = action_rng.choice(free, n_this, replace=False)
                 encoded = []
                 for core in selected_cores:
                     encoded.extend(mapper._grid_core_to_action_pair(int(core)))
@@ -2065,7 +2077,8 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
                 proto = executed_action = np.asarray(encoded, dtype=np.float32)
             else:
                 proto = agent.select_action(
-                    state, noise_scale=noise_scale, explore=explore)
+                    state, noise_scale=noise_scale, explore=explore,
+                    rng=action_rng if explore else None)
                 candidates, core_batches = mapper.legal_action_candidates(
                     proto, top_k=top_k)
                 scores = agent.score_actions(state, candidates)
@@ -2112,6 +2125,10 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
         torch.set_rng_state(checkpoint["torch_state"])
         if agent.device.type == "cuda" and checkpoint.get("cuda_state") is not None:
             torch.cuda.set_rng_state_all(checkpoint["cuda_state"])
+        if checkpoint.get("guided_action_rng_state") is not None:
+            action_rng.bit_generator.state = checkpoint["guided_action_rng_state"]
+        if checkpoint.get("guided_replay_rng_state") is not None:
+            replay_buffer.rng.bit_generator.state = checkpoint["guided_replay_rng_state"]
         best_cost = checkpoint["best_cost"]
         best_placement = checkpoint["best_placement"]
         best_grid = checkpoint.get("best_grid")
@@ -2157,6 +2174,8 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
             "fingerprint": fingerprint,
             "random_state": random.getstate(),
             "numpy_state": np.random.get_state(),
+            "guided_action_rng_state": action_rng.bit_generator.state,
+            "guided_replay_rng_state": replay_buffer.rng.bit_generator.state,
             "torch_state": torch.get_rng_state(),
             "cuda_state": (torch.cuda.get_rng_state_all()
                            if agent.device.type == "cuda" else None),
@@ -2278,6 +2297,7 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
             "bc_decay_placements": bc_decay_placements,
             "random_start_placements": random_start_placements,
             "learning_enabled": not disable_learning,
+            "random_seed": seed,
             "compact_state_shape": [mapper.state_rows, mapper.state_cols],
             "replay_target": "discounted_complete_episode_return",
             "critic": "twin_huber_clipped_gradient",
@@ -2927,7 +2947,8 @@ def main():
             retain_deterministic_candidates=True,
             asa_options=asa_options,
             random_start_placements=args.guided_random_start_placements,
-            disable_learning=args.guided_disable_learning)
+            disable_learning=args.guided_disable_learning,
+            seed=args.seed)
         algorithm_metadata.update({"declared_epochs": args.epochs,
                                    "placements_per_epoch": args.placements_per_epoch,
                                    "complete_placement_evaluations": complete_placements})

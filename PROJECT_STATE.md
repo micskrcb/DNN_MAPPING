@@ -20,7 +20,7 @@ The maintained development branch is `cpu` in `micskrcb/DNN_MAPPING`; it is a de
 - Figure 9 `paper_cnn`, sparse terminal reward, paper learning rates/gamma/batch size, batched actions, coordinate conversion, and Manhattan collision repair.
 - Absolute-placement OU exploration scheduling that remains stable across cumulative checkpoint stages.
 - Sequential BS, random search, fixed simulated annealing, adaptive simulated annealing, DDPG, and DDPG→ASA.
-- Experimental guided DDPG with ASA demonstrations, permanent demonstration replay, collision-free legal projection, dense normalized rewards, a uniform legal warm-up, deterministic candidate retention, and a matched no-learning control.
+- Experimental guided DDPG with ASA demonstrations, permanent demonstration replay, collision-free legal projection, normalized complete-episode return targets, a uniform legal warm-up, deterministic candidate retention, and a matched no-learning control.
 - Explicit placement accounting: DDPG epochs × placements/epoch, separate reward-normalizer trials, and independently configurable RS/SA budgets.
 - Five-seed orchestration, periodic JSONL diagnostics, checkpoints, JSON reports, BS-normalized summaries, hop counts, link-load summaries, and a placement-sensitivity preflight.
 - One command that orchestrates separate CONV and FC paper-mode suites.
@@ -43,7 +43,7 @@ Batch-one latency can be compared after validation. True large-batch throughput 
 
 ## Evidence completed locally
 
-- The corrected `cpu` head passes `src/test_multi_chip.py`, all 24 reconciliation tests with no skips, and the bounded CPU device validator under torch 2.14.0+cpu and torchvision 0.29.0+cpu. The validator completed 57 measured optimizer updates and a checkpoint round trip.
+- The corrected `cpu` head passes `src/test_multi_chip.py`, all 25 reconciliation tests with no skips, and the bounded CPU device validator under torch 2.14.0+cpu and torchvision 0.29.0+cpu. The validator completed 57 measured optimizer updates and a checkpoint round trip.
 - Paper-target extraction returns all six exact CONV/FC counts.
 - Hand-calculated XY gateway and shared-link contention tests pass.
 - Masked-region tests confirm that baselines and the mapper cannot use other cores.
@@ -67,7 +67,9 @@ Earlier 1,445-task AlexNet logs, decimal-valued junior runs, and old proxy/full-
 
 The 3,000-placement AlexNet-CONV Kaggle run executed correctly but did not demonstrate policy learning. The trained deterministic policy ended at 37.6356 microseconds while the matched untrained policy was 37.4466 microseconds. Approximately 176 of 183 actions required collision repair, the deterministic policy used only a few unique intended positions, and critic loss reached roughly `1.48e12`. The run's best candidate therefore came from search/exploration rather than a learned deterministic policy.
 
-This diagnosis changed the immediate plan. The experimental `ddpg_guided` mode now seeds replay with ASA transitions that are never overwritten, projects every action to a legal unused core before evaluation, uses dense normalized incremental rewards, retains deterministic candidates, and starts with configurable uniform legal placements to diversify replay. `--guided_disable_learning` runs the identical data-generation path without gradient updates, providing the control needed to establish whether training contributes anything.
+This diagnosis changed the immediate plan. The experimental `ddpg_guided` mode now seeds replay with ASA transitions that are never overwritten, projects every action to a legal unused core before evaluation, assigns normalized discounted complete-episode return targets to all trajectory steps, retains deterministic candidates, and starts with configurable uniform legal placements to diversify replay. `--guided_disable_learning` runs the identical data-generation path without gradient updates, providing the control needed to establish whether training contributes anything.
+
+A comparison with OpenAI Spinning Up, Stable Baselines3, TD3, Wolpertinger, and DDPGfD found that the trained and no-learning conditions still shared one global NumPy stream. Replay sampling in the trained run therefore changed its later exploration samples. Guided replay and action selection now use independent seeded streams, and a paired synthetic integration test confirms identical random-warm-up costs, zero collision repairs, and finite training diagnostics. `DDPG_REFERENCE_AUDIT.md` records the full comparison and remaining differences.
 
 The original paper and later work do not make continuous DDPG an obviously suitable choice for this discrete placement problem. DDPG can deadlock under sparse deterministic rewards; Wolpertinger-style methods use a continuous proto-action only to retrieve discrete candidates; invalid-action masking and later masked placement policies enforce legality directly. If guided DDPG does not beat its matched control across seeds, the next agent should be masked categorical PPO rather than further tuning an unstable continuous actor. See [`RESEARCH_FINDINGS.md`](RESEARCH_FINDINGS.md) for the evidence, Gemini review, sources, and decision gates.
 
