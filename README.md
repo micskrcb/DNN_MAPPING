@@ -479,7 +479,7 @@ Guided DDPG changes the learning path while leaving `--algo ddpg` available as t
 - the environment executes that exact legal batch and replay stores the same action;
 - an ASA placement supplies a valid demonstration for behavior cloning;
 - every step receives a discounted complete-placement return instead of waiting for a one-step terminal sample to propagate through replay;
-- prioritized replay samples informative and demonstration transitions;
+- prioritized replay samples informative transitions and keeps demonstration transitions permanently;
 - Huber critic loss, delayed actor updates, gradient clipping, and conservative twin-critic scoring reduce divergence;
 - the state contains only the active placement region, so AlexNet CONV uses a 16×16 map instead of padding one active chip to the full 64×64 machine.
 

@@ -464,6 +464,20 @@ class WorkloadTests(unittest.TestCase):
         self.assertTrue(np.isfinite(second["critic_grad_norm"]))
         self.assertFalse(torch.equal(before, next(agent.actor.parameters()).detach()))
 
+    def test_guided_replay_keeps_demonstrations_when_capacity_wraps(self):
+        replay = rm.GuidedReplayBuffer(capacity=5, demo_fraction=0.4)
+        state = np.zeros(4, dtype=np.float32)
+        action = np.zeros(2, dtype=np.float32)
+        replay.add(state, action, 0.1, is_demo=True)
+        replay.add(state + 1, action + 1, 0.2, is_demo=True)
+        for index in range(20):
+            replay.add(state + index + 2, action, -0.1, is_demo=False)
+        demonstrations = [entry for entry in replay.buffer if entry[3]]
+        self.assertEqual(len(replay), 5)
+        self.assertEqual(len(demonstrations), 2)
+        self.assertTrue(np.array_equal(demonstrations[0][0], state))
+        self.assertTrue(np.array_equal(demonstrations[1][0], state + 1))
+
     def test_cnn_agent_spatial_state_and_update(self):
         import torch
         torch.set_num_threads(2)

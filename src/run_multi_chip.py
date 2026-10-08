@@ -660,6 +660,16 @@ if HAS_TORCH:
             if len(self.buffer) < self.capacity:
                 self.buffer.append(entry)
             else:
+                # DDPG-from-demonstrations keeps expert transitions in replay.
+                # Without this guard, a 100k buffer would erase the AlexNet
+                # demonstration around placement 1,638, while behavior cloning
+                # is still active by default through placement 2,000.
+                start = self.ptr
+                while self.buffer[self.ptr][3]:
+                    self.ptr = (self.ptr + 1) % self.capacity
+                    if self.ptr == start:
+                        raise RuntimeError(
+                            "guided replay is full of permanent demonstrations")
                 self.buffer[self.ptr] = entry
             if priority is None:
                 priority = self.priorities[:len(self.buffer)].max(initial=1.0)
