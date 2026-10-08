@@ -1,6 +1,6 @@
 # DNN Mapping with Reinforcement Learning
 
-This repository maps DNN computation tasks onto a multi-chip many-core accelerator using DDPG, guided DDPG, random search, fixed simulated annealing, adaptive simulated annealing (ASA), a DDPG→ASA hybrid, or the sequential baseline (BS). Its reproduction target is Wu et al., **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning**, ACM TODAES 2020 ([DOI 10.1145/3418498](https://doi.org/10.1145/3418498)).
+This repository maps DNN computation tasks onto a multi-chip many-core accelerator using DDPG, guided DDPG, masked categorical PPO, random search, fixed simulated annealing, adaptive simulated annealing (ASA), a DDPG→ASA hybrid, or the sequential baseline (BS). Its reproduction target is Wu et al., **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning**, ACM TODAES 2020 ([DOI 10.1145/3418498](https://doi.org/10.1145/3418498)).
 
 The `cpu` branch is the CPU-oriented continuation of the reconciled paper implementation. It is runnable and tested on CPU, explicitly controls PyTorch thread use, supports concurrent independent experiments, reduces diagnostic overhead, and uses exact affected-stage reevaluation for ASA. The paper does not publish its simulator or every parameter, so the code records reconstruction assumptions instead of claiming exact numerical reproduction.
 
@@ -16,6 +16,7 @@ The `cpu` branch is the CPU-oriented continuation of the reconciled paper implem
 | BS, RS, SA, and DDPG | Implemented |
 | Adaptive SA and DDPG→ASA | Implemented as research extensions with matched-budget support |
 | Guided DDPG | Implemented as an experimental learning repair using legal actions, ASA demonstrations, complete-episode returns, prioritized replay, and twin critics |
+| Masked PPO | Implemented as an experimental exact legal-action policy with a paired frozen control |
 | Objective sensitivity preflight | Implemented; flat paper-mode objectives stop before long optimization |
 | 30 placements/epoch and paper search budgets | Explicitly accounted for by the paper runner |
 | XY routing and link contention | Reconstructed and implemented |
@@ -27,7 +28,7 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
 
 ## Repository layout
 
-- `src/run_multi_chip.py` runs one BS, DDPG, guided-DDPG, random-search, SA, ASA, or DDPG→ASA experiment.
+- `src/run_multi_chip.py` runs one BS, DDPG, guided-DDPG, masked-PPO, random-search, SA, ASA, or DDPG→ASA experiment.
 - `src/run_multiseed_experiment.py` runs selected methods across seeds and can schedule independent CPU jobs concurrently.
 - `src/run_paper_experiment.py` runs separate CONV and FC paper-mode suites.
 - `src/compute_model.py` reconstructs partitions and converts work/traffic to physical units.
@@ -43,6 +44,8 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
   Up, Stable Baselines3, TD3, Wolpertinger, and DDPGfD reference algorithms.
 - `scripts/run_kaggle_guided_ablation.sh` runs reproducible trained/control
   Kaggle experiments and packages their reports.
+- `scripts/run_kaggle_masked_ppo_ablation.sh` runs the next paired masked-PPO
+  learning gate and packages its reports.
 - `prev version readmes/` preserves earlier README snapshots.
 
 The older single-chip PPO/GCN programs and `run_multi_chip_fast.py` are not part of the validated paper reproduction path.
@@ -562,6 +565,40 @@ second invocation skips pairs carrying a valid completion marker. It restarts
 an interrupted pair from the beginning because guided replay is not stored in
 the model checkpoint; silently resuming without replay would change the
 experiment.
+
+The extensive guided-DDPG run is now complete. Training lost all five paired
+late deterministic comparisons. The trained aggregate mean was 39.0857
+microseconds versus 38.7322 microseconds for the frozen control. Guided DDPG is
+therefore retained as a negative ablation rather than the recommended next run.
+
+## Masked PPO learning experiment
+
+`--algo ppo_masked` matches the actual decision: choose one unused physical
+core for the next logic core. Invalid actions receive zero probability before
+sampling, so the policy never needs collision repair. It uses PPO clipping,
+GAE, a value baseline, entropy regularization, gradient clipping, deterministic
+diagnostics, resumable model/optimizer checkpoints, and explicit evaluation
+accounting. This is an experimental improvement; it is not Wu et al.'s DDPG.
+
+Run the one-seed paired gate on a Kaggle GPU first:
+
+```bash
+bash scripts/run_kaggle_masked_ppo_ablation.sh short
+```
+
+The script runs 300 trained placements and 300 frozen-control placements, then
+creates `runs/kaggle-masked-ppo-short.zip`. It verifies that both conditions
+start from the same deterministic policy, reports zero collision repairs, and
+compares their late deterministic costs. Only if this gate is positive, run:
+
+```bash
+bash scripts/run_kaggle_masked_ppo_ablation.sh extensive
+```
+
+The extensive preset uses five paired seeds and 3,000 placements per condition.
+Both presets use the paper-style sparse terminal reward. With the fixed episode
+horizon, `gamma=1` and `GAE lambda=1` assign the complete-placement return to
+every placement decision without adding partial objective evaluations.
 
 ## Interpreting results
 

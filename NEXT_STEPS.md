@@ -25,7 +25,7 @@ Current paper targets:
 | VGG16 | 1,024 | 1,924 | 2,948 |
 | ResNet50 | 512 | 37 | 549 |
 
-## Gate 2: methods — paper mode complete; guided learning experiment implemented
+## Gate 2: methods — paper mode complete; guided DDPG rejected, masked PPO implemented
 
 - [x] BS in chip-major then core-major order.
 - [x] Figure 9 `paper_cnn` actor and critic.
@@ -38,16 +38,18 @@ Current paper targets:
 - [x] Record unpublished `z`, OU, replay, padding, LRN, and target-update choices as assumptions.
 - [x] Add an experimental guided DDPG mode with ASA demonstrations, permanent demonstration replay, collision-free legal action projection, normalized complete-episode return targets, and deterministic candidate retention.
 - [x] Add a matched `--guided_disable_learning` control and a uniform legal warm-up so policy learning can be separated from initialization and repair effects.
+- [x] Complete the five-seed guided-DDPG ablation: trained lost all five late deterministic comparisons, so this path is closed as a negative result.
+- [x] Add experimental masked categorical PPO with exact invalid-action masking and a matched frozen-policy control.
 - [ ] Run the paper-scale budgets on an available GPU and archive all manifests/logs.
 
 ## Gate 3: comparisons — pending GPU experiments
 
-1. The corrected short run passed its mechanics and stability checks but the trained policy was 8.03% worse than its control at 300 placements. Run `scripts/run_kaggle_guided_ablation.sh extensive` next: five paired seeds and 3,000 placements per condition. The runner archives after each seed pair, skips completed pairs on rerun, and deliberately restarts an interrupted pair because replay is not checkpointed.
-2. Run matched trained and `--guided_disable_learning` AlexNet-CONV jobs with identical seeds, budgets, demonstrations, warm-up, and evaluator settings. Independent action/replay random streams now make this a true paired-randomness comparison.
-3. Use at least five seeds and report paired deterministic-policy outcomes. Do not infer learning from the best candidate alone because demonstrations and search also contribute candidates.
+1. Run `scripts/run_kaggle_masked_ppo_ablation.sh short`. It compares 300 trained placements with an exactly matched frozen-policy control at seed 0 and creates a downloadable ZIP.
+2. Check zero repairs, matching initial-policy cost, finite losses, and late deterministic trained-versus-control cost. Do not scale a negative short result.
+3. If the short gate is positive, run the `extensive` preset for five paired seeds and 3,000 placements per condition. Require consistent paired improvement rather than one lucky best candidate.
 4. Inspect noisy/deterministic curves, critic/actor losses, unique intended positions, collision repairs, hop-distance reductions, and link loads. Require the trained policy to improve over the matched control consistently.
 5. Repeat the matched experiment on AlexNet-FC or VGG16-CONV. AlexNet-CONV has zero off-chip traffic in the minimum whole-chip mask and only about 13.7% communication headroom, so it is a useful sanity test but a weak final benchmark.
-6. If guided DDPG still fails, implement a masked categorical PPO baseline. The placement decision is discrete, and invalid-action masking enforces legal positions directly.
+6. Keep the completed guided-DDPG archive as a negative ablation; do not spend the paper-scale budget on it.
 7. Only after the learning gate passes, run AlexNet across at least five seeds plus BS, RS, SA, and ASA under matched complete-placement budgets.
 8. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
 9. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.

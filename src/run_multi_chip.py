@@ -1210,6 +1210,26 @@ class MultiChipCoreMapper:
             self._task_ptr += 1
         return self._reward_after_step()
 
+    def legal_action_mask(self) -> np.ndarray:
+        """Boolean mask over the compact list of allowed physical cores."""
+        mask = np.ones(len(self._allowed_grid), dtype=bool)
+        if self._occupied:
+            occupied = np.fromiter(self._occupied, dtype=np.int64,
+                                   count=len(self._occupied))
+            indices = np.searchsorted(self._allowed_grid, occupied)
+            mask[indices] = False
+        return mask
+
+    def step_masked(self, action_index: int):
+        """Execute one categorical legal-core action with no repair path."""
+        if self.batch_z != 1:
+            raise ValueError("masked categorical placement requires batch_z=1")
+        action_index = int(action_index)
+        mask = self.legal_action_mask()
+        if not 0 <= action_index < len(mask) or not mask[action_index]:
+            raise ValueError("masked policy selected an unavailable core")
+        return self.step_legal([int(self._allowed_grid[action_index])])
+
     def _place_one(self, target_x: float, target_y: float):
         """Place the task at self._task_ptr onto a core, given a single
         (target_x, target_y) intended position. PAPER IMPLEMENTATION (Sec
@@ -1343,6 +1363,385 @@ class MultiChipCoreMapper:
         local = (y % topo.rows_per_chip) * topo.cols_per_chip + x % topo.cols_per_chip
         p[valid] = chips * topo.cores_per_chip + local
         return p
+
+
+# ---------------------------------------------------------------------------
+# Experimental masked categorical PPO
+# ---------------------------------------------------------------------------
+
+if HAS_TORCH:
+    class MaskedPPOActorCritic(nn.Module):
+        """Small actor/value network over exact legal physical-core actions."""
+
+        def __init__(self, state_dim: int, action_dim: int, hidden_dim: int = 256):
+            super().__init__()
+            self.encoder = nn.Sequential(
+                nn.Linear(state_dim, hidden_dim), nn.Tanh(),
+                nn.Linear(hidden_dim, hidden_dim), nn.Tanh())
+            self.policy_head = nn.Linear(hidden_dim, action_dim)
+            self.value_head = nn.Linear(hidden_dim, 1)
+            for layer in self.encoder:
+                if isinstance(layer, nn.Linear):
+                    nn.init.orthogonal_(layer.weight, gain=math.sqrt(2.0))
+                    nn.init.zeros_(layer.bias)
+            nn.init.orthogonal_(self.policy_head.weight, gain=0.01)
+            nn.init.zeros_(self.policy_head.bias)
+            nn.init.orthogonal_(self.value_head.weight, gain=1.0)
+            nn.init.zeros_(self.value_head.bias)
+
+        def forward(self, states):
+            features = self.encoder(states)
+            return self.policy_head(features), self.value_head(features).squeeze(-1)
+
+        def distribution_and_value(self, states, masks):
+            logits, values = self(states)
+            masks = masks.to(dtype=torch.bool)
+            if not bool(torch.all(masks.any(dim=-1))):
+                raise ValueError("every masked categorical row needs a legal action")
+            masked_logits = logits.masked_fill(~masks, torch.finfo(logits.dtype).min)
+            return torch.distributions.Categorical(logits=masked_logits), values
+
+        def action_and_value(self, states, masks, deterministic=False, generator=None):
+            distribution, values = self.distribution_and_value(states, masks)
+            if deterministic:
+                actions = distribution.logits.argmax(dim=-1)
+            else:
+                actions = torch.multinomial(
+                    distribution.probs, 1, generator=generator).squeeze(-1)
+            return actions, distribution.log_prob(actions), distribution.entropy(), values
+
+
+def run_masked_ppo(env: MultiChipEnvironment, n_episodes: int = 500,
+                   baseline_trials: int = 1000, device: str = None,
+                   learning_rate: float = 3e-4, rollout_episodes: int = 10,
+                   update_epochs: int = 4, minibatch_size: int = 512,
+                   gamma: float = 0.98, gae_lambda: float = 0.95,
+                   clip_ratio: float = 0.2, entropy_coefficient: float = 0.01,
+                   value_coefficient: float = 0.5, max_grad_norm: float = 0.5,
+                   hidden_dim: int = 256, reward_mode: str = "potential",
+                   reward_scale: float = 1.0, diagnostics_every: int = 30,
+                   diagnostics_path: str = None, save_checkpoint: str = None,
+                   load_checkpoint: str = None, checkpoint_every: int = 100,
+                   disable_learning: bool = False, seed: int = None,
+                   run_metadata: dict = None) -> float:
+    """Train a legal-action PPO policy as an experimental DDPG alternative.
+
+    The next logic core is fixed by the workload order.  The policy therefore
+    selects one currently free physical core from ``env.allowed_cores``.  A
+    pre-softmax boolean mask makes illegal actions structurally impossible;
+    no collision-repair heuristic participates in the transition.
+    """
+    if not HAS_TORCH:
+        raise RuntimeError("masked PPO requires PyTorch")
+    if min(n_episodes, baseline_trials, rollout_episodes, update_epochs,
+           minibatch_size, hidden_dim, diagnostics_every, checkpoint_every) <= 0:
+        raise ValueError("masked PPO budgets and sizes must be positive")
+    if (not 0 < gamma <= 1 or not 0 <= gae_lambda <= 1 or
+            not 0 < clip_ratio < 1 or learning_rate <= 0 or
+            entropy_coefficient < 0 or value_coefficient < 0 or max_grad_norm <= 0):
+        raise ValueError("invalid masked PPO hyperparameters")
+    if device == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CUDA requested but torch.cuda.is_available() is false")
+    torch_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    seed_value = 0 if seed is None else int(seed)
+
+    signature = hashlib.sha256()
+    signature.update(np.ascontiguousarray(env.task_graph).tobytes())
+    signature.update(np.ascontiguousarray(env.compute_latency).tobytes())
+    signature.update(np.ascontiguousarray(env.allowed_cores).tobytes())
+    signature.update(repr((env.topo, env.topo.on_chip_latency,
+                           env.topo.off_chip_latency, learning_rate,
+                           rollout_episodes, update_epochs, minibatch_size,
+                           gamma, gae_lambda, clip_ratio, entropy_coefficient,
+                           value_coefficient, max_grad_norm, hidden_dim,
+                           reward_mode, reward_scale, disable_learning,
+                           seed_value, "masked-ppo-v1")).encode())
+    fingerprint = signature.hexdigest()
+    checkpoint = None
+    if load_checkpoint and os.path.exists(load_checkpoint):
+        checkpoint = torch.load(load_checkpoint, map_location="cpu", weights_only=False)
+        if checkpoint.get("fingerprint") != fingerprint:
+            raise ValueError("Masked PPO checkpoint is from a different configuration")
+        baseline_latency = checkpoint["baseline_latency"]
+        baseline_placement = np.asarray(
+            checkpoint["baseline_placement"], dtype=np.int32).copy()
+        print(f"[PPO] Resuming from placement {checkpoint['episode']}; "
+              f"baseline B={baseline_latency:.6g}")
+    else:
+        print(f"[PPO] Computing random-search baseline B ({baseline_trials} trials)...")
+        baseline_latency = run_random(env, n_trials=baseline_trials)
+        baseline_placement = env.placement.copy()
+        print(f"[PPO] Baseline B = {baseline_latency:.6g}")
+
+    mapper = MultiChipCoreMapper(
+        env, baseline_latency=baseline_latency, batch_z=1,
+        reward_mode=reward_mode, shaping_gamma=gamma,
+        reward_scale=reward_scale, compact_state=True)
+    state_dim = mapper.state_rows * mapper.state_cols + env.num_tasks
+    action_dim = len(mapper._allowed_grid)
+    model = MaskedPPOActorCritic(state_dim, action_dim, hidden_dim).to(torch_device)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, eps=1e-5)
+    action_generator = torch.Generator(device=torch_device)
+    action_generator.manual_seed(seed_value + 104729)
+    update_generator = torch.Generator(device=torch_device)
+    update_generator.manual_seed(seed_value + 130363)
+
+    best_cost = baseline_latency
+    best_placement = baseline_placement.copy()
+    best_grid = None
+    best_candidate_source = "random_baseline"
+    start_episode = deterministic_evaluations = update_count = 0
+    initial_deterministic_cost = None
+    if checkpoint is not None:
+        model.load_state_dict(checkpoint["model"])
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        best_cost = checkpoint["best_cost"]
+        best_placement = np.asarray(checkpoint["best_placement"], dtype=np.int32).copy()
+        best_grid = checkpoint.get("best_grid")
+        best_candidate_source = checkpoint.get("best_candidate_source", "ppo_training")
+        start_episode = int(checkpoint["episode"])
+        if start_episode > n_episodes:
+            raise ValueError("Masked PPO checkpoint is beyond the requested placement budget")
+        deterministic_evaluations = int(
+            checkpoint.get("deterministic_candidate_evaluations", 0))
+        update_count = int(checkpoint.get("update_count", 0))
+        initial_deterministic_cost = checkpoint.get("initial_deterministic_cost")
+        action_generator.set_state(checkpoint["action_generator_state"])
+        update_generator.set_state(checkpoint["update_generator_state"])
+
+    diagnostics_stream = None
+    if diagnostics_path:
+        parent = os.path.dirname(diagnostics_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        diagnostics_stream = open(
+            diagnostics_path, "a" if checkpoint is not None else "w", encoding="utf-8")
+
+    def save(ep):
+        if not save_checkpoint:
+            return
+        parent = os.path.dirname(save_checkpoint)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        torch.save({
+            "fingerprint": fingerprint, "episode": ep,
+            "baseline_latency": baseline_latency,
+            "baseline_placement": baseline_placement,
+            "model": model.state_dict(), "optimizer": optimizer.state_dict(),
+            "best_cost": best_cost, "best_placement": best_placement,
+            "best_grid": best_grid, "best_candidate_source": best_candidate_source,
+            "deterministic_candidate_evaluations": deterministic_evaluations,
+            "update_count": update_count,
+            "initial_deterministic_cost": initial_deterministic_cost,
+            "action_generator_state": action_generator.get_state(),
+            "update_generator_state": update_generator.get_state(),
+        }, save_checkpoint)
+
+    def collect_episode(deterministic=False, keep_trajectory=True):
+        state = mapper.reset()
+        trajectory = {key: [] for key in
+                      ("states", "masks", "actions", "log_probs", "rewards",
+                       "values", "dones")}
+        done = False
+        grid = ""
+        final_cost = 0.0
+        while not done:
+            mask = mapper.legal_action_mask()
+            state_tensor = torch.as_tensor(
+                state, dtype=torch.float32, device=torch_device).unsqueeze(0)
+            mask_tensor = torch.as_tensor(
+                mask, dtype=torch.bool, device=torch_device).unsqueeze(0)
+            with torch.no_grad():
+                action, log_prob, _, value = model.action_and_value(
+                    state_tensor, mask_tensor, deterministic=deterministic,
+                    generator=None if deterministic else action_generator)
+            reward, done, grid, final_cost = mapper.step_masked(int(action.item()))
+            if keep_trajectory:
+                trajectory["states"].append(state.copy())
+                trajectory["masks"].append(mask.copy())
+                trajectory["actions"].append(int(action.item()))
+                trajectory["log_probs"].append(float(log_prob.item()))
+                trajectory["rewards"].append(float(reward))
+                trajectory["values"].append(float(value.item()))
+                trajectory["dones"].append(bool(done))
+            state = mapper._occ_map()
+        return trajectory, grid, final_cost, mapper.get_placement().copy()
+
+    def update_policy(trajectories):
+        nonlocal update_count
+        if disable_learning or not trajectories:
+            return None
+        combined = {key: sum((trajectory[key] for trajectory in trajectories), [])
+                    for key in trajectories[0]}
+        rewards = np.asarray(combined["rewards"], dtype=np.float32)
+        values = np.asarray(combined["values"], dtype=np.float32)
+        dones = np.asarray(combined["dones"], dtype=bool)
+        advantages = np.zeros_like(rewards)
+        last_advantage = 0.0
+        for index in range(len(rewards) - 1, -1, -1):
+            nonterminal = 0.0 if dones[index] else 1.0
+            next_value = (values[index + 1]
+                          if index + 1 < len(values) and not dones[index] else 0.0)
+            delta = rewards[index] + gamma * next_value * nonterminal - values[index]
+            last_advantage = (delta + gamma * gae_lambda * nonterminal *
+                              last_advantage)
+            advantages[index] = last_advantage
+        returns = advantages + values
+        states = torch.as_tensor(np.asarray(combined["states"]),
+                                 dtype=torch.float32, device=torch_device)
+        masks = torch.as_tensor(np.asarray(combined["masks"]),
+                                dtype=torch.bool, device=torch_device)
+        actions = torch.as_tensor(combined["actions"], dtype=torch.long,
+                                  device=torch_device)
+        old_log_probs = torch.as_tensor(combined["log_probs"], dtype=torch.float32,
+                                        device=torch_device)
+        advantages_tensor = torch.as_tensor(advantages, dtype=torch.float32,
+                                            device=torch_device)
+        returns_tensor = torch.as_tensor(returns, dtype=torch.float32,
+                                         device=torch_device)
+        if len(advantages_tensor) > 1:
+            advantages_tensor = ((advantages_tensor - advantages_tensor.mean()) /
+                                 (advantages_tensor.std(unbiased=False) + 1e-8))
+        metrics = []
+        for _ in range(update_epochs):
+            permutation = torch.randperm(
+                len(states), generator=update_generator, device=torch_device)
+            for start in range(0, len(states), minibatch_size):
+                indices = permutation[start:start + minibatch_size]
+                distribution, new_values = model.distribution_and_value(
+                    states[indices], masks[indices])
+                new_log_probs = distribution.log_prob(actions[indices])
+                log_ratio = new_log_probs - old_log_probs[indices]
+                ratio = log_ratio.exp()
+                unclipped = ratio * advantages_tensor[indices]
+                clipped = torch.clamp(
+                    ratio, 1.0 - clip_ratio, 1.0 + clip_ratio) * \
+                    advantages_tensor[indices]
+                policy_loss = -torch.minimum(unclipped, clipped).mean()
+                value_loss = F.mse_loss(new_values, returns_tensor[indices])
+                entropy = distribution.entropy().mean()
+                loss = (policy_loss + value_coefficient * value_loss -
+                        entropy_coefficient * entropy)
+                optimizer.zero_grad()
+                loss.backward()
+                gradient_norm = torch.nn.utils.clip_grad_norm_(
+                    model.parameters(), max_grad_norm)
+                optimizer.step()
+                with torch.no_grad():
+                    approximate_kl = ((ratio - 1.0) - log_ratio).mean()
+                    clip_fraction = ((ratio - 1.0).abs() > clip_ratio).float().mean()
+                metrics.append({
+                    "policy_loss": float(policy_loss.detach().cpu()),
+                    "value_loss": float(value_loss.detach().cpu()),
+                    "entropy": float(entropy.detach().cpu()),
+                    "approximate_kl": float(approximate_kl.detach().cpu()),
+                    "clip_fraction": float(clip_fraction.detach().cpu()),
+                    "gradient_norm": float(gradient_norm.detach().cpu()),
+                })
+        update_count += 1
+        return {key: float(np.mean([metric[key] for metric in metrics]))
+                for key in metrics[0]}
+
+    if initial_deterministic_cost is None:
+        _, initial_grid, initial_deterministic_cost, initial_placement = \
+            collect_episode(deterministic=True, keep_trajectory=False)
+        deterministic_evaluations += 1
+        if initial_deterministic_cost < best_cost:
+            best_cost, best_grid = initial_deterministic_cost, initial_grid
+            best_placement = initial_placement.copy()
+            best_candidate_source = "untrained_masked_policy_deterministic"
+
+    print(f"[PPO] Device={torch_device}; state={state_dim}; legal actions={action_dim}; "
+          f"reward={reward_mode}; learning={'off' if disable_learning else 'on'}")
+    start_time = time.time()
+    pending = []
+    latest_metrics = None
+    final_cost = best_cost
+    for episode in range(start_episode + 1, n_episodes + 1):
+        trajectory, grid, final_cost, placement = collect_episode()
+        if final_cost < best_cost:
+            best_cost, best_grid = final_cost, grid
+            best_placement = placement.copy()
+            best_candidate_source = ("untrained_masked_policy_rollout"
+                                     if disable_learning else "ppo_training")
+        if not disable_learning:
+            pending.append(trajectory)
+            if len(pending) >= rollout_episodes or episode == n_episodes:
+                latest_metrics = update_policy(pending)
+                pending.clear()
+
+        write_diagnostics = (episode % diagnostics_every == 0 or episode == n_episodes)
+        if write_diagnostics:
+            _, eval_grid, deterministic_cost, deterministic_placement = \
+                collect_episode(deterministic=True, keep_trajectory=False)
+            deterministic_evaluations += 1
+            retained = False
+            if deterministic_cost < best_cost:
+                best_cost, best_grid = deterministic_cost, eval_grid
+                best_placement = deterministic_placement.copy()
+                best_candidate_source = ("untrained_masked_policy_deterministic"
+                                         if disable_learning else
+                                         "ppo_deterministic")
+                retained = True
+            env.place(placement)
+            record = {
+                "episode": episode, "current_cost": final_cost,
+                "best_cost": best_cost, "deterministic_cost": deterministic_cost,
+                "learning_enabled": not disable_learning,
+                "collision_repairs": mapper.collision_repairs,
+                "deterministic_collision_repairs": 0,
+                "retained_deterministic_candidate": retained,
+                "valid_action_fraction_final": float(
+                    (action_dim - env.num_tasks + 1) / action_dim),
+                "update_count": update_count,
+            }
+            for key in ("policy_loss", "value_loss", "entropy", "approximate_kl",
+                        "clip_fraction", "gradient_norm"):
+                record[key] = latest_metrics.get(key) if latest_metrics else None
+            if diagnostics_stream is not None:
+                diagnostics_stream.write(json.dumps(record, allow_nan=False) + "\n")
+                diagnostics_stream.flush()
+        if episode % 10 == 0 or episode == n_episodes:
+            elapsed = time.time() - start_time
+            seconds_per_episode = elapsed / max(1, episode - start_episode)
+            eta = timedelta(seconds=int(seconds_per_episode * (n_episodes - episode)))
+            print(f"# of PPO placements: {episode:7d} | Current Cost: "
+                  f"{final_cost:.6g} | Best Cost: {best_cost:.6g} | "
+                  f"{seconds_per_episode:.2f}s/ep | ETA: {eta}")
+        if (save_checkpoint and episode % checkpoint_every == 0 and
+                (disable_learning or not pending)):
+            save(episode)
+            print(f"[PPO] Checkpoint saved to {save_checkpoint} (placement {episode})")
+
+    save(n_episodes)
+    if diagnostics_stream is not None:
+        diagnostics_stream.close()
+    env.place(best_placement)
+    if run_metadata is not None:
+        partial_evaluations = (n_episodes * max(0, env.num_tasks - 1)
+                               if reward_mode == "potential" else 0)
+        run_metadata.update({
+            "method": "masked_categorical_ppo",
+            "baseline_cost": baseline_latency,
+            "training_candidate_evaluations": n_episodes,
+            "deterministic_candidate_evaluations": deterministic_evaluations,
+            "total_candidate_evaluations": (baseline_trials + n_episodes +
+                                            deterministic_evaluations),
+            "partial_objective_evaluations": partial_evaluations,
+            "best_candidate_source": best_candidate_source,
+            "best_cost": best_cost, "learning_enabled": not disable_learning,
+            "random_seed": seed_value, "state_dimension": state_dim,
+            "action_dimension": action_dim, "reward_mode": reward_mode,
+            "rollout_episodes": rollout_episodes, "update_epochs": update_epochs,
+            "minibatch_size": minibatch_size, "learning_rate": learning_rate,
+            "gamma": gamma, "gae_lambda": gae_lambda,
+            "clip_ratio": clip_ratio, "entropy_coefficient": entropy_coefficient,
+            "value_coefficient": value_coefficient, "max_grad_norm": max_grad_norm,
+            "hidden_dimension": hidden_dim, "update_count": update_count,
+            "collision_repairs": 0, "diagnostics_path": diagnostics_path,
+            "initial_deterministic_cost": initial_deterministic_cost,
+        })
+    return best_cost
 
 
 # ---------------------------------------------------------------------------
@@ -2493,11 +2892,13 @@ def run_sequential(env: MultiChipEnvironment) -> float:
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-chip core placement")
-    parser.add_argument("--algo", choices=["ddpg", "ddpg_guided", "sa", "asa", "ddpg_asa",
-                                            "random", "bs"], default="ddpg",
+    parser.add_argument("--algo", choices=["ddpg", "ddpg_guided", "ppo_masked",
+                                            "sa", "asa", "ddpg_asa", "random", "bs"],
+                        default="ddpg",
                         help="Placement method; ddpg_guided uses ASA demonstrations, "
                              "legal top-k actions, episode-return replay and stable twin "
-                             "critics; ddpg remains the paper-faithful baseline")
+                             "critics; ppo_masked is an experimental exact legal-action "
+                             "baseline; ddpg remains the paper-faithful baseline")
     parser.add_argument("--chips_x", type=int, default=2)
     parser.add_argument("--chips_y", type=int, default=2)
     parser.add_argument("--rows", type=int, default=4, help="Rows per chip")
@@ -2529,7 +2930,7 @@ def main():
                               "per the paper's batched action [x1,y1,...,xz,yz] "
                               "(Sec 3.2). Clamped to num_tasks if larger.")
     parser.add_argument("--save_checkpoint", type=str, default=None,
-                         help="Path to save a DDPG checkpoint (networks, optimizer state, "
+                         help="Path to save an RL checkpoint (networks, optimizer state, "
                               "best result, noise schedule position, baseline B) every "
                               "--checkpoint_every episodes and once more at the end. "
                               "Without this, nothing persists between runs -- each run "
@@ -2539,9 +2940,8 @@ def main():
                               "If the file doesn't exist yet, training starts fresh and "
                               "will create it (combine with --save_checkpoint pointing to "
                               "the same path to make a run resumable from itself). Note: "
-                              "the replay buffer is NOT persisted -- resumed training keeps "
-                              "the trained networks and progress, but refills experience "
-                              "from an empty buffer.")
+                              "DDPG replay is not persisted; masked PPO checkpoints are "
+                              "saved only between complete on-policy rollout batches.")
     parser.add_argument("--checkpoint_every", type=int, default=100,
                          help="Save a checkpoint every N episodes (only used with "
                               "--save_checkpoint).")
@@ -2554,7 +2954,7 @@ def main():
                               "every step (original behavior, much slower at "
                               "large task counts).")
     parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"],
-                         help="DDPG device. The cpu branch defaults to CPU explicitly.")
+                         help="RL device. The cpu branch defaults to CPU explicitly.")
     parser.add_argument("--cpu_threads", type=int, default=None,
                         help="PyTorch intra-op CPU threads (default: OMP_NUM_THREADS or all logical CPUs)")
     parser.add_argument("--cpu_interop_threads", type=int, default=1,
@@ -2562,7 +2962,7 @@ def main():
     parser.add_argument("--agent_arch", choices=["mlp", "cnn", "paper_cnn"], default="mlp",
                         help="DDPG architecture: historical MLP, junior-derived augmented CNN, or Figure-9 paper CNN.")
     parser.add_argument("--reward_mode", choices=["sparse", "potential"], default="sparse",
-                        help="DDPG reward: paper-style sparse terminal reward, or opt-in potential-based shaping with the same fixed-horizon discounted objective.")
+                        help="RL reward: paper-style sparse terminal reward, or opt-in potential-based shaping with the same fixed-horizon discounted objective.")
     parser.add_argument("--reward_scale", type=float, default=None,
                         help="Multiply latency before sqrt reward. Default: 400e6 for "
                              "seconds-based timing (400-MHz cycle units), otherwise 1")
@@ -2586,6 +2986,20 @@ def main():
     parser.add_argument("--guided_disable_learning", action="store_true",
                         help="Disable guided pretraining and online gradient updates for a "
                              "matched untrained-policy control")
+    parser.add_argument("--ppo_learning_rate", type=float, default=3e-4)
+    parser.add_argument("--ppo_rollout_placements", type=int, default=10,
+                        help="Complete placements collected before each masked-PPO update")
+    parser.add_argument("--ppo_update_epochs", type=int, default=4)
+    parser.add_argument("--ppo_minibatch_size", type=int, default=512)
+    parser.add_argument("--ppo_gamma", type=float, default=0.98)
+    parser.add_argument("--ppo_gae_lambda", type=float, default=0.95)
+    parser.add_argument("--ppo_clip_ratio", type=float, default=0.2)
+    parser.add_argument("--ppo_entropy_coef", type=float, default=0.01)
+    parser.add_argument("--ppo_value_coef", type=float, default=0.5)
+    parser.add_argument("--ppo_max_grad_norm", type=float, default=0.5)
+    parser.add_argument("--ppo_hidden_dim", type=int, default=256)
+    parser.add_argument("--ppo_disable_learning", action="store_true",
+                        help="Freeze masked PPO for a matched untrained-policy control")
     parser.add_argument("--compute_ops", type=str, default=None,
                          help="Optional .npy file containing MAC operations per task; "
                               "converted with Table 1's 128 MACs/core at 400 MHz.")
@@ -2708,6 +3122,14 @@ def main():
         parser.error("guided DDPG budgets must be positive (pretrain updates may be zero)")
     if args.guided_random_start_placements < 0:
         parser.error("--guided_random_start_placements must be nonnegative")
+    if min(args.ppo_rollout_placements, args.ppo_update_epochs,
+           args.ppo_minibatch_size, args.ppo_hidden_dim) <= 0:
+        parser.error("masked PPO sizes and update budgets must be positive")
+    if (not math.isfinite(args.ppo_learning_rate) or args.ppo_learning_rate <= 0 or
+            not 0 < args.ppo_gamma <= 1 or not 0 <= args.ppo_gae_lambda <= 1 or
+            not 0 < args.ppo_clip_ratio < 1 or args.ppo_entropy_coef < 0 or
+            args.ppo_value_coef < 0 or args.ppo_max_grad_norm <= 0):
+        parser.error("invalid masked PPO hyperparameters")
     if args.conv_blocks <= 0:
         parser.error("--conv_blocks must be positive")
     if args.timing_model == "paper_pipeline":
@@ -2738,8 +3160,8 @@ def main():
         np.random.seed(args.seed)
         if HAS_TORCH:
             torch.manual_seed(args.seed)
-        print(f">> Seeded RNGs with --seed {args.seed} (random search baseline B "
-              f"and DDPG exploration noise are now reproducible for this run)\n")
+        print(f">> Seeded RNGs with --seed {args.seed} (random baseline and "
+              f"RL/search sampling are reproducible for this run)\n")
 
     if args.model != "simple" and args.custom_model is None and not HAS_TORCHVISION:
         print(f"ERROR: --model {args.model} requires torchvision, which isn't installed.")
@@ -2858,7 +3280,7 @@ def main():
     print(f"System : {env.topo}")
     print(f"Tasks  : {env.num_tasks}")
     print(f"Algo   : {args.algo}")
-    if args.algo in ("ddpg", "ddpg_guided", "ddpg_asa"):
+    if args.algo in ("ddpg", "ddpg_guided", "ddpg_asa", "ppo_masked"):
         print(f"Reward : sqrt({args.reward_scale:g} * latency)")
     print("-" * 50)
 
@@ -2956,6 +3378,35 @@ def main():
         algorithm_metadata.update({"declared_epochs": args.epochs,
                                    "placements_per_epoch": args.placements_per_epoch,
                                    "complete_placement_evaluations": complete_placements})
+    elif args.algo == "ppo_masked":
+        algorithm_metadata = {}
+        print(f">> Masked PPO budget: {args.epochs} epoch(s) x "
+              f"{args.placements_per_epoch} placement(s) = "
+              f"{complete_placements} complete placements")
+        cost = run_masked_ppo(
+            env, n_episodes=complete_placements,
+            baseline_trials=args.baseline_trials, device=args.device,
+            learning_rate=args.ppo_learning_rate,
+            rollout_episodes=args.ppo_rollout_placements,
+            update_epochs=args.ppo_update_epochs,
+            minibatch_size=args.ppo_minibatch_size,
+            gamma=args.ppo_gamma, gae_lambda=args.ppo_gae_lambda,
+            clip_ratio=args.ppo_clip_ratio,
+            entropy_coefficient=args.ppo_entropy_coef,
+            value_coefficient=args.ppo_value_coef,
+            max_grad_norm=args.ppo_max_grad_norm,
+            hidden_dim=args.ppo_hidden_dim, reward_mode=args.reward_mode,
+            reward_scale=args.reward_scale,
+            diagnostics_every=args.diagnostics_every,
+            diagnostics_path=args.diagnostics,
+            save_checkpoint=args.save_checkpoint,
+            load_checkpoint=args.load_checkpoint,
+            checkpoint_every=args.checkpoint_every,
+            disable_learning=args.ppo_disable_learning,
+            seed=args.seed, run_metadata=algorithm_metadata)
+        algorithm_metadata.update({"declared_epochs": args.epochs,
+                                   "placements_per_epoch": args.placements_per_epoch,
+                                   "complete_placement_evaluations": complete_placements})
     elif args.algo == "ddpg_asa":
         algorithm_metadata = {}
         print(f">> Hybrid budget: {complete_placements} DDPG placements + "
@@ -2985,11 +3436,15 @@ def main():
         report_parent = os.path.dirname(args.report)
         if report_parent:
             os.makedirs(report_parent, exist_ok=True)
-        limitations = ["replay buffer is not persisted in DDPG checkpoints"]
+        limitations = []
+        if args.algo in ("ddpg", "ddpg_guided", "ddpg_asa"):
+            limitations.append("replay buffer is not persisted in DDPG checkpoints")
         if args.agent_arch != "paper_cnn" and args.algo in ("ddpg", "ddpg_guided", "ddpg_asa"):
             limitations.append("selected DDPG agent is not the Figure-9 paper CNN")
         if args.algo == "ddpg_guided":
             limitations.append("ddpg_guided is a sample-efficiency extension, not the paper's original DDPG")
+        if args.algo == "ppo_masked":
+            limitations.append("ppo_masked is an experimental discrete policy, not the paper's original DDPG")
         if args.partition_mode != "paper_targets":
             limitations.append("logic-core allocation does not match Figure-6 aggregate counts")
         else:
@@ -3010,7 +3465,7 @@ def main():
             limitations.append("residual add is assigned to the destination transformation/VVA path")
         evaluated_placements = (complete_placements if args.algo == "ddpg"
                                 else algorithm_metadata["total_candidate_evaluations"]
-                                if args.algo == "ddpg_guided"
+                                if args.algo in ("ddpg_guided", "ppo_masked")
                                 else complete_placements + args.iters
                                 if args.algo == "ddpg_asa"
                                 else 1 if args.algo == "bs" else args.iters)
@@ -3021,7 +3476,7 @@ def main():
                        "objective_units": env.timing_units, "best_cost": cost,
                        "complete_placement_evaluations": evaluated_placements,
                        "reward_normalizer_evaluations": args.baseline_trials
-                       if args.algo in ("ddpg", "ddpg_guided", "ddpg_asa") else 0,
+                       if args.algo in ("ddpg", "ddpg_guided", "ddpg_asa", "ppo_masked") else 0,
                        "placement_chip_major": env.placement.tolist(),
                        "routing_diagnostics": routing_diagnostics,
                        "objective_sensitivity": objective_sensitivity,

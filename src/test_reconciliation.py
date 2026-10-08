@@ -14,6 +14,60 @@ import run_multi_chip as rm
 
 
 class TimingTests(unittest.TestCase):
+    def test_masked_mapper_exposes_only_unused_allowed_cores(self):
+        graph = np.zeros((3, 3), dtype=np.float32)
+        graph[0, 1] = graph[1, 2] = 1.0
+        env = MultiChipEnvironment(
+            1, 1, 1, 5, task_graph=graph, num_tasks=3,
+            allowed_cores=np.array([0, 2, 4], dtype=np.int32))
+        mapper = rm.MultiChipCoreMapper(env, batch_z=1, compact_state=True)
+        mapper.reset()
+        np.testing.assert_array_equal(mapper.legal_action_mask(), [True, True, True])
+        _, done, _, _ = mapper.step_masked(1)
+        self.assertFalse(done)
+        np.testing.assert_array_equal(mapper.legal_action_mask(), [True, False, True])
+        with self.assertRaisesRegex(ValueError, "unavailable"):
+            mapper.step_masked(1)
+        mapper.step_masked(0)
+        _, done, _, _ = mapper.step_masked(2)
+        self.assertTrue(done)
+        self.assertEqual(mapper.collision_repairs, 0)
+        self.assertEqual(len(np.unique(mapper.get_placement())), 3)
+
+    @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
+    def test_masked_ppo_has_zero_illegal_probability_and_trains(self):
+        import torch
+        torch.set_num_threads(2)
+        model = rm.MaskedPPOActorCritic(6, 4, hidden_dim=16)
+        states = torch.zeros((2, 6))
+        masks = torch.tensor([[True, False, True, False],
+                              [False, True, False, True]])
+        distribution, values = model.distribution_and_value(states, masks)
+        self.assertTrue(torch.equal(distribution.probs[~masks], torch.zeros(4)))
+        self.assertTrue(torch.isfinite(values).all())
+        for _ in range(20):
+            actions, _, _, _ = model.action_and_value(states, masks)
+            self.assertTrue(bool(masks.gather(1, actions[:, None]).all()))
+
+        graph = np.zeros((3, 3), dtype=np.float32)
+        graph[0, 1] = graph[1, 2] = 1.0
+        env = MultiChipEnvironment(1, 1, 1, 4, task_graph=graph, num_tasks=3)
+        metadata = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                contextlib.redirect_stdout(io.StringIO()):
+            result = rm.run_masked_ppo(
+                env, n_episodes=4, baseline_trials=2, device="cpu",
+                rollout_episodes=2, update_epochs=1, minibatch_size=8,
+                hidden_dim=16, diagnostics_every=2, checkpoint_every=2,
+                diagnostics_path=f"{directory}/diagnostics.jsonl",
+                save_checkpoint=f"{directory}/checkpoint.pt", seed=11,
+                run_metadata=metadata)
+        self.assertTrue(np.isfinite(result))
+        self.assertEqual(metadata["method"], "masked_categorical_ppo")
+        self.assertEqual(metadata["collision_repairs"], 0)
+        self.assertGreater(metadata["update_count"], 0)
+        self.assertTrue(np.isfinite(metadata["initial_deterministic_cost"]))
+
     def test_remainder_conserves_work(self):
         ops, kinds = tile_work(5, 7, 2, 3, 9, 2, 3)
         self.assertEqual(sum(o for o, k in zip(ops, kinds) if k == "vmm"), 5*7*2*3*9)

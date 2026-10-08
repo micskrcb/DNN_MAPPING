@@ -214,6 +214,34 @@ The separately labelled `--algo ddpg_guided` now implements:
 
 ## Staged experimental plan
 
+## Five-seed guided-DDPG decision (8 October 2026)
+
+The completed extensive Kaggle archive contains five trained/control pairs,
+3,000 online placements per condition, all reports, all diagnostics, and valid
+completion markers. Mechanics and numerical-stability checks passed, but the
+trained policy lost every paired late deterministic comparison. Its aggregate
+late deterministic mean was 39.0857 microseconds versus 38.7322 microseconds
+for the frozen control, a regression of 0.3535 microseconds. The exploratory
+paired 95% interval for improvement was -0.8766 to +0.1696 microseconds.
+
+This closes Gate 2 for guided DDPG as a negative result. Occasional good
+deterministic checkpoints do not reverse the conclusion because choosing the
+best checkpoint after inspecting 100 diagnostics is selection bias, and the
+trained best complete solution was also slightly worse in aggregate. Further
+guided-DDPG tuning is paused.
+
+The repository now contains `--algo ppo_masked`, a separate experimental
+categorical PPO policy. It chooses one exact unused physical core for the next
+logic core, applies a pre-softmax legality mask, and therefore has no repair
+path. PPO uses clipped policy updates, generalized advantage estimation,
+entropy regularization, a value baseline, gradient clipping, deterministic
+diagnostics, and an exactly matched `--ppo_disable_learning` control. The
+paper-aligned DDPG remains unchanged and available for reproduction tables.
+
+The first masked-PPO gate is the paired one-seed Kaggle short run. Scale to five
+seeds only if the trained deterministic policy beats its frozen control while
+diagnostics remain finite.
+
 ### Gate 1: implementation sanity
 
 Run bounded synthetic and AlexNet-CONV smoke tests. Required conditions:
