@@ -556,7 +556,12 @@ bash scripts/run_kaggle_guided_ablation.sh extensive
 The short preset runs 300 online placements for one trained/control pair. The
 extensive preset runs 3,000 online placements for each condition across five
 paired seeds. On two Kaggle T4 GPUs the pairs run concurrently, one seed pair
-at a time.
+at a time. The runner refreshes its ZIP archive after every completed pair and
+again when it exits, so an interrupted session leaves recoverable output. A
+second invocation skips pairs carrying a valid completion marker. It restarts
+an interrupted pair from the beginning because guided replay is not stored in
+the model checkpoint; silently resuming without replay would change the
+experiment.
 
 ## Interpreting results
 
