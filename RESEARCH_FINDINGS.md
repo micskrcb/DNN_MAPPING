@@ -271,3 +271,26 @@ already reproduced the paper's reported improvements.
 The detailed source-code comparison with maintained public DDPG
 implementations and the remaining algorithmic differences are recorded in
 [`DDPG_REFERENCE_AUDIT.md`](DDPG_REFERENCE_AUDIT.md).
+
+## Paired Kaggle short result (8 October 2026)
+
+The corrected one-seed trained/control run used commit `aa75b2d`, 300 online
+placements per condition, identical seed 0 action randomness, 60 legal-random
+warm-up placements, and separate replay randomness. Mechanics and numerical
+stability passed: warm-up costs matched exactly, collision repairs were zero,
+Q magnitude stayed below 0.127, losses were finite, and late proto-action
+saturation was below 1%.
+
+It did not show learning. The trained policy's late deterministic mean was
+41.4736 microseconds versus 38.3919 microseconds for the no-learning control,
+so training was 8.03% worse. The trained best candidate was 38.1083
+microseconds versus 37.6356 microseconds for the control. This is one seed and
+does not establish a population result, but it is direct evidence against the
+current update at the 300-placement budget.
+
+An older 3,000-placement guided run from commit `107899a` reached a 37.1630
+microsecond best search trajectory and lower late noisy costs. It lacked a
+matched no-learning control, permanent demonstration retention, legal-random
+warm-up, and separated random streams. Its deterministic diagnostics did not
+show a clean sustained improvement. It is useful for choosing a 3,000-placement
+follow-up horizon but cannot be used as proof that policy training helped.

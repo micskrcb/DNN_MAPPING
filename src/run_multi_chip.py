@@ -2213,7 +2213,8 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
         if final_cost < best_cost:
             best_cost, best_grid = final_cost, grid
             best_placement = placement.copy()
-            best_candidate_source = "guided_training"
+            best_candidate_source = ("untrained_control_rollout"
+                                     if disable_learning else "guided_training")
 
         write_diagnostics = (ep % diagnostics_every == 0 or ep == n_episodes)
         if write_diagnostics:
@@ -2224,7 +2225,9 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
             if retain_deterministic_candidates and deterministic_cost < best_cost:
                 best_cost, best_grid = deterministic_cost, eval_grid
                 best_placement = deterministic_placement.copy()
-                best_candidate_source = "guided_deterministic"
+                best_candidate_source = ("untrained_control_deterministic"
+                                         if disable_learning else
+                                         "guided_deterministic")
                 retained = True
             env.place(placement)
             action_values = np.concatenate(proto_actions)
@@ -2293,7 +2296,8 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
                                             deterministic_candidate_evaluations),
             "best_candidate_source": best_candidate_source,
             "best_cost": best_cost, "top_k": top_k,
-            "pretrain_updates": pretrain_updates,
+            "pretrain_updates": 0 if disable_learning else pretrain_updates,
+            "pretrain_updates_configured": pretrain_updates,
             "bc_decay_placements": bc_decay_placements,
             "random_start_placements": random_start_placements,
             "learning_enabled": not disable_learning,

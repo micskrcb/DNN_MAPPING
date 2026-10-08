@@ -19,13 +19,13 @@ case "${mode}" in
     ;;
   extensive)
     seeds=(0 1 2 3 4)
-    epochs=20
+    epochs=100
     baseline_trials=1000
     demo_iterations=5000
     pretrain_updates=500
     random_starts=100
-    bc_decay=500
-    exploration_decay=500
+    bc_decay=2000
+    exploration_decay=2400
     sensitivity_trials=64
     ;;
   *)

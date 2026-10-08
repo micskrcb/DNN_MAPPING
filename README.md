@@ -553,6 +553,11 @@ For the five-seed follow-up, use:
 bash scripts/run_kaggle_guided_ablation.sh extensive
 ```
 
+The short preset runs 300 online placements for one trained/control pair. The
+extensive preset runs 3,000 online placements for each condition across five
+paired seeds. On two Kaggle T4 GPUs the pairs run concurrently, one seed pair
+at a time.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

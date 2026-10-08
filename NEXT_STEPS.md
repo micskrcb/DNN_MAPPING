@@ -42,7 +42,7 @@ Current paper targets:
 
 ## Gate 3: comparisons — pending GPU experiments
 
-1. Run `scripts/run_kaggle_guided_ablation.sh short`, then the `extensive` five-seed condition if the mechanics pass.
+1. The corrected short run passed its mechanics and stability checks but the trained policy was 8.03% worse than its control at 300 placements. Run `scripts/run_kaggle_guided_ablation.sh extensive` next: five paired seeds and 3,000 placements per condition.
 2. Run matched trained and `--guided_disable_learning` AlexNet-CONV jobs with identical seeds, budgets, demonstrations, warm-up, and evaluator settings. Independent action/replay random streams now make this a true paired-randomness comparison.
 3. Use at least five seeds and report paired deterministic-policy outcomes. Do not infer learning from the best candidate alone because demonstrations and search also contribute candidates.
 4. Inspect noisy/deterministic curves, critic/actor losses, unique intended positions, collision repairs, hop-distance reductions, and link loads. Require the trained policy to improve over the matched control consistently.
