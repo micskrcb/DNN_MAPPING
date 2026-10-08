@@ -1,6 +1,6 @@
 # Project state: paper-faithful DNN core placement
 
-Updated 2026-09-30.
+Updated 2026-10-08.
 
 ## Goal and branch
 
@@ -20,6 +20,7 @@ The maintained development branch is `cpu` in `micskrcb/DNN_MAPPING`; it is a de
 - Figure 9 `paper_cnn`, sparse terminal reward, paper learning rates/gamma/batch size, batched actions, coordinate conversion, and Manhattan collision repair.
 - Absolute-placement OU exploration scheduling that remains stable across cumulative checkpoint stages.
 - Sequential BS, random search, fixed simulated annealing, adaptive simulated annealing, DDPG, and DDPG→ASA.
+- Experimental guided DDPG with ASA demonstrations, permanent demonstration replay, collision-free legal projection, dense normalized rewards, a uniform legal warm-up, deterministic candidate retention, and a matched no-learning control.
 - Explicit placement accounting: DDPG epochs × placements/epoch, separate reward-normalizer trials, and independently configurable RS/SA budgets.
 - Five-seed orchestration, periodic JSONL diagnostics, checkpoints, JSON reports, BS-normalized summaries, hop counts, link-load summaries, and a placement-sensitivity preflight.
 - One command that orchestrates separate CONV and FC paper-mode suites.
@@ -42,7 +43,7 @@ Batch-one latency can be compared after validation. True large-batch throughput 
 
 ## Evidence completed locally
 
-- The corrected `cpu` head passes `src/test_multi_chip.py`, all 19 reconciliation tests with no skips, and the bounded CPU device validator under torch 2.14.0+cpu and torchvision 0.29.0+cpu. The validator completed 57 measured optimizer updates and a checkpoint round trip.
+- The corrected `cpu` head passes `src/test_multi_chip.py`, all 24 reconciliation tests with no skips, and the bounded CPU device validator under torch 2.14.0+cpu and torchvision 0.29.0+cpu. The validator completed 57 measured optimizer updates and a checkpoint round trip.
 - Paper-target extraction returns all six exact CONV/FC counts.
 - Hand-calculated XY gateway and shared-link contention tests pass.
 - Masked-region tests confirm that baselines and the mapper cannot use other cores.
@@ -62,25 +63,31 @@ Batch-one latency can be compared after validation. True large-batch throughput 
 
 Earlier 1,445-task AlexNet logs, decimal-valued junior runs, and old proxy/full-frame best costs were produced by different extraction or objective versions. They remain useful historical diagnostics but are not evidence of paper result reproduction.
 
+## Kaggle learning diagnosis (2026-10-08)
+
+The 3,000-placement AlexNet-CONV Kaggle run executed correctly but did not demonstrate policy learning. The trained deterministic policy ended at 37.6356 microseconds while the matched untrained policy was 37.4466 microseconds. Approximately 176 of 183 actions required collision repair, the deterministic policy used only a few unique intended positions, and critic loss reached roughly `1.48e12`. The run's best candidate therefore came from search/exploration rather than a learned deterministic policy.
+
+This diagnosis changed the immediate plan. The experimental `ddpg_guided` mode now seeds replay with ASA transitions that are never overwritten, projects every action to a legal unused core before evaluation, uses dense normalized incremental rewards, retains deterministic candidates, and starts with configurable uniform legal placements to diversify replay. `--guided_disable_learning` runs the identical data-generation path without gradient updates, providing the control needed to establish whether training contributes anything.
+
+The original paper and later work do not make continuous DDPG an obviously suitable choice for this discrete placement problem. DDPG can deadlock under sparse deterministic rewards; Wolpertinger-style methods use a continuous proto-action only to retrieve discrete candidates; invalid-action masking and later masked placement policies enforce legality directly. If guided DDPG does not beat its matched control across seeds, the next agent should be masked categorical PPO rather than further tuning an unstable continuous actor. See [`RESEARCH_FINDINGS.md`](RESEARCH_FINDINGS.md) for the evidence, Gemini review, sources, and decision gates.
+
 ## GPU state
 
-DDPG networks and sampled tensors support CUDA; the environment, routing, collision repair, replay storage, and process orchestration remain CPU-side. Previous junior measurements showed substantial CNN-update acceleration on a different GPU, but an H100 speedup cannot be claimed until measured with this commit and identical settings.
+DDPG networks and sampled tensors support CUDA; the environment, routing, collision handling, replay storage, and process orchestration remain CPU-side. GPU acceleration therefore speeds neural-network work but does not remove the CPU evaluator bottleneck.
 
-The planned device is an H100 12 GB slice accessed through SSH. Access was not available during local development. Once available, first run `src/validate_device.py --device cuda`, then the bounded paper smoke, inspect memory and CPU/GPU timing, and only then launch the default 300,000-placement five-seed runs.
+The planned H100 12 GB slice was unavailable. A Kaggle GPU completed the 3,000-placement diagnostic above. Guided DDPG passes local trained/control smoke tests but still needs a multi-seed Kaggle evaluation before any convergence or performance claim.
 
 ## Next execution sequence
 
-1. Run the real Torch/torchvision AlexNet CONV and FC sensitivity preflight and archive reports.
-2. Run bounded BS/RS/SA/ASA comparisons and verify objective decompositions against the pure-model audit.
-3. Validate the corrected commit on the H100 and archive the validator JSON.
-4. Benchmark one placement and one optimizer update before selecting a budget.
-5. Run a bounded DDPG diagnostic and require deterministic-policy improvement before a paper-scale launch.
-6. Run AlexNet across at least five DDPG seeds plus BS, RS, and SA only after the gate above passes.
-7. Review learning diagnostics before spending the full VGG16/ResNet50 budget.
-8. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
-9. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
+1. Run matched guided-trained and guided-no-learning AlexNet-CONV experiments on Kaggle for at least five seeds.
+2. Compare deterministic final/best costs pairwise and inspect diversity, repairs, losses, and action distributions. A lower hybrid best is insufficient because ASA contributes candidates to both runs.
+3. Repeat on AlexNet-FC or VGG16-CONV, where multi-chip communication and optimization headroom provide a stronger learning signal.
+4. If guided DDPG does not beat its control consistently, implement masked categorical PPO and compare it under the same complete-placement budget.
+5. Run BS, RS, SA, and ASA using matched evaluator counts, then scale only the method that passes the learning gate.
+6. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
+7. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
 
-Potential reward shaping, different agents, collision penalties, discrete actions, graph encoders, and parallel environments remain improvement experiments and should be run only after freezing the paper-mode configuration.
+The paper-faithful mode remains frozen separately from guided DDPG and future masked-policy experiments.
 
 ## Five-seed local control study (2026-09-30)
 

@@ -25,7 +25,7 @@ Current paper targets:
 | VGG16 | 1,024 | 1,924 | 2,948 |
 | ResNet50 | 512 | 37 | 549 |
 
-## Gate 2: methods — implementation complete, long runs pending
+## Gate 2: methods — paper mode complete; guided learning experiment implemented
 
 - [x] BS in chip-major then core-major order.
 - [x] Figure 9 `paper_cnn` actor and critic.
@@ -36,21 +36,24 @@ Current paper targets:
 - [x] Independent DDPG, reward-baseline, RS, and SA accounting.
 - [x] Default paper budgets: 300,000 DDPG placements and 1,000,000 RS/SA placements.
 - [x] Record unpublished `z`, OU, replay, padding, LRN, and target-update choices as assumptions.
-- [ ] Run the paper-scale budgets on the H100 and archive all manifests/logs.
+- [x] Add an experimental guided DDPG mode with ASA demonstrations, permanent demonstration replay, collision-free legal action projection, denser normalized rewards, and deterministic candidate retention.
+- [x] Add a matched `--guided_disable_learning` control and a uniform legal warm-up so policy learning can be separated from initialization and repair effects.
+- [ ] Run the paper-scale budgets on an available GPU and archive all manifests/logs.
 
 ## Gate 3: comparisons — pending GPU experiments
 
-1. Install the pinned dependencies and rerun both test suites in a Torch-enabled environment.
-2. Run the objective-sensitivity preflight for every model/region and inspect the compute/communication split before training.
-3. Run the bounded H100 validator and AlexNet CONV/FC smoke suite.
-4. Measure per-placement and optimizer-update time before committing the allocation window.
-5. Run AlexNet across at least five DDPG seeds plus BS, RS, and SA.
-6. Report CONV/FC latency separately, normalized to BS, with seed mean, sample standard deviation, minimum, and maximum.
-7. Inspect noisy/deterministic learning curves, losses, intended-core diversity, collision repairs, hop-distance reductions, and link-load distributions.
-8. Proceed to VGG16 and ResNet50 only after the AlexNet evaluator and learning behavior are credible.
-9. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
-10. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
+1. Run matched trained and `--guided_disable_learning` AlexNet-CONV jobs with identical seeds, budgets, demonstrations, warm-up, and evaluator settings.
+2. Use at least five seeds and report paired deterministic-policy outcomes. Do not infer learning from the best candidate alone because demonstrations and search also contribute candidates.
+3. Inspect noisy/deterministic curves, critic/actor losses, unique intended positions, collision repairs, hop-distance reductions, and link loads. Require the trained policy to improve over the matched control consistently.
+4. Repeat the matched experiment on AlexNet-FC or VGG16-CONV. AlexNet-CONV has zero off-chip traffic in the minimum whole-chip mask and only about 13.7% communication headroom, so it is a useful sanity test but a weak final benchmark.
+5. If guided DDPG still fails, implement a masked categorical PPO baseline. The placement decision is discrete, and invalid-action masking enforces legal positions directly.
+6. Only after the learning gate passes, run AlexNet across at least five seeds plus BS, RS, SA, and ASA under matched complete-placement budgets.
+7. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
+8. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
+9. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
 
 ## Gate 4: improvements after reproduction
 
-Potential reward shaping, collision penalties, valid-action masks, discrete actions, graph encoders, alternative partitioning, and parallel environments are improvement experiments. Freeze and identify the paper-mode configuration first, then compare improvements under matched complete-placement budgets.
+Guided DDPG is now available as an explicitly experimental mode. It combines ASA demonstrations with permanent replay, collision-free legal projection, dense normalized rewards, uniform legal replay warm-up, and retained deterministic candidates. Its matched no-learning control is required for every learning claim.
+
+Masked categorical PPO, graph encoders, alternative partitioning, and parallel environments remain future improvement experiments. Freeze and identify the paper-mode configuration, then compare every improvement under matched complete-placement budgets. The evidence and design rationale are recorded in [`RESEARCH_FINDINGS.md`](RESEARCH_FINDINGS.md).

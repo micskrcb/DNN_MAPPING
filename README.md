@@ -36,6 +36,9 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
 - `src/validate_device.py` performs a bounded CPU/CUDA functionality profile.
 - `PROJECT_STATE.md` gives the detailed handoff state and known limitations.
 - `NEXT_STEPS.md` tracks the reproduction gates.
+- `RESEARCH_FINDINGS.md` audits the failed Kaggle run, Gemini's findings,
+  primary literature, forum leads, implemented repairs, and the staged
+  learning-validation plan.
 - `prev version readmes/` preserves earlier README snapshots.
 
 The older single-chip PPO/GCN programs and `run_multi_chip_fast.py` are not part of the validated paper reproduction path.
@@ -481,6 +484,7 @@ Guided DDPG changes the learning path while leaving `--algo ddpg` available as t
 - every step receives a discounted complete-placement return instead of waiting for a one-step terminal sample to propagate through replay;
 - prioritized replay samples informative transitions and keeps demonstration transitions permanently;
 - Huber critic loss, delayed actor updates, gradient clipping, and conservative twin-critic scoring reduce divergence;
+- an initial uniformly random legal-action phase broadens replay coverage before actor proposals take over;
 - the state contains only the active placement region, so AlexNet CONV uses a 16×16 map instead of padding one active chip to the full 64×64 machine.
 
 A successful guided run should report zero collision repairs, one unique executed core per logic core, finite critic statistics, and a deterministic policy that improves over its untrained control across multiple seeds. These checks show that the learning loop is internally consistent; paper-comparable claims still require the frozen DDPG, BS, RS, and SA baselines under matched placement budgets.
@@ -502,6 +506,7 @@ python src/run_multi_chip.py \
   --exploration_decay_placements 2400 \
   --guided_top_k 8 --guided_demo_iterations 5000 \
   --guided_pretrain_updates 500 --guided_bc_decay_placements 2000 \
+  --guided_random_start_placements 100 \
   --diagnostics_every 30 --checkpoint_every 100 \
   --sensitivity_trials 64 --seed 0 \
   --save_checkpoint runs/alexnet-conv-guided/seed0.pt \
@@ -512,6 +517,18 @@ python src/run_multi_chip.py \
 ```
 
 The 3,000 online placements are a learning validation budget, not the paper's final search budget. If this run beats a separately run untrained control and remains stable, repeat it for at least five seeds before scaling the online-placement count.
+
+For the matched untrained control, repeat the same command with
+`--guided_disable_learning`, a different checkpoint/diagnostics/report prefix,
+and the same seed and budgets. This flag suppresses both demonstration
+pretraining and online gradient updates while preserving legal-action handling,
+uniform random warm-up, ASA generation, noise scheduling, and evaluation
+accounting. Compare `deterministic_cost` between trained and control JSONL files;
+best-so-far cost can still improve through random exploration and is not enough
+to establish learning.
+
+The evidence and decision rules behind this experiment are documented in
+[RESEARCH_FINDINGS.md](RESEARCH_FINDINGS.md).
 
 ## Interpreting results
 

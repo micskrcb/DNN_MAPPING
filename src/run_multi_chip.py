@@ -1950,7 +1950,8 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
                     demo_iterations: int = 2000, pretrain_updates: int = 200,
                     bc_decay_placements: int = 2000,
                     retain_deterministic_candidates: bool = True,
-                    asa_options=None) -> float:
+                    asa_options=None, random_start_placements: int = 100,
+                    disable_learning: bool = False) -> float:
     """Sample-efficient DDPG variant for the discrete placement interface.
 
     This experimental mode keeps a deterministic continuous actor but fixes
@@ -1967,6 +1968,8 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
     if min(n_episodes, batch_z, train_every, diagnostics_every, top_k,
            demo_iterations, bc_decay_placements) <= 0 or pretrain_updates < 0:
         raise ValueError("guided DDPG budgets and intervals must be positive")
+    if random_start_placements < 0:
+        raise ValueError("guided random-start placements must be nonnegative")
     if exploration_decay_placements is None:
         exploration_decay_placements = max(1, int(0.8 * n_episodes))
     guided_asa_options = dict(asa_options or {})
@@ -1983,7 +1986,8 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
                            env.topo.off_chip_latency, batch_z, env.timing_units,
                            agent_arch, reward_scale, exploration_decay_placements,
                            train_every, top_k, demo_iterations, pretrain_updates,
-                           bc_decay_placements, asa_fingerprint_options,
+                           bc_decay_placements, random_start_placements,
+                           disable_learning, asa_fingerprint_options,
                            "ddpg-guided-v1")).encode())
     fingerprint = signature.hexdigest()
     checkpoint = None
@@ -2042,20 +2046,35 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
             state = mapper._occ_map()
         return transitions, reward, grid, cost
 
-    def policy_trajectory(explore, noise_scale):
+    def policy_trajectory(explore, noise_scale, uniform_random=False):
         state = mapper.reset()
         transitions, proto_actions = [], []
         done, grid, final_cost, terminal_reward = False, "", 0.0, 0.0
         while not done:
-            proto = agent.select_action(state, noise_scale=noise_scale, explore=explore)
-            candidates, core_batches = mapper.legal_action_candidates(proto, top_k=top_k)
-            scores = agent.score_actions(state, candidates)
-            selected = int(np.argmax(scores))
-            executed_action = candidates[selected]
+            if uniform_random:
+                n_this = min(batch_z, env.num_tasks - mapper._task_ptr)
+                free = np.asarray(
+                    [core for core in mapper._allowed_grid
+                     if int(core) not in mapper._occupied], dtype=np.int32)
+                selected_cores = np.random.choice(free, n_this, replace=False)
+                encoded = []
+                for core in selected_cores:
+                    encoded.extend(mapper._grid_core_to_action_pair(int(core)))
+                while len(encoded) < action_dim:
+                    encoded.extend((0.0, 0.0))
+                proto = executed_action = np.asarray(encoded, dtype=np.float32)
+            else:
+                proto = agent.select_action(
+                    state, noise_scale=noise_scale, explore=explore)
+                candidates, core_batches = mapper.legal_action_candidates(
+                    proto, top_k=top_k)
+                scores = agent.score_actions(state, candidates)
+                selected = int(np.argmax(scores))
+                executed_action = candidates[selected]
+                selected_cores = core_batches[selected]
             transitions.append((state.copy(), executed_action.copy()))
             proto_actions.append(proto.copy())
-            terminal_reward, done, grid, final_cost = mapper.step_legal(
-                core_batches[selected])
+            terminal_reward, done, grid, final_cost = mapper.step_legal(selected_cores)
             state = mapper._occ_map()
         return (transitions, proto_actions, terminal_reward, grid, final_cost,
                 mapper.get_placement().copy())
@@ -2112,10 +2131,12 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
             best_placement, best_grid = baseline_placement.copy(), None
             best_candidate_source = "random_baseline"
         global_step = start_episode = deterministic_candidate_evaluations = 0
-        if pretrain_updates:
+        if pretrain_updates and not disable_learning:
             print(f"[GUIDED] Pretraining on the demonstration ({pretrain_updates} updates)...")
             for _ in range(pretrain_updates):
                 agent.train_guided(replay_buffer, batch_size=batch_size, bc_weight=5.0)
+        elif disable_learning:
+            print("[GUIDED] Learning disabled: running a matched untrained control")
 
     diagnostics_stream = None
     if diagnostics_path is not None:
@@ -2152,13 +2173,18 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
     noise_scale = noise_at(start_episode)
     for ep in range(start_episode + 1, n_episodes + 1):
         noise_scale = noise_at(ep)
+        uniform_random = ep <= random_start_placements
         (transitions, proto_actions, terminal_reward, grid, final_cost,
-         placement) = policy_trajectory(explore=True, noise_scale=noise_scale)
+         placement) = policy_trajectory(
+             explore=True, noise_scale=noise_scale,
+             uniform_random=uniform_random)
         normalized_return = add_trajectory(transitions, terminal_reward, is_demo=False)
         global_step += len(transitions)
-        bc_weight = 5.0 * max(0.0, 1.0 - ep / bc_decay_placements)
+        bc_weight = (0.0 if disable_learning else
+                     5.0 * max(0.0, 1.0 - ep / bc_decay_placements))
         losses = []
-        updates = max(1, math.ceil(len(transitions) / train_every))
+        updates = (0 if disable_learning else
+                   max(1, math.ceil(len(transitions) / train_every)))
         for _ in range(updates):
             loss = agent.train_guided(replay_buffer, batch_size=batch_size,
                                       bc_weight=bc_weight)
@@ -2190,6 +2216,8 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
             record = {
                 "episode": ep, "current_cost": final_cost,
                 "best_cost": best_cost, "deterministic_cost": deterministic_cost,
+                "rollout_source": "uniform_random" if uniform_random else "guided_actor",
+                "learning_enabled": not disable_learning,
                 "retained_deterministic_candidate": retained,
                 "normalized_terminal_return": normalized_return,
                 "noise_scale": noise_scale, "collision_repairs": mapper.collision_repairs,
@@ -2248,6 +2276,8 @@ def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
             "best_cost": best_cost, "top_k": top_k,
             "pretrain_updates": pretrain_updates,
             "bc_decay_placements": bc_decay_placements,
+            "random_start_placements": random_start_placements,
+            "learning_enabled": not disable_learning,
             "compact_state_shape": [mapper.state_rows, mapper.state_cols],
             "replay_target": "discounted_complete_episode_return",
             "critic": "twin_huber_clipped_gradient",
@@ -2526,6 +2556,12 @@ def main():
                         help="Twin-critic/behavior-cloning updates before guided online training")
     parser.add_argument("--guided_bc_decay_placements", type=int, default=2000,
                         help="Placements over which the guided behavior-cloning weight decays to zero")
+    parser.add_argument("--guided_random_start_placements", type=int, default=100,
+                        help="Initial guided placements sampled uniformly from legal cores to "
+                             "broaden replay coverage before relying on actor proposals")
+    parser.add_argument("--guided_disable_learning", action="store_true",
+                        help="Disable guided pretraining and online gradient updates for a "
+                             "matched untrained-policy control")
     parser.add_argument("--compute_ops", type=str, default=None,
                          help="Optional .npy file containing MAC operations per task; "
                               "converted with Table 1's 128 MACs/core at 400 MHz.")
@@ -2646,6 +2682,8 @@ def main():
     if (args.guided_top_k <= 0 or args.guided_demo_iterations <= 0 or
             args.guided_pretrain_updates < 0 or args.guided_bc_decay_placements <= 0):
         parser.error("guided DDPG budgets must be positive (pretrain updates may be zero)")
+    if args.guided_random_start_placements < 0:
+        parser.error("--guided_random_start_placements must be nonnegative")
     if args.conv_blocks <= 0:
         parser.error("--conv_blocks must be positive")
     if args.timing_model == "paper_pipeline":
@@ -2887,7 +2925,9 @@ def main():
             pretrain_updates=args.guided_pretrain_updates,
             bc_decay_placements=args.guided_bc_decay_placements,
             retain_deterministic_candidates=True,
-            asa_options=asa_options)
+            asa_options=asa_options,
+            random_start_placements=args.guided_random_start_placements,
+            disable_learning=args.guided_disable_learning)
         algorithm_metadata.update({"declared_epochs": args.epochs,
                                    "placements_per_epoch": args.placements_per_epoch,
                                    "complete_placement_evaluations": complete_placements})
