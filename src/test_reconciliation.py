@@ -225,6 +225,30 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(mapper.get_placement()[0], 4)
         self.assertEqual(mapper.collision_repairs, 0)
 
+    def test_guided_legal_actions_are_executed_without_repairs(self):
+        allowed = np.array([4, 5, 6, 7], dtype=np.int32)
+        env = MultiChipEnvironment(num_chips_x=2, num_chips_y=1,
+                                   rows_per_chip=2, cols_per_chip=2,
+                                   num_tasks=3, allowed_cores=allowed)
+        mapper = rm.MultiChipCoreMapper(env, baseline_latency=10.0, batch_z=2,
+                                         compact_state=True)
+        state = mapper.reset()
+        self.assertEqual((mapper.state_rows, mapper.state_cols), (2, 2))
+        self.assertEqual(len(state), 4 + env.num_tasks)
+        candidates, core_batches = mapper.legal_action_candidates(
+            np.array([-1.0, -1.0, -1.0, -1.0], dtype=np.float32), top_k=4)
+        self.assertGreaterEqual(len(candidates), 2)
+        self.assertEqual(len(set(core_batches[0].tolist())), 2)
+        _, done, _, _ = mapper.step_legal(core_batches[0])
+        self.assertFalse(done)
+        self.assertEqual(mapper.collision_repairs, 0)
+        candidates, core_batches = mapper.legal_action_candidates(
+            np.zeros(4, dtype=np.float32), top_k=4)
+        _, done, _, _ = mapper.step_legal(core_batches[0])
+        self.assertTrue(done)
+        self.assertEqual(mapper.collision_repairs, 0)
+        self.assertEqual(len(set(mapper.get_placement().tolist())), 3)
+
     def test_potential_shaping_preserves_discounted_return(self):
         gamma = 0.98
         reward_scale = 400.0
@@ -418,6 +442,27 @@ class WorkloadTests(unittest.TestCase):
         if not torch.cuda.is_available():
             with self.assertRaisesRegex(RuntimeError, "CUDA"):
                 rm.DDPGAgent(8, device="cuda")
+
+    def test_guided_replay_and_twin_critic_update_are_finite(self):
+        import torch
+        torch.set_num_threads(2)
+        replay = rm.GuidedReplayBuffer(capacity=128)
+        rng = np.random.default_rng(7)
+        for index in range(80):
+            replay.add(rng.normal(size=8).astype(np.float32),
+                       np.tanh(rng.normal(size=2)).astype(np.float32),
+                       return_target=float(rng.uniform(-0.2, 0.1)),
+                       is_demo=index < 16)
+        agent = rm.DDPGAgent(8, 2, device="cpu", stable=True)
+        before = next(agent.actor.parameters()).detach().clone()
+        first = agent.train_guided(replay, batch_size=64, bc_weight=1.0)
+        second = agent.train_guided(replay, batch_size=64, bc_weight=1.0)
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second["actor_loss"])
+        self.assertTrue(np.isfinite(second["critic_loss"]))
+        self.assertTrue(np.isfinite(second["q_abs_max"]))
+        self.assertTrue(np.isfinite(second["critic_grad_norm"]))
+        self.assertFalse(torch.equal(before, next(agent.actor.parameters()).detach()))
 
     def test_cnn_agent_spatial_state_and_update(self):
         import torch

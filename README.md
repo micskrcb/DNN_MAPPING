@@ -1,6 +1,6 @@
 # DNN Mapping with Reinforcement Learning
 
-This repository maps DNN computation tasks onto a multi-chip many-core accelerator using DDPG, random search, fixed simulated annealing, adaptive simulated annealing (ASA), a DDPG→ASA hybrid, or the sequential baseline (BS). Its reproduction target is Wu et al., **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning**, ACM TODAES 2020 ([DOI 10.1145/3418498](https://doi.org/10.1145/3418498)).
+This repository maps DNN computation tasks onto a multi-chip many-core accelerator using DDPG, guided DDPG, random search, fixed simulated annealing, adaptive simulated annealing (ASA), a DDPG→ASA hybrid, or the sequential baseline (BS). Its reproduction target is Wu et al., **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning**, ACM TODAES 2020 ([DOI 10.1145/3418498](https://doi.org/10.1145/3418498)).
 
 The `cpu` branch is the CPU-oriented continuation of the reconciled paper implementation. It is runnable and tested on CPU, explicitly controls PyTorch thread use, supports concurrent independent experiments, reduces diagnostic overhead, and uses exact affected-stage reevaluation for ASA. The paper does not publish its simulator or every parameter, so the code records reconstruction assumptions instead of claiming exact numerical reproduction.
 
@@ -15,6 +15,7 @@ The `cpu` branch is the CPU-oriented continuation of the reconciled paper implem
 | Sparse reward `sqrt(B) - sqrt(L(P))` | Implemented; zero before a complete placement |
 | BS, RS, SA, and DDPG | Implemented |
 | Adaptive SA and DDPG→ASA | Implemented as research extensions with matched-budget support |
+| Guided DDPG | Implemented as an experimental learning repair using legal actions, ASA demonstrations, complete-episode returns, prioritized replay, and twin critics |
 | Objective sensitivity preflight | Implemented; flat paper-mode objectives stop before long optimization |
 | 30 placements/epoch and paper search budgets | Explicitly accounted for by the paper runner |
 | XY routing and link contention | Reconstructed and implemented |
@@ -26,7 +27,7 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
 
 ## Repository layout
 
-- `src/run_multi_chip.py` runs one BS, DDPG, random-search, SA, ASA, or DDPG→ASA experiment.
+- `src/run_multi_chip.py` runs one BS, DDPG, guided-DDPG, random-search, SA, ASA, or DDPG→ASA experiment.
 - `src/run_multiseed_experiment.py` runs selected methods across seeds and can schedule independent CPU jobs concurrently.
 - `src/run_paper_experiment.py` runs separate CONV and FC paper-mode suites.
 - `src/compute_model.py` reconstructs partitions and converts work/traffic to physical units.
@@ -467,6 +468,50 @@ Paper-mode DDPG uses the Figure 9 spatial CNN, the 2-D placement grid, batched `
 BS fills allowed physical cores in chip-major order. RS samples complete valid placements. SA uses current-cost acceptance, cooling factor 0.99, and roughly 1% placement perturbations that may use free cores.
 
 ASA and DDPG→ASA are project extensions, not features claimed by the source DNN-mapping paper. Keep fixed SA in result tables as the paper-aligned baseline. The runner matches the hybrid's combined candidate count to DDPG. For a direct hybrid-versus-ASA ablation, set `--search_budget` equal to `--epochs × --placements_per_epoch`; otherwise the paper-scale defaults deliberately give SA/ASA one million candidates and DDPG/hybrid 300,000.
+
+## Guided DDPG learning repair
+
+`--algo ddpg_guided` is an experimental extension created after the 3,000-placement diagnostic run showed that the original continuous actor was not learning a useful policy. In that run, almost every requested action collided, the environment silently replaced it with a different core, and replay stored the requested action instead of the action that produced the transition. The deterministic actor collapsed to only a few intended cores while the critic loss grew very large.
+
+Guided DDPG changes the learning path while leaving `--algo ddpg` available as the paper-aligned control:
+
+- the actor emits a proto-action and the twin critics rank nearby legal, collision-free batches;
+- the environment executes that exact legal batch and replay stores the same action;
+- an ASA placement supplies a valid demonstration for behavior cloning;
+- every step receives a discounted complete-placement return instead of waiting for a one-step terminal sample to propagate through replay;
+- prioritized replay samples informative and demonstration transitions;
+- Huber critic loss, delayed actor updates, gradient clipping, and conservative twin-critic scoring reduce divergence;
+- the state contains only the active placement region, so AlexNet CONV uses a 16×16 map instead of padding one active chip to the full 64×64 machine.
+
+A successful guided run should report zero collision repairs, one unique executed core per logic core, finite critic statistics, and a deterministic policy that improves over its untrained control across multiple seeds. These checks show that the learning loop is internally consistent; paper-comparable claims still require the frozen DDPG, BS, RS, and SA baselines under matched placement budgets.
+
+The following bounded AlexNet CONV run performs 100 declared epochs with the paper's 30 complete placements per epoch. The checkpoint path is supplied for both loading and saving, so the same command continues an interrupted run. Diagnostics are appended after a resume.
+
+```bash
+mkdir -p runs/alexnet-conv-guided
+
+python src/run_multi_chip.py \
+  --algo ddpg_guided --device cuda \
+  --use_cnn --model alexnet \
+  --partition_mode paper_targets --workload_region conv \
+  --timing_model paper_pipeline --routing_model paper_xy \
+  --chips_x 4 --chips_y 4 --rows 16 --cols 16 \
+  --agent_arch paper_cnn --reward_mode sparse \
+  --epochs 100 --placements_per_epoch 30 \
+  --baseline_trials 1000 --batch_z 3 --train_every 1 \
+  --exploration_decay_placements 2400 \
+  --guided_top_k 8 --guided_demo_iterations 5000 \
+  --guided_pretrain_updates 500 --guided_bc_decay_placements 2000 \
+  --diagnostics_every 30 --checkpoint_every 100 \
+  --sensitivity_trials 64 --seed 0 \
+  --save_checkpoint runs/alexnet-conv-guided/seed0.pt \
+  --load_checkpoint runs/alexnet-conv-guided/seed0.pt \
+  --diagnostics runs/alexnet-conv-guided/seed0.jsonl \
+  --asa_diagnostics runs/alexnet-conv-guided/seed0-asa.jsonl \
+  --report runs/alexnet-conv-guided/seed0-report.json
+```
+
+The 3,000 online placements are a learning validation budget, not the paper's final search budget. If this run beats a separately run untrained control and remains stable, repeat it for at least five seeds before scaling the online-placement count.
 
 ## Interpreting results
 

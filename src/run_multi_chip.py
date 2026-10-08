@@ -635,10 +635,73 @@ if HAS_TORCH:
         def __len__(self):
             return len(self.buffer)
 
+    class GuidedReplayBuffer:
+        """Prioritized replay for complete-episode return targets.
+
+        Guided DDPG deliberately trains the critic on Monte-Carlo returns.
+        This makes every transition in a sparse-reward placement trajectory
+        informative and avoids bootstrapping a terminal reward through tens
+        or hundreds of placement decisions.  Demonstration transitions are
+        sampled explicitly so that a single ASA trajectory cannot disappear
+        in a much larger online replay buffer.
+        """
+        def __init__(self, capacity=100000, demo_fraction=0.25, alpha=0.6):
+            self.buffer = []
+            self.priorities = np.zeros(capacity, dtype=np.float64)
+            self.ptr = 0
+            self.capacity = capacity
+            self.demo_fraction = demo_fraction
+            self.alpha = alpha
+
+        def add(self, state, action, return_target, is_demo=False, priority=None):
+            entry = (np.asarray(state, dtype=np.float32),
+                     np.asarray(action, dtype=np.float32),
+                     float(return_target), bool(is_demo))
+            if len(self.buffer) < self.capacity:
+                self.buffer.append(entry)
+            else:
+                self.buffer[self.ptr] = entry
+            if priority is None:
+                priority = self.priorities[:len(self.buffer)].max(initial=1.0)
+            self.priorities[self.ptr] = max(float(priority), 1e-6)
+            self.ptr = (self.ptr + 1) % self.capacity
+
+        def sample(self, batch_size, beta=0.4):
+            if not self.buffer:
+                raise ValueError("cannot sample an empty replay buffer")
+            size = len(self.buffer)
+            demo_indices = np.array(
+                [i for i, item in enumerate(self.buffer) if item[3]], dtype=np.int64)
+            demo_count = min(len(demo_indices), int(round(batch_size * self.demo_fraction)))
+            chosen = []
+            if demo_count:
+                chosen.extend(np.random.choice(demo_indices, demo_count, replace=True).tolist())
+            remaining = batch_size - len(chosen)
+            scaled = np.maximum(self.priorities[:size], 1e-6) ** self.alpha
+            probabilities = scaled / scaled.sum()
+            if remaining:
+                chosen.extend(np.random.choice(size, remaining, replace=True,
+                                               p=probabilities).tolist())
+            indices = np.asarray(chosen, dtype=np.int64)
+            batch = [self.buffer[index] for index in indices]
+            states, actions, returns, demos = map(np.asarray, zip(*batch))
+            sample_probabilities = np.maximum(probabilities[indices], 1e-12)
+            weights = (size * sample_probabilities) ** (-beta)
+            weights /= weights.max(initial=1.0)
+            return (states, actions, returns.astype(np.float32),
+                    demos.astype(bool), indices, weights.astype(np.float32))
+
+        def update_priorities(self, indices, priorities):
+            for index, priority in zip(indices, priorities):
+                self.priorities[int(index)] = max(float(priority), 1e-6)
+
+        def __len__(self):
+            return len(self.buffer)
+
     class DDPGAgent:
         def __init__(self, state_dim, action_dim=2, lr_actor=2e-4, lr_critic=1e-3,
                      gamma=0.98, tau=0.005, device=None, agent_arch="mlp",
-                     rows=None, cols=None, num_tasks=None):
+                     rows=None, cols=None, num_tasks=None, stable=False):
             # PERF FIX: this agent previously never checked for a GPU, even
             # if one was available -- for a partitioned CNN workload the
             # state vector is total_cores + num_tasks (e.g. 4096+906=5002
@@ -652,6 +715,8 @@ if HAS_TORCH:
             if agent_arch not in ("mlp", "cnn", "paper_cnn"):
                 raise ValueError(f"Unknown agent architecture: {agent_arch}")
             self.agent_arch = agent_arch
+            self.stable = stable
+            self.training_updates = 0
 
             self.action_dim = action_dim
             if agent_arch in ("cnn", "paper_cnn"):
@@ -674,9 +739,125 @@ if HAS_TORCH:
             self.critic_target.load_state_dict(self.critic.state_dict())
             self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=lr_critic)
 
+            if stable:
+                self.critic2 = critic_cls(*critic_args).to(self.device)
+                self.critic2_target = critic_cls(*critic_args).to(self.device)
+                self.critic2_target.load_state_dict(self.critic2.state_dict())
+                self.critic2_optimizer = optim.Adam(self.critic2.parameters(), lr=lr_critic)
+
             self.gamma = gamma
             self.tau = tau
             self.ou_state = np.zeros(action_dim, dtype=np.float32)
+
+        def score_actions(self, state, actions):
+            """Return conservative Q estimates for legal candidate actions."""
+            states = torch.as_tensor(state, dtype=torch.float32,
+                                     device=self.device).unsqueeze(0)
+            actions_tensor = torch.as_tensor(actions, dtype=torch.float32,
+                                             device=self.device)
+            states = states.expand(len(actions_tensor), -1)
+            self.critic.eval()
+            if self.stable:
+                self.critic2.eval()
+            with torch.inference_mode():
+                values = self.critic(states, actions_tensor)
+                if self.stable:
+                    values = torch.minimum(values, self.critic2(states, actions_tensor))
+            self.critic.train()
+            if self.stable:
+                self.critic2.train()
+            return values.squeeze(1).cpu().numpy()
+
+        def train_guided(self, replay_buffer, batch_size=64, bc_weight=1.0,
+                         policy_delay=2, max_grad_norm=1.0):
+            """Stable twin-critic update using prioritized episode returns."""
+            if len(replay_buffer) < 2:
+                return None
+            batch_size = min(batch_size, max(2, len(replay_buffer)))
+            states, actions, returns, demos, indices, weights = replay_buffer.sample(batch_size)
+            states = torch.as_tensor(states, dtype=torch.float32, device=self.device)
+            actions = torch.as_tensor(actions, dtype=torch.float32, device=self.device)
+            targets = torch.as_tensor(returns, dtype=torch.float32,
+                                      device=self.device).unsqueeze(1)
+            weights_tensor = torch.as_tensor(weights, dtype=torch.float32,
+                                             device=self.device).unsqueeze(1)
+
+            self.critic.train()
+            self.critic2.train()
+            current1 = self.critic(states, actions)
+            current2 = self.critic2(states, actions)
+            loss1_values = F.smooth_l1_loss(current1, targets, reduction="none")
+            loss2_values = F.smooth_l1_loss(current2, targets, reduction="none")
+            critic1_loss = (loss1_values * weights_tensor).mean()
+            critic2_loss = (loss2_values * weights_tensor).mean()
+
+            self.critic_optimizer.zero_grad()
+            critic1_loss.backward()
+            critic1_grad = torch.nn.utils.clip_grad_norm_(self.critic.parameters(), max_grad_norm)
+            self.critic_optimizer.step()
+            self.critic2_optimizer.zero_grad()
+            critic2_loss.backward()
+            critic2_grad = torch.nn.utils.clip_grad_norm_(self.critic2.parameters(), max_grad_norm)
+            self.critic2_optimizer.step()
+
+            td_error = torch.maximum((current1.detach() - targets).abs(),
+                                     (current2.detach() - targets).abs())
+            replay_buffer.update_priorities(indices,
+                                            td_error.squeeze(1).cpu().numpy() + 1e-6)
+
+            self.training_updates += 1
+            actor_loss_value = None
+            bc_loss_value = None
+            actor_grad_value = None
+            if self.training_updates % policy_delay == 0:
+                self.critic.eval()
+                self.critic.requires_grad_(False)
+                predicted = self.actor(states)
+                policy_loss = -self.critic(states, predicted).mean()
+                demo_mask = torch.as_tensor(demos, dtype=torch.bool, device=self.device)
+                if demo_mask.any():
+                    bc_loss = F.mse_loss(predicted[demo_mask], actions[demo_mask])
+                else:
+                    bc_loss = torch.zeros((), device=self.device)
+                actor_loss = policy_loss + float(bc_weight) * bc_loss
+                self.actor_optimizer.zero_grad()
+                actor_loss.backward()
+                actor_grad = torch.nn.utils.clip_grad_norm_(self.actor.parameters(), max_grad_norm)
+                self.actor_optimizer.step()
+                self.critic.requires_grad_(True)
+                self.critic.train()
+                actor_loss_value = float(actor_loss.detach().cpu())
+                bc_loss_value = float(bc_loss.detach().cpu())
+                actor_grad_value = float(torch.as_tensor(actor_grad).detach().cpu())
+
+                for param, target_param in zip(self.actor.parameters(), self.actor_target.parameters()):
+                    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+
+            for online, target in ((self.critic, self.critic_target),
+                                   (self.critic2, self.critic2_target)):
+                for param, target_param in zip(online.parameters(), target.parameters()):
+                    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+            with torch.no_grad():
+                pairs = [(self.actor, self.actor_target),
+                         (self.critic, self.critic_target),
+                         (self.critic2, self.critic2_target)]
+                for online, target in pairs:
+                    for source, destination in zip(online.buffers(), target.buffers()):
+                        destination.copy_(source)
+
+            q_abs_max = float(torch.maximum(current1.detach().abs().max(),
+                                            current2.detach().abs().max()).cpu())
+            if not math.isfinite(q_abs_max):
+                raise FloatingPointError("guided DDPG critic produced a non-finite Q value")
+            return {
+                "actor_loss": actor_loss_value,
+                "critic_loss": float((critic1_loss + critic2_loss).detach().cpu() / 2),
+                "bc_loss": bc_loss_value,
+                "q_abs_max": q_abs_max,
+                "critic_grad_norm": float(max(torch.as_tensor(critic1_grad),
+                                               torch.as_tensor(critic2_grad)).detach().cpu()),
+                "actor_grad_norm": actor_grad_value,
+            }
 
         def select_action(self, state, noise_scale=0.1, explore=True):
             state = torch.as_tensor(state, dtype=torch.float32,
@@ -757,14 +938,23 @@ if HAS_TORCH:
 
         def state_dict(self) -> dict:
             """Everything needed to exactly resume this agent's networks/optimizers."""
-            return {
+            result = {
                 "actor": self.actor.state_dict(),
                 "actor_target": self.actor_target.state_dict(),
                 "critic": self.critic.state_dict(),
                 "critic_target": self.critic_target.state_dict(),
                 "actor_optimizer": self.actor_optimizer.state_dict(),
                 "critic_optimizer": self.critic_optimizer.state_dict(),
+                "stable": self.stable,
+                "training_updates": self.training_updates,
             }
+            if self.stable:
+                result.update({
+                    "critic2": self.critic2.state_dict(),
+                    "critic2_target": self.critic2_target.state_dict(),
+                    "critic2_optimizer": self.critic2_optimizer.state_dict(),
+                })
+            return result
 
         def load_state_dict(self, sd: dict) -> None:
             self.actor.load_state_dict(sd["actor"])
@@ -773,6 +963,11 @@ if HAS_TORCH:
             self.critic_target.load_state_dict(sd["critic_target"])
             self.actor_optimizer.load_state_dict(sd["actor_optimizer"])
             self.critic_optimizer.load_state_dict(sd["critic_optimizer"])
+            self.training_updates = sd.get("training_updates", 0)
+            if self.stable:
+                self.critic2.load_state_dict(sd["critic2"])
+                self.critic2_target.load_state_dict(sd["critic2_target"])
+                self.critic2_optimizer.load_state_dict(sd["critic2_optimizer"])
 
 
 # ---------------------------------------------------------------------------
@@ -782,7 +977,7 @@ if HAS_TORCH:
 class MultiChipCoreMapper:
     def __init__(self, env: MultiChipEnvironment, baseline_latency: float = None, batch_z: int = 3,
                  reward_mode: str = "sparse", shaping_gamma: float = 0.98,
-                 reward_scale: float = 1.0):
+                 reward_scale: float = 1.0, compact_state: bool = False):
         """
         Args:
             baseline_latency: B in the paper's reward r_t = sqrt(B) - sqrt(L(P))
@@ -818,6 +1013,19 @@ class MultiChipCoreMapper:
         self._allowed_grid_mask[self._allowed_grid] = True
         self._region_min_x, self._region_max_x = int(grid_x.min()), int(grid_x.max())
         self._region_min_y, self._region_max_y = int(grid_y.min()), int(grid_y.max())
+        self.compact_state = compact_state
+        self.state_cols = (self._region_max_x - self._region_min_x + 1
+                           if compact_state else self.total_cols)
+        self.state_rows = (self._region_max_y - self._region_min_y + 1
+                           if compact_state else self.total_rows)
+        self._state_index_by_grid = np.full(self.total_rows * self.total_cols, -1,
+                                            dtype=np.int64)
+        if compact_state:
+            local_x = grid_x - self._region_min_x
+            local_y = grid_y - self._region_min_y
+            self._state_index_by_grid[self._allowed_grid] = local_y * self.state_cols + local_x
+        else:
+            self._state_index_by_grid[self._allowed_grid] = self._allowed_grid
         self._task_ptr  = 0
         self.collision_repairs = 0
         self.occupied_collision_repairs = 0
@@ -865,11 +1073,13 @@ class MultiChipCoreMapper:
         # num_tasks (called every environment step -- e.g. ~482 times/episode
         # for AlexNet at batch_z=3) with vectorized numpy assignment. Same
         # result, no interpreted-Python loop.
-        m = np.full(self.total_rows * self.total_cols, -1.0, dtype=np.float32)
-        m[self._allowed_grid] = 0.0
+        m = np.full(self.state_rows * self.state_cols, -1.0, dtype=np.float32)
+        allowed_state_indices = self._state_index_by_grid[self._allowed_grid]
+        m[allowed_state_indices] = 0.0
         valid = self._placement >= 0
         if np.any(valid):
-            m[self._placement[valid]] = (np.nonzero(valid)[0] + 1) / self.num_tasks
+            state_indices = self._state_index_by_grid[self._placement[valid]]
+            m[state_indices] = (np.nonzero(valid)[0] + 1) / self.num_tasks
 
         # PAPER FIX: expose BOTH directions of communication volume,
         # aggregated over the WHOLE upcoming batch of up to batch_z tasks
@@ -890,6 +1100,96 @@ class MultiChipCoreMapper:
             task_comm = task_comm / max_vol
 
         return np.concatenate([m, task_comm])
+
+    def _grid_core_to_action_pair(self, core_id):
+        """Encode a legal grid core at the centre of its continuous bin."""
+        x, y = int(core_id) % self.total_cols, int(core_id) // self.total_cols
+        width = self._region_max_x - self._region_min_x + 1
+        height = self._region_max_y - self._region_min_y + 1
+        ax = 2.0 * ((x - self._region_min_x + 0.5) / width) - 1.0
+        ay = 2.0 * ((y - self._region_min_y + 0.5) / height) - 1.0
+        return float(ax), float(ay)
+
+    def topology_to_grid_placement(self, placement):
+        """Convert chip-major physical IDs into the policy's row-major grid."""
+        physical = np.asarray(placement, dtype=np.int64)
+        topo = self.env.topo
+        chip = physical // topo.cores_per_chip
+        local = physical % topo.cores_per_chip
+        x = ((chip % topo.num_chips_x) * topo.cols_per_chip +
+             local % topo.cols_per_chip)
+        y = ((chip // topo.num_chips_x) * topo.rows_per_chip +
+             local // topo.cols_per_chip)
+        return (y * self.total_cols + x).astype(np.int32)
+
+    def legal_action_candidates(self, proto_action, top_k=8):
+        """Generate legal batched actions near a continuous proto-action.
+
+        Each returned candidate contains unique, currently free physical
+        cores.  The action vector is the centre-coordinate encoding of those
+        executed cores, so replay describes the transition that actually
+        occurred rather than the pre-repair request.
+        """
+        proto_action = np.asarray(proto_action, dtype=np.float32)
+        remaining = self.num_tasks - self._task_ptr
+        n_this_step = min(self.batch_z, remaining)
+        free = np.asarray([core for core in self._allowed_grid
+                           if int(core) not in self._occupied], dtype=np.int64)
+        if len(free) < n_this_step:
+            raise RuntimeError("not enough legal cores remain for guided action")
+        candidate_count = max(1, min(int(top_k), len(free)))
+        candidates, core_batches, seen = [], [], set()
+        width = self._region_max_x - self._region_min_x + 1
+        height = self._region_max_y - self._region_min_y + 1
+        for candidate_index in range(candidate_count):
+            available = free.copy()
+            selected = []
+            for pair_index in range(n_this_step):
+                ax, ay = proto_action[2 * pair_index:2 * pair_index + 2]
+                target_x = self._region_min_x + ((float(ax) + 1.0) / 2.0) * width
+                target_y = self._region_min_y + ((float(ay) + 1.0) / 2.0) * height
+                target_x = min(max(target_x, self._region_min_x),
+                               np.nextafter(self._region_max_x + 1.0, -np.inf))
+                target_y = min(max(target_y, self._region_min_y),
+                               np.nextafter(self._region_max_y + 1.0, -np.inf))
+                cx, cy = available % self.total_cols, available // self.total_cols
+                order = np.lexsort((available,
+                                    np.abs(cx - target_x) + np.abs(cy - target_y)))
+                rank = (0 if candidate_index == 0 else
+                        (candidate_index + pair_index - 1) %
+                        min(candidate_count, len(order)))
+                selected_core = int(available[order[rank]])
+                selected.append(selected_core)
+                available = available[available != selected_core]
+            key = tuple(selected)
+            if key in seen:
+                continue
+            seen.add(key)
+            encoded = []
+            for core in selected:
+                encoded.extend(self._grid_core_to_action_pair(core))
+            while len(encoded) < 2 * self.batch_z:
+                encoded.extend((0.0, 0.0))
+            candidates.append(np.asarray(encoded, dtype=np.float32))
+            core_batches.append(np.asarray(selected, dtype=np.int32))
+        return np.stack(candidates), core_batches
+
+    def step_legal(self, grid_core_ids):
+        """Place an already validated batch without invoking collision repair."""
+        remaining = self.num_tasks - self._task_ptr
+        n_this_step = min(self.batch_z, remaining)
+        core_ids = np.asarray(grid_core_ids, dtype=np.int64)
+        if len(core_ids) != n_this_step or len(set(core_ids.tolist())) != n_this_step:
+            raise ValueError("guided action must contain one unique core per pending task")
+        for core_id in core_ids:
+            core_id = int(core_id)
+            if not self._allowed_grid_mask[core_id] or core_id in self._occupied:
+                raise ValueError("guided action selected an unavailable core")
+            self.intended_cores.add(core_id)
+            self._placement[self._task_ptr] = core_id
+            self._occupied.add(core_id)
+            self._task_ptr += 1
+        return self._reward_after_step()
 
     def _place_one(self, target_x: float, target_y: float):
         """Place the task at self._task_ptr onto a core, given a single
@@ -953,6 +1253,11 @@ class MultiChipCoreMapper:
                 self._region_max_y - self._region_min_y)
             self._place_one(target_x, target_y)
             self._task_ptr += 1
+
+        return self._reward_after_step()
+
+    def _reward_after_step(self):
+        """Evaluate sparse or shaped reward after either placement path."""
 
         done = (self._task_ptr >= self.num_tasks)
 
@@ -1623,6 +1928,324 @@ def run_adaptive_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     return best_cost
 
 
+def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
+                    batch_size: int = 64, baseline_trials: int = 1000,
+                    batch_z: int = 3, train_every: int = 1,
+                    device: str = None, save_checkpoint: str = None,
+                    load_checkpoint: str = None, checkpoint_every: int = 100,
+                    diagnostics_path: str = None, run_metadata: dict = None,
+                    agent_arch: str = "paper_cnn", reward_scale: float = 1.0,
+                    exploration_decay_placements: int = None,
+                    diagnostics_every: int = 30, top_k: int = 8,
+                    demo_iterations: int = 2000, pretrain_updates: int = 200,
+                    bc_decay_placements: int = 2000,
+                    retain_deterministic_candidates: bool = True,
+                    asa_options=None) -> float:
+    """Sample-efficient DDPG variant for the discrete placement interface.
+
+    This experimental mode keeps a deterministic continuous actor but fixes
+    the failure observed in the 3,000-placement Kaggle run: the environment no
+    longer repairs almost every action behind the critic's back.  The actor
+    proposes a proto-action, the critic ranks nearby legal actions, and replay
+    stores the selected legal action.  ASA supplies one valid demonstration;
+    complete-episode returns and prioritized replay make every sparse-reward
+    transition trainable.  Twin critics, Huber loss, delayed actor updates and
+    gradient clipping bound the critic feedback used by the actor.
+    """
+    if not HAS_TORCH:
+        raise RuntimeError("guided DDPG requires PyTorch")
+    if min(n_episodes, batch_z, train_every, diagnostics_every, top_k,
+           demo_iterations, bc_decay_placements) <= 0 or pretrain_updates < 0:
+        raise ValueError("guided DDPG budgets and intervals must be positive")
+    if exploration_decay_placements is None:
+        exploration_decay_placements = max(1, int(0.8 * n_episodes))
+    guided_asa_options = dict(asa_options or {})
+    guided_asa_options.pop("metadata", None)
+    asa_fingerprint_options = tuple(sorted(
+        (key, value) for key, value in guided_asa_options.items()
+        if key != "diagnostics_path"))
+
+    signature = hashlib.sha256()
+    signature.update(np.ascontiguousarray(env.task_graph).tobytes())
+    signature.update(np.ascontiguousarray(env.compute_latency).tobytes())
+    signature.update(np.ascontiguousarray(env.allowed_cores).tobytes())
+    signature.update(repr((env.topo, env.topo.on_chip_latency,
+                           env.topo.off_chip_latency, batch_z, env.timing_units,
+                           agent_arch, reward_scale, exploration_decay_placements,
+                           train_every, top_k, demo_iterations, pretrain_updates,
+                           bc_decay_placements, asa_fingerprint_options,
+                           "ddpg-guided-v1")).encode())
+    fingerprint = signature.hexdigest()
+    checkpoint = None
+    if load_checkpoint is not None and os.path.exists(load_checkpoint):
+        checkpoint = torch.load(load_checkpoint, map_location="cpu", weights_only=False)
+        if checkpoint.get("fingerprint") != fingerprint:
+            raise ValueError("Guided checkpoint is from a different configuration")
+        baseline_latency = checkpoint["baseline_latency"]
+        print(f"[GUIDED] Resuming from placement {checkpoint['episode']}; "
+              f"baseline B={baseline_latency:.6g}")
+    else:
+        print(f"[GUIDED] Computing random-search baseline B ({baseline_trials} trials)...")
+        baseline_latency = run_random(env, n_trials=baseline_trials)
+        baseline_placement = env.placement.copy()
+        print(f"[GUIDED] Baseline B = {baseline_latency:.6g}")
+
+    batch_z = max(1, min(batch_z, env.num_tasks))
+    action_dim = 2 * batch_z
+    mapper = MultiChipCoreMapper(
+        env, baseline_latency=baseline_latency, batch_z=batch_z,
+        reward_mode="sparse", reward_scale=reward_scale, compact_state=True)
+    state_dim = mapper.state_rows * mapper.state_cols + env.num_tasks
+    agent = DDPGAgent(
+        state_dim=state_dim, action_dim=action_dim, device=device,
+        agent_arch=agent_arch, rows=mapper.state_rows, cols=mapper.state_cols,
+        num_tasks=env.num_tasks, stable=True, lr_critic=3e-4)
+    replay_buffer = GuidedReplayBuffer()
+    reward_normalizer = max(mapper._potential_normalizer, np.finfo(float).eps)
+    print(f"[GUIDED] Compact state: {mapper.state_rows}x{mapper.state_cols}; "
+          f"legal top-k={top_k}; twin critics; episode-return replay")
+
+    def add_trajectory(transitions, terminal_reward, is_demo):
+        normalized_terminal = float(terminal_reward) / reward_normalizer
+        horizon = len(transitions)
+        for index, (state, executed_action) in enumerate(transitions):
+            return_target = (agent.gamma ** (horizon - index - 1)) * normalized_terminal
+            replay_buffer.add(state, executed_action, return_target,
+                              is_demo=is_demo,
+                              priority=2.0 if is_demo else None)
+        return normalized_terminal
+
+    def exact_trajectory(physical_placement):
+        grid_placement = mapper.topology_to_grid_placement(physical_placement)
+        state = mapper.reset()
+        transitions, done, grid, cost, reward = [], False, "", 0.0, 0.0
+        while not done:
+            n_this = min(batch_z, env.num_tasks - mapper._task_ptr)
+            cores = grid_placement[mapper._task_ptr:mapper._task_ptr + n_this]
+            encoded = []
+            for core in cores:
+                encoded.extend(mapper._grid_core_to_action_pair(int(core)))
+            while len(encoded) < action_dim:
+                encoded.extend((0.0, 0.0))
+            transitions.append((state.copy(), np.asarray(encoded, dtype=np.float32)))
+            reward, done, grid, cost = mapper.step_legal(cores)
+            state = mapper._occ_map()
+        return transitions, reward, grid, cost
+
+    def policy_trajectory(explore, noise_scale):
+        state = mapper.reset()
+        transitions, proto_actions = [], []
+        done, grid, final_cost, terminal_reward = False, "", 0.0, 0.0
+        while not done:
+            proto = agent.select_action(state, noise_scale=noise_scale, explore=explore)
+            candidates, core_batches = mapper.legal_action_candidates(proto, top_k=top_k)
+            scores = agent.score_actions(state, candidates)
+            selected = int(np.argmax(scores))
+            executed_action = candidates[selected]
+            transitions.append((state.copy(), executed_action.copy()))
+            proto_actions.append(proto.copy())
+            terminal_reward, done, grid, final_cost = mapper.step_legal(
+                core_batches[selected])
+            state = mapper._occ_map()
+        return (transitions, proto_actions, terminal_reward, grid, final_cost,
+                mapper.get_placement().copy())
+
+    # ASA -> demonstration trajectory. This reverses the old DDPG->ASA hybrid:
+    # the heuristic now teaches the policy instead of only polishing its output.
+    asa_metadata = {}
+    print(f"[GUIDED] Generating ASA demonstration ({demo_iterations} candidates)...")
+    guided_asa_options["metadata"] = asa_metadata
+    asa_cost = run_adaptive_sa(
+        env, n_iter=demo_iterations, **guided_asa_options)
+    asa_placement = env.placement.copy()
+    demo_cost, demo_placement, demo_source = asa_cost, asa_placement, "adaptive_sa"
+    if checkpoint is not None and checkpoint["best_cost"] < demo_cost:
+        demo_cost = checkpoint["best_cost"]
+        demo_placement = np.asarray(checkpoint["best_placement"], dtype=np.int32).copy()
+        demo_source = "checkpoint_best"
+    elif checkpoint is None and baseline_latency < demo_cost:
+        demo_cost, demo_placement = baseline_latency, baseline_placement.copy()
+        demo_source = "random_baseline"
+    demo_transitions, demo_reward, demo_grid, replayed_demo_cost = exact_trajectory(
+        demo_placement)
+    if not math.isclose(demo_cost, replayed_demo_cost, rel_tol=1e-9, abs_tol=1e-12):
+        raise RuntimeError(
+            "ASA demonstration changed cost when replayed through legal actions: "
+            f"{demo_cost:.12g} != {replayed_demo_cost:.12g}")
+    add_trajectory(demo_transitions, demo_reward, is_demo=True)
+    print(f"[GUIDED] Demonstration source={demo_source}, cost={demo_cost:.6g}; "
+          f"{len(demo_transitions)} transitions added to replay")
+
+    if checkpoint is not None:
+        agent.load_state_dict(checkpoint["agent"])
+        random.setstate(checkpoint["random_state"])
+        np.random.set_state(checkpoint["numpy_state"])
+        torch.set_rng_state(checkpoint["torch_state"])
+        if agent.device.type == "cuda" and checkpoint.get("cuda_state") is not None:
+            torch.cuda.set_rng_state_all(checkpoint["cuda_state"])
+        best_cost = checkpoint["best_cost"]
+        best_placement = checkpoint["best_placement"]
+        best_grid = checkpoint.get("best_grid")
+        best_candidate_source = checkpoint.get("best_candidate_source", "guided_training")
+        global_step = checkpoint.get("global_step", 0)
+        start_episode = checkpoint["episode"]
+        deterministic_candidate_evaluations = checkpoint.get(
+            "deterministic_candidate_evaluations", 0)
+    else:
+        best_cost = min(baseline_latency, demo_cost)
+        if demo_cost <= baseline_latency:
+            best_placement, best_grid = demo_placement.copy(), demo_grid
+            best_candidate_source = ("asa_demonstration"
+                                     if demo_source == "adaptive_sa"
+                                     else "random_baseline")
+        else:
+            best_placement, best_grid = baseline_placement.copy(), None
+            best_candidate_source = "random_baseline"
+        global_step = start_episode = deterministic_candidate_evaluations = 0
+        if pretrain_updates:
+            print(f"[GUIDED] Pretraining on the demonstration ({pretrain_updates} updates)...")
+            for _ in range(pretrain_updates):
+                agent.train_guided(replay_buffer, batch_size=batch_size, bc_weight=5.0)
+
+    diagnostics_stream = None
+    if diagnostics_path is not None:
+        parent = os.path.dirname(diagnostics_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        diagnostics_stream = open(
+            diagnostics_path, "a" if checkpoint is not None else "w",
+            encoding="utf-8")
+
+    def noise_at(episode):
+        return max(0.01, 0.01 ** (episode / exploration_decay_placements))
+
+    def save(ep):
+        if save_checkpoint is None:
+            return
+        torch.save({
+            "fingerprint": fingerprint,
+            "random_state": random.getstate(),
+            "numpy_state": np.random.get_state(),
+            "torch_state": torch.get_rng_state(),
+            "cuda_state": (torch.cuda.get_rng_state_all()
+                           if agent.device.type == "cuda" else None),
+            "agent": agent.state_dict(), "best_cost": best_cost,
+            "best_placement": best_placement, "best_grid": best_grid,
+            "best_candidate_source": best_candidate_source,
+            "global_step": global_step, "episode": ep,
+            "baseline_latency": baseline_latency,
+            "deterministic_candidate_evaluations": deterministic_candidate_evaluations,
+        }, save_checkpoint)
+
+    start_time = time.time()
+    final_cost = demo_cost
+    noise_scale = noise_at(start_episode)
+    for ep in range(start_episode + 1, n_episodes + 1):
+        noise_scale = noise_at(ep)
+        (transitions, proto_actions, terminal_reward, grid, final_cost,
+         placement) = policy_trajectory(explore=True, noise_scale=noise_scale)
+        normalized_return = add_trajectory(transitions, terminal_reward, is_demo=False)
+        global_step += len(transitions)
+        bc_weight = 5.0 * max(0.0, 1.0 - ep / bc_decay_placements)
+        losses = []
+        updates = max(1, math.ceil(len(transitions) / train_every))
+        for _ in range(updates):
+            loss = agent.train_guided(replay_buffer, batch_size=batch_size,
+                                      bc_weight=bc_weight)
+            if loss is not None:
+                losses.append(loss)
+
+        if final_cost < best_cost:
+            best_cost, best_grid = final_cost, grid
+            best_placement = placement.copy()
+            best_candidate_source = "guided_training"
+
+        write_diagnostics = (ep % diagnostics_every == 0 or ep == n_episodes)
+        if write_diagnostics:
+            (eval_transitions, eval_proto, _, eval_grid, deterministic_cost,
+             deterministic_placement) = policy_trajectory(explore=False, noise_scale=0.0)
+            deterministic_candidate_evaluations += 1
+            retained = False
+            if retain_deterministic_candidates and deterministic_cost < best_cost:
+                best_cost, best_grid = deterministic_cost, eval_grid
+                best_placement = deterministic_placement.copy()
+                best_candidate_source = "guided_deterministic"
+                retained = True
+            env.place(placement)
+            action_values = np.concatenate(proto_actions)
+            finite_actor = [item["actor_loss"] for item in losses
+                            if item["actor_loss"] is not None]
+            finite_bc = [item["bc_loss"] for item in losses
+                         if item["bc_loss"] is not None]
+            record = {
+                "episode": ep, "current_cost": final_cost,
+                "best_cost": best_cost, "deterministic_cost": deterministic_cost,
+                "retained_deterministic_candidate": retained,
+                "normalized_terminal_return": normalized_return,
+                "noise_scale": noise_scale, "collision_repairs": mapper.collision_repairs,
+                "unique_executed_cores": len(mapper.intended_cores),
+                "deterministic_collision_repairs": 0,
+                "deterministic_unique_executed_cores": env.num_tasks,
+                "proto_action_mean": float(action_values.mean()),
+                "proto_action_std": float(action_values.std()),
+                "proto_action_saturated_fraction": float(
+                    np.mean(np.abs(action_values) >= 0.999)),
+                "actor_loss_mean": float(np.mean(finite_actor)) if finite_actor else None,
+                "critic_loss_mean": float(np.mean(
+                    [item["critic_loss"] for item in losses])) if losses else None,
+                "bc_loss_mean": float(np.mean(finite_bc)) if finite_bc else None,
+                "q_abs_max": float(max(item["q_abs_max"] for item in losses)) if losses else None,
+                "critic_grad_norm_max": float(max(
+                    item["critic_grad_norm"] for item in losses)) if losses else None,
+                "actor_grad_norm_max": float(max(
+                    item["actor_grad_norm"] for item in losses
+                    if item["actor_grad_norm"] is not None)) if finite_actor else None,
+                "gradient_updates": len(losses), "bc_weight": bc_weight,
+                "replay_size": len(replay_buffer),
+            }
+            if diagnostics_stream is not None:
+                diagnostics_stream.write(json.dumps(record, allow_nan=False) + "\n")
+                diagnostics_stream.flush()
+
+        if ep % 10 == 0 or ep == n_episodes:
+            elapsed = time.time() - start_time
+            per_ep = elapsed / max(1, ep - start_episode)
+            eta = timedelta(seconds=int(per_ep * (n_episodes - ep)))
+            print(f"# of guided placements: {ep:7d} | Current Cost: {final_cost:.6g} | "
+                  f"Best Cost: {best_cost:.6g} | {per_ep:.2f}s/ep | ETA: {eta}")
+        if save_checkpoint is not None and ep % checkpoint_every == 0:
+            save(ep)
+            print(f"[GUIDED] Checkpoint saved to {save_checkpoint} (placement {ep})")
+
+    if n_episodes > start_episode:
+        save(n_episodes)
+    if diagnostics_stream is not None:
+        diagnostics_stream.close()
+    env.place(best_placement)
+    if run_metadata is not None:
+        run_metadata.update({
+            "method": "ddpg_guided", "baseline_cost": baseline_latency,
+            "asa_demonstration_cost": asa_cost,
+            "demonstration_cost": demo_cost,
+            "demonstration_source": demo_source,
+            "asa_demonstration_evaluations": demo_iterations,
+            "training_candidate_evaluations": n_episodes - start_episode,
+            "deterministic_candidate_evaluations": deterministic_candidate_evaluations,
+            "total_candidate_evaluations": (baseline_trials + demo_iterations +
+                                            n_episodes - start_episode +
+                                            deterministic_candidate_evaluations),
+            "best_candidate_source": best_candidate_source,
+            "best_cost": best_cost, "top_k": top_k,
+            "pretrain_updates": pretrain_updates,
+            "bc_decay_placements": bc_decay_placements,
+            "compact_state_shape": [mapper.state_rows, mapper.state_cols],
+            "replay_target": "discounted_complete_episode_return",
+            "critic": "twin_huber_clipped_gradient",
+            "diagnostics_path": diagnostics_path, "asa": asa_metadata,
+        })
+    return best_cost
+
+
 def run_ddpg_asa(env: MultiChipEnvironment, ddpg_placements: int,
                  asa_iterations: int, ddpg_options=None, asa_options=None,
                  metadata: dict = None) -> float:
@@ -1806,10 +2429,11 @@ def run_sequential(env: MultiChipEnvironment) -> float:
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-chip core placement")
-    parser.add_argument("--algo", choices=["ddpg", "sa", "asa", "ddpg_asa",
+    parser.add_argument("--algo", choices=["ddpg", "ddpg_guided", "sa", "asa", "ddpg_asa",
                                             "random", "bs"], default="ddpg",
-                        help="Placement method; asa is adaptive SA and ddpg_asa "
-                             "refines the best DDPG placement with ASA")
+                        help="Placement method; ddpg_guided uses ASA demonstrations, "
+                             "legal top-k actions, episode-return replay and stable twin "
+                             "critics; ddpg remains the paper-faithful baseline")
     parser.add_argument("--chips_x", type=int, default=2)
     parser.add_argument("--chips_y", type=int, default=2)
     parser.add_argument("--rows", type=int, default=4, help="Rows per chip")
@@ -1884,6 +2508,14 @@ def main():
     parser.add_argument("--retain_deterministic_candidates", action="store_true",
                         help="Allow deterministic diagnostic rollouts to update the saved best "
                              "placement; their extra objective evaluations are reported separately")
+    parser.add_argument("--guided_top_k", type=int, default=8,
+                        help="Legal action candidates ranked by the guided DDPG critics")
+    parser.add_argument("--guided_demo_iterations", type=int, default=2000,
+                        help="Adaptive-SA candidate budget used to create the guided demonstration")
+    parser.add_argument("--guided_pretrain_updates", type=int, default=200,
+                        help="Twin-critic/behavior-cloning updates before guided online training")
+    parser.add_argument("--guided_bc_decay_placements", type=int, default=2000,
+                        help="Placements over which the guided behavior-cloning weight decays to zero")
     parser.add_argument("--compute_ops", type=str, default=None,
                          help="Optional .npy file containing MAC operations per task; "
                               "converted with Table 1's 128 MACs/core at 400 MHz.")
@@ -2001,6 +2633,9 @@ def main():
     if (args.exploration_decay_placements is not None and
             args.exploration_decay_placements <= 0):
         parser.error("--exploration_decay_placements must be positive")
+    if (args.guided_top_k <= 0 or args.guided_demo_iterations <= 0 or
+            args.guided_pretrain_updates < 0 or args.guided_bc_decay_placements <= 0):
+        parser.error("guided DDPG budgets must be positive (pretrain updates may be zero)")
     if args.conv_blocks <= 0:
         parser.error("--conv_blocks must be positive")
     if args.timing_model == "paper_pipeline":
@@ -2151,7 +2786,7 @@ def main():
     print(f"System : {env.topo}")
     print(f"Tasks  : {env.num_tasks}")
     print(f"Algo   : {args.algo}")
-    if args.algo in ("ddpg", "ddpg_asa"):
+    if args.algo in ("ddpg", "ddpg_guided", "ddpg_asa"):
         print(f"Reward : sqrt({args.reward_scale:g} * latency)")
     print("-" * 50)
 
@@ -2222,6 +2857,30 @@ def main():
                               "placements_per_epoch": args.placements_per_epoch,
                               "complete_placement_evaluations": complete_placements})
         algorithm_metadata = ddpg_metadata
+    elif args.algo == "ddpg_guided":
+        algorithm_metadata = {}
+        print(f">> Guided DDPG budget: {complete_placements} online placements + "
+              f"{args.guided_demo_iterations} ASA demonstration candidates")
+        cost = run_ddpg_guided(
+            env, n_episodes=complete_placements, batch_z=args.batch_z,
+            baseline_trials=args.baseline_trials, train_every=args.train_every,
+            device=args.device, save_checkpoint=args.save_checkpoint,
+            load_checkpoint=args.load_checkpoint,
+            checkpoint_every=args.checkpoint_every,
+            diagnostics_path=args.diagnostics,
+            run_metadata=algorithm_metadata, agent_arch=args.agent_arch,
+            reward_scale=args.reward_scale,
+            exploration_decay_placements=args.exploration_decay_placements,
+            diagnostics_every=args.diagnostics_every,
+            top_k=args.guided_top_k,
+            demo_iterations=args.guided_demo_iterations,
+            pretrain_updates=args.guided_pretrain_updates,
+            bc_decay_placements=args.guided_bc_decay_placements,
+            retain_deterministic_candidates=True,
+            asa_options=asa_options)
+        algorithm_metadata.update({"declared_epochs": args.epochs,
+                                   "placements_per_epoch": args.placements_per_epoch,
+                                   "complete_placement_evaluations": complete_placements})
     elif args.algo == "ddpg_asa":
         algorithm_metadata = {}
         print(f">> Hybrid budget: {complete_placements} DDPG placements + "
@@ -2252,8 +2911,10 @@ def main():
         if report_parent:
             os.makedirs(report_parent, exist_ok=True)
         limitations = ["replay buffer is not persisted in DDPG checkpoints"]
-        if args.agent_arch != "paper_cnn" and args.algo in ("ddpg", "ddpg_asa"):
+        if args.agent_arch != "paper_cnn" and args.algo in ("ddpg", "ddpg_guided", "ddpg_asa"):
             limitations.append("selected DDPG agent is not the Figure-9 paper CNN")
+        if args.algo == "ddpg_guided":
+            limitations.append("ddpg_guided is a sample-efficiency extension, not the paper's original DDPG")
         if args.partition_mode != "paper_targets":
             limitations.append("logic-core allocation does not match Figure-6 aggregate counts")
         else:
@@ -2273,6 +2934,8 @@ def main():
         if args.model.lower() == "resnet50":
             limitations.append("residual add is assigned to the destination transformation/VVA path")
         evaluated_placements = (complete_placements if args.algo == "ddpg"
+                                else algorithm_metadata["total_candidate_evaluations"]
+                                if args.algo == "ddpg_guided"
                                 else complete_placements + args.iters
                                 if args.algo == "ddpg_asa"
                                 else 1 if args.algo == "bs" else args.iters)
@@ -2283,7 +2946,7 @@ def main():
                        "objective_units": env.timing_units, "best_cost": cost,
                        "complete_placement_evaluations": evaluated_placements,
                        "reward_normalizer_evaluations": args.baseline_trials
-                       if args.algo in ("ddpg", "ddpg_asa") else 0,
+                       if args.algo in ("ddpg", "ddpg_guided", "ddpg_asa") else 0,
                        "placement_chip_major": env.placement.tolist(),
                        "routing_diagnostics": routing_diagnostics,
                        "objective_sensitivity": objective_sensitivity,
@@ -2296,7 +2959,7 @@ def main():
                        "cuda_device": torch.cuda.get_device_name(0)
                        if HAS_TORCH and torch.cuda.is_available() else None,
                        "algorithm_metadata": algorithm_metadata,
-                       "ddpg_metadata": algorithm_metadata if args.algo == "ddpg" else
+                       "ddpg_metadata": algorithm_metadata if args.algo in ("ddpg", "ddpg_guided") else
                        algorithm_metadata.get("ddpg") if args.algo == "ddpg_asa" else None,
                        "limitations": limitations},
                       stream, indent=2)
