@@ -104,10 +104,11 @@ The planned H100 12 GB slice was unavailable. Kaggle completed the original diag
 ## Next execution sequence
 
 1. Preserve guided DDPG and both 4,101-evaluation PPO-ASA variants as negative ablations; do not scale their unchanged policies.
-2. Train the next proposal policy across parallel independent placement chains, using at least 250,000 true-objective evaluations and matched frozen-policy and ASA controls.
-3. Use the official RL-Based-SA structure or MaskablePPO for maintained PPO and parallel collection while retaining this project's evaluator and legal placement.
-4. Do not scale unchanged AlexNet-FC masked PPO; its 3,000-placement run tied the frozen control and lost to ASA.
-5. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.
+2. [Implemented locally] Train one shared proposal policy across repeated independently initialized placement chains, using 250,000 proposals and matched frozen-policy and ASA controls. Chain initializations are part of the objective budget.
+3. Run `bash scripts/run_kaggle_ppo_asa_gate.sh multichain-train` on Kaggle T4 x2. It creates 1,954 chains and exactly 251,954 true-objective evaluations per condition.
+4. Proceed to five seeds only if trained PPO-ASA beats both its frozen control and ASA. If PPO mechanics are unstable, retain the adapter and test MaskablePPO; a library change alone is not evidence of learning.
+5. Do not scale unchanged AlexNet-FC masked PPO; its 3,000-placement run tied the frozen control and lost to ASA.
+6. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.
 6. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
 7. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
 

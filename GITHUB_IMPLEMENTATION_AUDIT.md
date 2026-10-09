@@ -104,3 +104,27 @@ and batch or parallelize environment collection. The first training-scale
 target should be at least 250,000 true-objective evaluations, with a frozen
 policy control and ordinary ASA receiving matched evaluation budgets. Every
 true objective call remains part of the budget.
+
+## Implemented response to the audit
+
+The repository now supports repeated independently initialized PPO-ASA chains
+through `--ppo_asa_restart_interval`. One proposal network and optimizer learn
+from rollouts collected across all chains, while generalized-advantage
+estimation treats each restart as terminal. A configurable mixture of global
+and bottleneck-anchored proposals is available through
+`--ppo_asa_focus_fraction`. New-chain initialization evaluations are included
+in the true-objective budget, and the paired Kaggle runner increases ASA's
+proposal count so all three conditions have identical totals.
+
+The `multichain-train` protocol uses 250,000 proposals, 1,954 independent
+chains, 4,096-transition PPO rollouts, and 251,954 objective evaluations per
+condition. Collection inside each condition is sequential because the
+placement evaluator is stateful; trained and frozen conditions run concurrently
+on Kaggle's two GPUs. This obtains multi-chain data diversity without claiming
+that the evaluator itself is vectorized.
+
+The implementation follows the public RL-Based-SA experiment structure and
+cites it in the source and documentation. No external source code was copied.
+Stable-Baselines3 Contrib remains a licensed, maintained fallback if the
+training-scale result identifies an optimizer problem; it was not added as an
+unnecessary dependency before that evidence exists.

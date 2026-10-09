@@ -714,6 +714,32 @@ closest official RL-Based-SA setup uses millions of transitions across many
 parallel problem instances. The next RL implementation must make that training
 regime possible while retaining the current evaluator and matched controls.
 
+That training-scale path is now implemented. `--ppo_asa_restart_interval`
+starts independently initialized placement chains while retaining one shared
+proposal policy and optimizer; `--ppo_asa_focus_fraction` mixes bottleneck-
+anchored and global proposals in every candidate pool. Chain boundaries are
+terminal for advantage estimation, and every new-chain initialization is
+included in `total_objective_evaluations`. The paired script automatically
+gives ordinary ASA the same number of true objective calls.
+
+A 520-evaluation local smoke passed all restart, finite-update, frozen-control,
+and budget checks. Learned and frozen PPO-ASA tied at 24.31712 microseconds and
+ASA reached 24.05376 microseconds; this small run validates mechanics only.
+The first decision run trains across 1,954 chains and uses exactly 251,954
+objective evaluations per condition (250,000 proposals plus initializations):
+
+```bash
+bash scripts/run_kaggle_ppo_asa_gate.sh multichain-train
+```
+
+On a Kaggle T4 x2 session, trained and frozen PPO-ASA run concurrently, then
+ASA runs with the matched budget. The script prints progress every minute and
+creates `runs/kaggle-ppo-asa-alexnet-fc-multichain-train.zip`. Run
+`multichain-preflight` first only when checking a new environment. The code
+uses the training structure described by the official RL-Based-SA project but
+does not copy its source; citations and compatibility limits are recorded in
+`GITHUB_IMPLEMENTATION_AUDIT.md`.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

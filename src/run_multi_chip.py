@@ -2432,6 +2432,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 value_coefficient: float = 0.5, max_grad_norm: float = 0.5,
                 hidden_dim: int = 128, disable_learning: bool = False,
                 focus_bottleneck: bool = False,
+                focus_fraction: float = 0.0, restart_interval: int = 0,
                 seed: int = None, initial_acceptance: float = 0.8,
                 target_acceptance: float = 0.30, adapt_window: int = 100,
                 min_perturb_frac: float = 0.005,
@@ -2448,7 +2449,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     set of legal, unevaluated swap/relocation candidates.  Only the selected
     candidate calls the true placement objective, so ``n_iter`` has the same
     meaning as ordinary ASA.  A disabled-learning run stays exactly uniform
-    because the proposal score head is initialized to zero.
+    because the proposal score head is initialized to zero. Independent-chain
+    training follows their multi-instance training principle, with an original
+    adapter for this project's placement state, action, and objective. No
+    external implementation code is copied. Reference:
+    https://github.com/nathanqiu07/RL-Based-SA-Public
     """
     if not HAS_TORCH:
         raise RuntimeError("PPO-guided ASA requires PyTorch")
@@ -2458,6 +2463,12 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("PPO-ASA budgets and sizes must be positive")
     if candidate_count < 2:
         raise ValueError("PPO-ASA requires at least two proposal candidates")
+    if not 0.0 <= focus_fraction <= 1.0:
+        raise ValueError("PPO-ASA focus fraction must be in [0, 1]")
+    if restart_interval < 0:
+        raise ValueError("PPO-ASA restart interval cannot be negative")
+    if focus_bottleneck:
+        focus_fraction = 1.0
     if (not 0 < gamma <= 1 or not 0 <= gae_lambda <= 1 or
             not 0 < clip_ratio < 1 or learning_rate <= 0 or
             entropy_coefficient < 0 or value_coefficient < 0 or
@@ -2488,6 +2499,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     env.place(placement)
     current_cost = float(env.evaluate())
     initial_cost = current_cost
+    chain_initial_cost = current_cost
+    chain_best_cost = current_cost
     best_cost, best_placement = current_cost, placement.copy()
     free_pool = _FreeCorePool(env.allowed_cores, placement)
     evaluator = None
@@ -2496,7 +2509,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             evaluator = IncrementalPipelineEvaluator(env)
         except (TypeError, AttributeError):
             evaluator = None
-    if focus_bottleneck and evaluator is None:
+    if focus_fraction > 0 and evaluator is None:
         raise ValueError(
             "bottleneck-focused PPO-ASA requires the incremental pipeline evaluator")
 
@@ -2525,8 +2538,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     task_pressure /= pressure_scale
     total_edge_volume = max(float(edge_volumes.sum()), np.finfo(float).eps)
 
-    def bottleneck_tasks():
-        if not focus_bottleneck:
+    def bottleneck_tasks(use_focus):
+        if not use_focus:
             return None
         stage_index = int(np.argmax(evaluator.stage_costs))
         return evaluator.stages[stage_index]
@@ -2611,12 +2624,13 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 else float(env.evaluate()))
 
     accepted = improving = reheats = neutral_proposals = evaluations = 0
+    chain_count = initialization_evaluations = 1
     positive_deltas = []
     perturb_fraction = min_perturb_frac
 
     def finish_proposal(candidate, new_cost, relocation, accept):
         nonlocal placement, current_cost, best_cost, best_placement
-        nonlocal accepted, improving
+        nonlocal accepted, improving, chain_best_cost
         if accept:
             if new_cost < current_cost:
                 improving += 1
@@ -2626,6 +2640,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 evaluator.accept()
             if relocation is not None:
                 free_pool.accept_relocation(*relocation)
+            chain_best_cost = min(chain_best_cost, new_cost)
             if new_cost < best_cost:
                 best_cost, best_placement = new_cost, candidate.copy()
         else:
@@ -2634,12 +2649,17 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 evaluator.reject()
 
     calibration = min(n_iter, max(1, calibration_trials))
+    if restart_interval and restart_interval <= calibration:
+        raise ValueError(
+            "PPO-ASA restart interval must exceed calibration trials")
     for _ in range(calibration):
         n_perturb = max(2 if n > 1 else 1,
                         min(n, round(perturb_fraction * n)))
+        use_focus = (focus_fraction > 0 and
+                     proposal_rng.random() < focus_fraction)
         candidate, changed, relocation = _placement_neighbor(
             placement, n_perturb, free_pool, rng=proposal_rng,
-            anchor_tasks=bottleneck_tasks())
+            anchor_tasks=bottleneck_tasks(use_focus))
         new_cost = evaluate(candidate, changed)
         evaluations += 1
         delta = new_cost - current_cost
@@ -2672,10 +2692,12 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         return np.asarray([
             progress,
             np.clip(temperature_log / 14.0, -1.0, 1.0),
-            np.clip((initial_cost - current_cost) /
-                    max(abs(initial_cost) * 0.05, np.finfo(float).eps), -2.0, 2.0),
-            np.clip((initial_cost - best_cost) /
-                    max(abs(initial_cost) * 0.05, np.finfo(float).eps), -2.0, 2.0),
+            np.clip((chain_initial_cost - current_cost) /
+                    max(abs(chain_initial_cost) * 0.05,
+                        np.finfo(float).eps), -2.0, 2.0),
+            np.clip((chain_initial_cost - chain_best_cost) /
+                    max(abs(chain_initial_cost) * 0.05,
+                        np.finfo(float).eps), -2.0, 2.0),
             np.clip(last_delta / reward_scale, -10.0, 10.0) / 10.0,
             float(last_accepted),
             float(recent_acceptance),
@@ -2684,10 +2706,12 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
 
     def make_proposal_pool(n_perturb):
         candidates, changed_sets, relocations, features = [], [], [], []
-        for _ in range(candidate_count):
+        focused_candidates = round(candidate_count * focus_fraction)
+        for candidate_index in range(candidate_count):
             candidate, changed, relocation = _placement_neighbor(
                 placement, n_perturb, free_pool, rng=proposal_rng,
-                anchor_tasks=bottleneck_tasks())
+                anchor_tasks=bottleneck_tasks(
+                    candidate_index < focused_candidates))
             candidates.append(candidate)
             changed_sets.append(changed)
             relocations.append(relocation)
@@ -2786,6 +2810,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     last_accepted = False
     recent_acceptance = target_acceptance
     policy_steps = max(0, n_iter - calibration)
+    chain_evaluations = calibration
+    progress_interval = max(adapt_window, max(1, n_iter // 50))
+    next_progress = progress_interval
 
     if policy_steps:
         n_perturb = max(2 if n > 1 else 1,
@@ -2816,6 +2843,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         previous_accepted, previous_improving = accepted, improving
         new_cost = evaluate(candidate, changed)
         evaluations += 1
+        chain_evaluations += 1
         delta = new_cost - before_cost
         if delta == 0:
             neutral_proposals += 1
@@ -2832,7 +2860,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         last_delta = delta
         last_accepted = accept
 
-        end_window = window_evaluations >= adapt_window or evaluations == n_iter
+        end_chain = bool(
+            restart_interval and chain_evaluations >= restart_interval)
+        end_window = (window_evaluations >= adapt_window or
+                      evaluations == n_iter or end_chain)
         write_record = False
         if end_window:
             recent_acceptance = window_accepted / window_evaluations
@@ -2859,7 +2890,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 max_temperature, max(min_temperature, temperature))
             write_record = True
 
-        done = evaluations == n_iter
+        overall_done = evaluations == n_iter
+        done = overall_done or end_chain
         next_pool = None
         next_value = 0.0
         if not done:
@@ -2887,7 +2919,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "next_value": next_value,
             "done": done,
         })
-        if len(pending) >= rollout_steps or done:
+        if len(pending) >= rollout_steps or overall_done:
             latest_metrics = update_policy(pending)
             pending.clear()
 
@@ -2905,6 +2937,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                     np.mean(window_selected_proxy)),
                 "learning_enabled": not disable_learning,
                 "update_count": update_count,
+                "chain": chain_count,
             }
             for key in ("policy_loss", "value_loss", "entropy",
                         "approximate_kl", "clip_fraction", "gradient_norm"):
@@ -2916,6 +2949,44 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             window_accepted = window_improving = window_evaluations = 0
             window_rewards.clear()
             window_selected_proxy.clear()
+        if end_chain and evaluations < n_iter:
+            placement = np.asarray(
+                proposal_rng.sample(env.allowed_cores.tolist(), n),
+                dtype=np.int32)
+            env.place(placement)
+            current_cost = float(env.evaluate())
+            chain_initial_cost = current_cost
+            chain_best_cost = current_cost
+            initialization_evaluations += 1
+            chain_count += 1
+            if current_cost < best_cost:
+                best_cost, best_placement = current_cost, placement.copy()
+            free_pool = _FreeCorePool(env.allowed_cores, placement)
+            evaluator = None
+            if incremental:
+                try:
+                    evaluator = IncrementalPipelineEvaluator(env)
+                except (TypeError, AttributeError):
+                    evaluator = None
+            temperature = initial_temperature
+            perturb_fraction = min_perturb_frac
+            stagnant = 0
+            last_delta = 0.0
+            last_accepted = False
+            recent_acceptance = target_acceptance
+            chain_evaluations = 0
+            next_n_perturb = max(
+                2 if n > 1 else 1,
+                min(n, round(perturb_fraction * n)))
+            next_pool = make_proposal_pool(next_n_perturb)
+        if evaluations >= next_progress or overall_done:
+            print(
+                f"[PPO-ASA] proposals={evaluations}/{n_iter} "
+                f"chains={chain_count} updates={update_count} "
+                f"best_us={best_cost * 1e6:.6f}",
+                flush=True)
+            while next_progress <= evaluations:
+                next_progress += progress_interval
         pool = next_pool
 
     if diagnostics is not None:
@@ -2936,14 +3007,18 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "seed": seed_value,
             "candidate_count": candidate_count,
             "learning_enabled": not disable_learning,
+            "focus_fraction": focus_fraction,
+            "restart_interval": restart_interval,
+            "independent_chains": chain_count,
         }, save_checkpoint)
     if metadata is not None:
         metadata.update({
             "method": "ppo_guided_adaptive_simulated_annealing",
             "proposal_policy": "candidate_set_ppo",
             "proposal_focus": (
-                "current_bottleneck_stage" if focus_bottleneck
-                else "uniform_tasks"),
+                "current_bottleneck_stage" if focus_fraction == 1.0
+                else f"mixed_bottleneck_{focus_fraction:.3f}"
+                if focus_fraction > 0 else "uniform_tasks"),
             "acceptance_rule": "fixed_metropolis",
             "temperature_controller": "existing_adaptive_sa",
             "learning_enabled": not disable_learning,
@@ -2951,8 +3026,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "initial_cost": initial_cost,
             "best_cost": best_cost,
             "candidate_evaluations": evaluations,
-            "initial_placement_evaluations": 1,
-            "total_objective_evaluations": evaluations + 1,
+            "initial_placement_evaluations": initialization_evaluations,
+            "total_objective_evaluations": (
+                evaluations + initialization_evaluations),
+            "independent_chains": chain_count,
+            "restart_interval": restart_interval,
             "proposal_candidates_per_step": candidate_count,
             "unevaluated_proposal_candidates": (
                 calibration + max(0, n_iter - calibration) * candidate_count),
@@ -3644,6 +3722,10 @@ def main():
                         help="Keep PPO-ASA proposal scores exactly uniform for a matched control")
     parser.add_argument("--ppo_asa_focus_bottleneck", action="store_true",
                         help="Anchor every PPO-ASA candidate on the current bottleneck stage")
+    parser.add_argument("--ppo_asa_focus_fraction", type=float, default=0.0,
+                        help="Fraction of each PPO-ASA pool anchored on the bottleneck stage")
+    parser.add_argument("--ppo_asa_restart_interval", type=int, default=0,
+                        help="Start an independent random placement chain after this many proposals; 0 disables restarts")
     parser.add_argument("--compute_ops", type=str, default=None,
                          help="Optional .npy file containing MAC operations per task; "
                               "converted with Table 1's 128 MACs/core at 400 MHz.")
@@ -3771,6 +3853,10 @@ def main():
         parser.error("masked PPO sizes and update budgets must be positive")
     if args.ppo_asa_candidates < 2 or args.ppo_asa_rollout_steps <= 0:
         parser.error("PPO-ASA requires at least two candidates and a positive rollout")
+    if not 0.0 <= args.ppo_asa_focus_fraction <= 1.0:
+        parser.error("--ppo_asa_focus_fraction must be in [0, 1]")
+    if args.ppo_asa_restart_interval < 0:
+        parser.error("--ppo_asa_restart_interval cannot be negative")
     if (not math.isfinite(args.ppo_learning_rate) or args.ppo_learning_rate <= 0 or
             not 0 < args.ppo_gamma <= 1 or not 0 <= args.ppo_gae_lambda <= 1 or
             not 0 < args.ppo_clip_ratio < 1 or args.ppo_entropy_coef < 0 or
@@ -4074,6 +4160,8 @@ def main():
             hidden_dim=args.ppo_hidden_dim,
             disable_learning=args.ppo_asa_disable_learning,
             focus_bottleneck=args.ppo_asa_focus_bottleneck,
+            focus_fraction=args.ppo_asa_focus_fraction,
+            restart_interval=args.ppo_asa_restart_interval,
             seed=args.seed,
             initial_acceptance=args.asa_initial_acceptance,
             target_acceptance=args.asa_target_acceptance,

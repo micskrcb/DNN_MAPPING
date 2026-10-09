@@ -92,6 +92,7 @@ class TimingTests(unittest.TestCase):
                 rollout_steps=8, device="cpu", update_epochs=1,
                 minibatch_size=8, hidden_dim=16, calibration_trials=4,
                 adapt_window=8, checkpoint_every=20, seed=7,
+                focus_fraction=0.5, restart_interval=10,
                 diagnostics_path=f"{directory}/trained.jsonl",
                 save_checkpoint=f"{directory}/trained.pt", metadata=trained)
             control_cost = rm.run_ppo_asa(
@@ -99,12 +100,16 @@ class TimingTests(unittest.TestCase):
                 rollout_steps=8, device="cpu", update_epochs=1,
                 minibatch_size=8, hidden_dim=16, calibration_trials=4,
                 adapt_window=8, checkpoint_every=20, seed=7,
+                focus_fraction=0.5, restart_interval=10,
                 disable_learning=True, metadata=control)
         self.assertTrue(np.isfinite(trained_cost))
         self.assertTrue(np.isfinite(control_cost))
         self.assertEqual(trained["initial_cost"], control["initial_cost"])
         self.assertEqual(trained["candidate_evaluations"], 40)
-        self.assertEqual(trained["total_objective_evaluations"], 41)
+        self.assertEqual(trained["initial_placement_evaluations"], 4)
+        self.assertEqual(trained["total_objective_evaluations"], 44)
+        self.assertEqual(trained["independent_chains"], 4)
+        self.assertEqual(trained["proposal_focus"], "mixed_bottleneck_0.500")
         self.assertEqual(trained["policy_steps"], 36)
         self.assertGreater(trained["update_count"], 0)
         self.assertEqual(control["update_count"], 0)

@@ -25,6 +25,28 @@ def finite_metrics(metadata):
         for value in metrics.values())
 
 
+def objective_evaluation_count(row, multiple_chains):
+    """Include initialization calls omitted by diagnostic proposal counts."""
+    initializations = row.get("chain", 1) if multiple_chains else 1
+    return row["evaluations"] + initializations
+
+
+def align_curves_by_evaluations(left, right, left_multichain=False,
+                                right_multichain=False):
+    """Return rows recorded at identical true-objective evaluation counts."""
+    left_by_evaluation = {
+        objective_evaluation_count(row, left_multichain): row for row in left
+    }
+    right_by_evaluation = {
+        objective_evaluation_count(row, right_multichain): row for row in right
+    }
+    shared = sorted(left_by_evaluation.keys() & right_by_evaluation.keys())
+    return [
+        (left_by_evaluation[evaluation], right_by_evaluation[evaluation])
+        for evaluation in shared
+    ]
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("directory", type=Path)
@@ -60,6 +82,13 @@ def main():
         "shared_proposal_focus": (
             trained_meta.get("proposal_focus") ==
             control_meta.get("proposal_focus")),
+        "shared_restart_protocol": (
+            trained_meta.get("restart_interval", 0) ==
+            control_meta.get("restart_interval", 0) and
+            trained_meta.get("independent_chains", 1) ==
+            control_meta.get("independent_chains", 1) and
+            trained_meta.get("initial_placement_evaluations", 1) ==
+            control_meta.get("initial_placement_evaluations", 1)),
     }
     mechanics_pass = all(mechanics.values())
     trained_cost = trained["best_cost"]
@@ -70,8 +99,13 @@ def main():
     trained_curve = load_jsonl(args.directory / "ppo-asa-trained.jsonl")
     control_curve = load_jsonl(args.directory / "ppo-asa-control.jsonl")
     asa_curve = load_jsonl(args.directory / "asa.jsonl")
-    aligned_points = min(
-        len(trained_curve), len(control_curve), len(asa_curve))
+    trained_control_pairs = align_curves_by_evaluations(
+        trained_curve, control_curve,
+        trained_meta.get("restart_interval", 0) > 0,
+        control_meta.get("restart_interval", 0) > 0)
+    trained_asa_pairs = align_curves_by_evaluations(
+        trained_curve, asa_curve,
+        trained_meta.get("restart_interval", 0) > 0, False)
     entropies = [
         row["entropy"] for row in trained_curve
         if isinstance(row.get("entropy"), (int, float))
@@ -80,14 +114,15 @@ def main():
     candidate_count = trained_meta["proposal_candidates_per_step"]
     uniform_entropy = math.log(candidate_count)
     policy_curve = {
-        "aligned_diagnostic_points": aligned_points,
+        "trained_control_aligned_evaluation_points": len(
+            trained_control_pairs),
+        "trained_asa_aligned_evaluation_points": len(trained_asa_pairs),
         "trained_better_than_control_points": sum(
-            trained_curve[index]["best_cost"] <
-            control_curve[index]["best_cost"]
-            for index in range(aligned_points)),
+            trained_row["best_cost"] < control_row["best_cost"]
+            for trained_row, control_row in trained_control_pairs),
         "trained_better_than_asa_points": sum(
-            trained_curve[index]["best_cost"] < asa_curve[index]["best_cost"]
-            for index in range(aligned_points)),
+            trained_row["best_cost"] < asa_row["best_cost"]
+            for trained_row, asa_row in trained_asa_pairs),
         "trained_neutral_proposal_percent": (
             trained_meta["neutral_proposals"] /
             trained_meta["candidate_evaluations"] * 100),
@@ -142,6 +177,10 @@ def main():
         },
         "proposal_diagnostics": {
             "trained_updates": trained_meta["update_count"],
+            "trained_independent_chains": trained_meta.get(
+                "independent_chains", 1),
+            "control_independent_chains": control_meta.get(
+                "independent_chains", 1),
             "trained_improving_moves": trained_meta["improving_moves"],
             "control_improving_moves": control_meta["improving_moves"],
             "asa_improving_moves": asa_meta["improving_moves"],

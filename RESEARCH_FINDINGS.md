@@ -369,6 +369,24 @@ won at 23.9629. The result is a learning-only signal. One focused 4,101-
 evaluation gate is warranted to see whether the advantage persists; five seeds
 remain conditional on beating ASA as well.
 
+## Multi-chain training implementation (9 October 2026)
+
+The training-scale response to the public-code audit is implemented without
+copying external source. One PPO proposal policy is retained across repeated
+independently initialized placement chains. Restarts terminate generalized-
+advantage estimates, reset the placement and annealing state, and retain the
+shared model and optimizer. A half-focused candidate pool supplies both
+bottleneck-relevant and global moves. Every restart initialization is counted
+as a true objective evaluation, and ordinary ASA receives the exact same total.
+
+The local mechanics smoke used eight 64-proposal chains. All mechanics checks
+passed, both PPO conditions received 520 objective evaluations, and four PPO
+updates were finite. Trained and frozen PPO-ASA tied at 24.31712 microseconds;
+ASA reached 24.05376. This is expected to be inconclusive at 512 proposals and
+does not establish learning. The decision experiment is the 250,000-proposal
+Kaggle `multichain-train` gate, which produces 1,954 chains and 251,954 total
+objective evaluations for each of trained PPO-ASA, frozen control, and ASA.
+
 ### Gate 1: implementation sanity
 
 Run bounded synthetic and AlexNet-CONV smoke tests. Required conditions:
