@@ -53,20 +53,21 @@ def main():
         and finite
     )
     best = {name: float(report["best_cost"]) for name, report in reports.items()}
-    learning_pass = trained_late_mean < control_late_mean
+    directional_policy_signal = trained_late_mean < control_late_mean
     optimizer_pass = best["ppo-trained"] < min(best["random"], best["asa"])
     if not mechanics:
         verdict = "MECHANICS_FAIL"
-    elif learning_pass and optimizer_pass:
-        verdict = "ONE_SEED_MULTICHIP_GATE_PASS"
-    elif learning_pass:
-        verdict = "POLICY_LEARNS_BUT_OPTIMIZER_GATE_FAILS"
+    elif directional_policy_signal and optimizer_pass:
+        verdict = "ONE_SEED_DIRECTIONAL_SIGNAL_AND_OPTIMIZER_PASS"
+    elif directional_policy_signal:
+        verdict = "ONE_SEED_DIRECTIONAL_SIGNAL_OPTIMIZER_FAILS"
     else:
         verdict = "NO_MULTICHIP_LEARNING_SIGNAL"
     result = {
         "verdict": verdict,
         "mechanics_pass": mechanics,
-        "learning_pass": learning_pass,
+        "directional_policy_signal": directional_policy_signal,
+        "evidence_level": "one_seed_directional_only",
         "optimizer_pass_against_random_and_asa": optimizer_pass,
         "initial_deterministic_cost": trained_meta["initial_deterministic_cost"],
         "trained_late_deterministic_mean": trained_late_mean,
@@ -82,7 +83,9 @@ def main():
             "asa": reports["asa"]["complete_placement_evaluations"] + 1,
             "bs": 1,
         },
-        "note": "ASA reports proposal count; its initialization is one additional complete placement.",
+        "note": ("ASA reports proposal count; its initialization is one additional "
+                 "complete placement. A lower one-seed late mean is directional "
+                 "evidence only and is not a multi-seed learning claim."),
     }
     output = os.path.join(directory, "gate-summary.json")
     with open(output, "w", encoding="utf-8") as stream:

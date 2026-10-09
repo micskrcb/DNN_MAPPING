@@ -1,7 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-output_dir="${1:-runs/kaggle-masked-ppo-alexnet-fc-short}"
+mode="${1:-short}"
+output_dir="${2:-runs/kaggle-masked-ppo-alexnet-fc-${mode}}"
+case "${mode}" in
+  short)
+    epochs=10
+    baseline_trials=256
+    matched_evaluations=567
+    asa_proposals=566
+    ;;
+  extended)
+    epochs=100
+    baseline_trials=1000
+    matched_evaluations=4101
+    asa_proposals=4100
+    ;;
+  *)
+    echo "Usage: $0 short|extended [output-directory]" >&2
+    exit 2
+    ;;
+esac
 archive="${output_dir%/}.zip"
 mkdir -p "${output_dir}"
 
@@ -51,8 +70,8 @@ run_ppo() {
   CUDA_VISIBLE_DEVICES="${gpu}" OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
     python src/run_multi_chip.py \
       --algo ppo_masked "${common[@]}" \
-      --reward_mode sparse --epochs 10 --placements_per_epoch 30 \
-      --baseline_trials 256 \
+      --reward_mode sparse --epochs "${epochs}" --placements_per_epoch 30 \
+      --baseline_trials "${baseline_trials}" \
       --ppo_learning_rate 3e-4 --ppo_rollout_placements 10 \
       --ppo_update_epochs 4 --ppo_minibatch_size 512 \
       --ppo_gamma 1.0 --ppo_gae_lambda 1.0 --ppo_clip_ratio 0.2 \
@@ -65,7 +84,7 @@ run_ppo() {
       "${learning_flag[@]}" >"${prefix}.log" 2>&1
 }
 
-echo "Running paired AlexNet-FC masked PPO on two GPUs."
+echo "Running ${mode} paired AlexNet-FC masked PPO on two GPUs."
 run_ppo trained 0 &
 trained_pid=$!
 run_ppo control 1 &
@@ -79,14 +98,15 @@ if [[ "${pair_status}" -ne 0 ]]; then
 fi
 archive_results
 
-echo "Running matched 567-evaluation random search."
+echo "Running matched ${matched_evaluations}-evaluation random search."
 python src/run_multi_chip.py --algo random "${common[@]}" \
-  --iters 567 --report "${output_dir}/random-report.json" \
+  --iters "${matched_evaluations}" --report "${output_dir}/random-report.json" \
   >"${output_dir}/random.log" 2>&1
 
-echo "Running matched 567-evaluation adaptive SA (initialization + 566 proposals)."
+echo "Running matched ${matched_evaluations}-evaluation adaptive SA " \
+  "(initialization + ${asa_proposals} proposals)."
 python src/run_multi_chip.py --algo asa "${common[@]}" \
-  --iters 566 --asa_diagnostics "${output_dir}/asa.jsonl" \
+  --iters "${asa_proposals}" --asa_diagnostics "${output_dir}/asa.jsonl" \
   --report "${output_dir}/asa-report.json" >"${output_dir}/asa.log" 2>&1
 
 echo "Running the deterministic sequential baseline."

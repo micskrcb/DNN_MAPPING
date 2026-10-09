@@ -627,9 +627,16 @@ bash scripts/run_kaggle_masked_ppo_multichip_gate.sh
 
 The resulting `runs/kaggle-masked-ppo-alexnet-fc-short.zip` contains the paired
 diagnostics, RS/ASA/BS reports, logs, checkpoints, and `gate-summary.json`.
-Passing requires both a better late deterministic policy than the frozen
-control and a lower best cost than matched-budget RS and ASA. This remains a
-one-seed gate; a positive result must be repeated over at least five seeds.
+The completed short gate produced only a 0.163% directional deterministic
+improvement over the frozen control. PPO's best cost was 24.2075 microseconds,
+worse than matched random search at 24.1472 and ASA at 24.1734 microseconds.
+The mechanics passed, but this is not a multi-chip learning or optimizer pass.
+The next bounded test is one paired 3,000-placement extension with 4,101
+matched evaluations before considering a five-seed run:
+
+```bash
+bash scripts/run_kaggle_masked_ppo_multichip_gate.sh extended
+```
 
 ## Interpreting results
 

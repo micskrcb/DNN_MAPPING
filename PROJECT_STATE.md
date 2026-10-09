@@ -102,15 +102,37 @@ The planned H100 12 GB slice was unavailable. Kaggle completed the original diag
 
 ## Next execution sequence
 
-1. Produce a matched-budget AlexNet-CONV table for BS, RS, SA, ASA, paper DDPG, masked PPO, and its frozen control.
-2. Repeat masked PPO on AlexNet-FC or VGG16-CONV, where multi-chip communication provides a stronger learning target.
-3. Scale only after the multi-chip trained policy beats its paired frozen control across seeds.
+1. Extend one paired AlexNet-FC seed to 3,000 placements and compare it with 4,101-evaluation RS and ASA runs.
+2. Scale AlexNet-FC to five seeds only if both its deterministic policy and retained best placement beat the matched controls materially.
+3. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and its frozen control.
 4. Preserve guided DDPG as the completed negative ablation and paper DDPG as the reproduction method.
 5. Run BS, RS, SA, and ASA using matched evaluator counts, then scale only the method that passes the learning gate.
 6. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
 7. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
 
 The paper-faithful mode remains frozen separately from guided DDPG and future masked-policy experiments.
+
+## AlexNet-FC multi-chip short gate (2026-10-09)
+
+The matched one-seed gate used 932 FC logic cores across four chips and 567
+complete-placement evaluations for each PPO condition, random search, and ASA.
+Mechanics passed: trained and frozen policies started identically, repairs were
+zero, all diagnostics were finite, and the final placement used all six
+directed off-chip links available in the four-chip region.
+
+The late deterministic PPO mean was 24.6022 microseconds versus 24.6424
+microseconds for its frozen control, a directional improvement of only 0.163%.
+The curve was non-monotonic, stochastic rollout cost worsened from 24.7541 to
+25.0429 microseconds between the first and last five diagnostics, and only one
+seed was tested. This is insufficient for a multi-chip learning claim.
+
+The optimizer gate failed. Best costs were 24.2075 microseconds for trained
+PPO, 24.1472 for matched-budget random search, and 24.1734 for matched-budget
+ASA. PPO was therefore 0.25% worse than random search and 0.14% worse than ASA.
+All three beat the 24.9203-microsecond sequential baseline. The next bounded
+test should extend one paired seed to 3,000 placements with 4,101 matched
+evaluations; scale to five seeds only if both the deterministic policy and best
+placement improve materially.
 
 ## Five-seed local control study (2026-09-30)
 
