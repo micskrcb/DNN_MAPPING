@@ -47,7 +47,7 @@ Current paper targets:
 
 1. Freeze the successful AlexNet-CONV masked-PPO configuration and preserve its archive/hash with the experiment record.
 2. Run BS, RS, fixed SA, ASA, paper DDPG, masked PPO, and the frozen PPO control with matched complete-placement accounting on the same evaluator.
-3. Repeat the paired masked-PPO gate on AlexNet-FC or VGG16-CONV. AlexNet-CONV has zero off-chip traffic in the minimum whole-chip mask and only about 13.7% communication headroom, so it remains a learning sanity test rather than the final benchmark.
+3. Run `scripts/run_kaggle_masked_ppo_multichip_gate.sh`: a one-seed AlexNet-FC paired PPO/control gate plus matched-budget RS, ASA, and BS. AlexNet-CONV has zero off-chip traffic in the minimum whole-chip mask and only about 13.7% communication headroom, so it remains a learning sanity test rather than the final benchmark.
 4. Inspect deterministic curves, policy/value losses, entropy, hop-distance reductions, and link loads on the multi-chip workload.
 5. Keep the completed guided-DDPG archive as a negative ablation; do not spend the paper-scale budget on it.
 6. Scale toward the paper's 300,000-placement PPO/DDPG budget only after the multi-chip learning gate and matched baseline table pass.

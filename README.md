@@ -46,6 +46,8 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
   Kaggle experiments and packages their reports.
 - `scripts/run_kaggle_masked_ppo_ablation.sh` runs the next paired masked-PPO
   learning gate and packages its reports.
+- `scripts/run_kaggle_masked_ppo_multichip_gate.sh` tests AlexNet-FC PPO against
+  its frozen control and matched-budget RS/ASA/BS baselines.
 - `prev version readmes/` preserves earlier README snapshots.
 
 The older single-chip PPO/GCN programs and `run_multi_chip_fast.py` are not part of the validated paper reproduction path.
@@ -612,6 +614,22 @@ AlexNet-CONV objective. It does not establish paper-level performance. Best
 retained solutions improved by only 1.26% on average because random rollout
 search remained competitive. The next experiment must use a multi-chip region
 and compare all methods under matched evaluation budgets.
+
+The bounded next gate uses AlexNet-FC, whose 932 logic cores span four chips.
+It runs 300 trained PPO placements and a frozen control in parallel, then gives
+random search and ASA the same 567 complete-placement evaluations available to
+each PPO condition (256 reward-baseline trials, 300 training rollouts, one
+initial deterministic evaluation, and ten periodic deterministic evaluations):
+
+```bash
+bash scripts/run_kaggle_masked_ppo_multichip_gate.sh
+```
+
+The resulting `runs/kaggle-masked-ppo-alexnet-fc-short.zip` contains the paired
+diagnostics, RS/ASA/BS reports, logs, checkpoints, and `gate-summary.json`.
+Passing requires both a better late deterministic policy than the frozen
+control and a lower best cost than matched-budget RS and ASA. This remains a
+one-seed gate; a positive result must be repeated over at least five seeds.
 
 ## Interpreting results
 
