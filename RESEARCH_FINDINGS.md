@@ -350,6 +350,15 @@ candidate evaluated by the true objective must count against the common budget.
 An LSTM or a larger training budget comes later because memory and duration do
 not address a neighborhood in which most actions have no measured effect.
 
+That single-factor ablation is implemented as
+`--ppo_asa_focus_bottleneck`. A local 1,001-evaluation smoke reduced the neutral
+rate from roughly 89% in the earlier short run to 72.8%, and the improving-move
+rate reached 7.5%. The learned condition beat the identically focused uniform
+control by 0.40% (24.0627 versus 24.1598 microseconds), but ordinary ASA still
+won at 23.9629. The result is a learning-only signal. One focused 4,101-
+evaluation gate is warranted to see whether the advantage persists; five seeds
+remain conditional on beating ASA as well.
+
 ### Gate 1: implementation sanity
 
 Run bounded synthetic and AlexNet-CONV smoke tests. Required conditions:

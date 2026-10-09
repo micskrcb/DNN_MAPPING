@@ -694,6 +694,20 @@ proposals with a matched bottleneck-focused neighborhood, then beat both its
 uniform control and ordinary ASA. The five-seed threshold remains the
 established ASA mean of 23.5001 microseconds.
 
+The matched focused neighborhood is enabled with
+`--ppo_asa_focus_bottleneck`. It guarantees that each candidate moves a task
+from the current maximum-latency pipeline stage, while leaving the policy,
+acceptance, temperature controller, and evaluation accounting unchanged. A
+local 1,001-evaluation smoke reached 24.0627 microseconds trained, 24.1598 for
+the focused uniform control, and 23.9629 for ASA. Run the one permitted
+extended gate with:
+
+```bash
+bash scripts/run_kaggle_ppo_asa_gate.sh focused-extended
+```
+
+Proceed to five seeds only if the learned focused condition beats both controls.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

@@ -57,6 +57,9 @@ def main():
             trained_meta["temperature_controller"] ==
             control_meta["temperature_controller"] ==
             "existing_adaptive_sa"),
+        "shared_proposal_focus": (
+            trained_meta.get("proposal_focus") ==
+            control_meta.get("proposal_focus")),
     }
     mechanics_pass = all(mechanics.values())
     trained_cost = trained["best_cost"]

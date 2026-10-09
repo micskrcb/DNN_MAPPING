@@ -202,6 +202,20 @@ Its final entropy was 2.76893 versus the uniform maximum `ln(16)=2.77259`, and
 not be scaled to five seeds. See
 `runs/kaggle-ppo-asa-alexnet-fc-extended-2026-10-09/STUDY.md`.
 
+A second, controlled proposal neighborhood is now available through
+`--ppo_asa_focus_bottleneck`. Every candidate is anchored on a task in the
+current maximum-latency pipeline stage, and the anchor is guaranteed to move.
+Both trained and frozen conditions use the same focused pools; candidate
+ranking, Metropolis acceptance, temperature adaptation, and true-objective
+accounting otherwise remain unchanged.
+
+The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
+24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
+PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate
+rose to 7.5%, while neutral proposals fell to 72.8%. This passes a bounded
+learning-only gate and justifies one 4,101-evaluation `focused-extended` run;
+it does not justify five seeds yet.
+
 ## Five-seed local control study (2026-09-30)
 
 Completed five AlexNet-CONV seeds with 12 training placements and six retained deterministic evaluations per seed. DDPG also used 64 baseline samples (82 selectable candidates total). RS used 82 samples; SA/ASA used 82 proposals plus initialization. Mean best latency: trained DDPG 38.24062 µs, untrained control 38.46750 µs, RS 41.13328 µs, fixed SA 42.99555 µs, ASA 42.32438 µs, sequential 42.12586 µs. Training beat its untrained control in two seeds, tied two, and lost one. Its mean benefit was only 0.22687 µs (about 0.59%); the exploratory paired 95% interval [-0.33818, 0.79193] µs includes zero. The initial policy and collision repair already yield strong layouts, so gains over RS/SA do not establish learning. Short annealing budgets and temperature calibration limit that comparison. See `runs/local-cpu-5seed-2026-09-30/STUDY.md` and raw reports. Next priority: improve and validate learning against the untrained control before scaling the training budget.

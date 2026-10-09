@@ -3,6 +3,7 @@ set -euo pipefail
 
 mode="${1:-short}"
 output_dir="${2:-runs/kaggle-ppo-asa-alexnet-fc-${mode}}"
+focus_flag=()
 case "${mode}" in
   short)
     proposals=1000
@@ -10,8 +11,16 @@ case "${mode}" in
   extended)
     proposals=4100
     ;;
+  focused-short)
+    proposals=1000
+    focus_flag+=(--ppo_asa_focus_bottleneck)
+    ;;
+  focused-extended)
+    proposals=4100
+    focus_flag+=(--ppo_asa_focus_bottleneck)
+    ;;
   *)
-    echo "Usage: $0 short|extended [output-directory]" >&2
+    echo "Usage: $0 short|extended|focused-short|focused-extended [output-directory]" >&2
     exit 2
     ;;
 esac
@@ -69,6 +78,7 @@ run_condition() {
   fi
   CUDA_VISIBLE_DEVICES="${gpu}" OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
     python src/run_multi_chip.py --algo ppo_asa "${common[@]}" \
+      "${focus_flag[@]}" \
       --asa_diagnostics "${prefix}.jsonl" \
       --save_checkpoint "${prefix}.pt" \
       --report "${prefix}-report.json" \

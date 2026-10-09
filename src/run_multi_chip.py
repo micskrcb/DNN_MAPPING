@@ -2105,17 +2105,42 @@ class _FreeCorePool:
         self.positions[int(freed_core)] = index
 
 
-def _placement_neighbor(placement, n_perturb, free_pool, rng=None):
-    """Return a valid swap/relocation neighbor and its changed task indices."""
+def _placement_neighbor(placement, n_perturb, free_pool, rng=None,
+                        anchor_tasks=None):
+    """Return a valid swap/relocation neighbor and its changed task indices.
+
+    When ``anchor_tasks`` is supplied, the first selected task is sampled from
+    that set and is guaranteed to move. This supports a matched
+    bottleneck-focused proposal neighborhood without changing legality or
+    evaluating extra candidates.
+    """
     rng = random if rng is None else rng
     n = len(placement)
-    indices = np.asarray(rng.sample(range(n), min(n_perturb, n)), dtype=np.int64)
+    count = min(n_perturb, n)
+    if anchor_tasks is None:
+        indices = np.asarray(rng.sample(range(n), count), dtype=np.int64)
+    else:
+        anchors = [int(index) for index in anchor_tasks
+                   if 0 <= int(index) < n]
+        if not anchors:
+            raise ValueError("anchor_tasks must contain a valid task index")
+        anchor = anchors[rng.randrange(len(anchors))]
+        remaining = [index for index in range(n) if index != anchor]
+        indices = np.asarray(
+            [anchor] + rng.sample(remaining, count - 1), dtype=np.int64)
     candidate = placement.copy()
     original = candidate[indices].copy()
     permuted = original.tolist()
     rng.shuffle(permuted)
     if len(permuted) >= 2 and np.array_equal(permuted, original):
         permuted[0], permuted[1] = permuted[1], permuted[0]
+    if anchor_tasks is not None and len(permuted) >= 2 and \
+            permuted[0] == int(original[0]):
+        swap_index = next(
+            index for index in range(1, len(permuted))
+            if permuted[index] != int(original[0]))
+        permuted[0], permuted[swap_index] = (
+            permuted[swap_index], permuted[0])
     candidate[indices] = permuted
 
     relocation = None
@@ -2406,6 +2431,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 clip_ratio: float = 0.2, entropy_coefficient: float = 0.01,
                 value_coefficient: float = 0.5, max_grad_norm: float = 0.5,
                 hidden_dim: int = 128, disable_learning: bool = False,
+                focus_bottleneck: bool = False,
                 seed: int = None, initial_acceptance: float = 0.8,
                 target_acceptance: float = 0.30, adapt_window: int = 100,
                 min_perturb_frac: float = 0.005,
@@ -2470,6 +2496,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             evaluator = IncrementalPipelineEvaluator(env)
         except (TypeError, AttributeError):
             evaluator = None
+    if focus_bottleneck and evaluator is None:
+        raise ValueError(
+            "bottleneck-focused PPO-ASA requires the incremental pipeline evaluator")
 
     diagnostics = None
     if diagnostics_path:
@@ -2495,6 +2524,12 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                          np.finfo(float).eps)
     task_pressure /= pressure_scale
     total_edge_volume = max(float(edge_volumes.sum()), np.finfo(float).eps)
+
+    def bottleneck_tasks():
+        if not focus_bottleneck:
+            return None
+        stage_index = int(np.argmax(evaluator.stage_costs))
+        return evaluator.stages[stage_index]
 
     topo = env.topo
     core_ids = np.arange(env.total_cores, dtype=np.int64)
@@ -2603,7 +2638,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         n_perturb = max(2 if n > 1 else 1,
                         min(n, round(perturb_fraction * n)))
         candidate, changed, relocation = _placement_neighbor(
-            placement, n_perturb, free_pool, rng=proposal_rng)
+            placement, n_perturb, free_pool, rng=proposal_rng,
+            anchor_tasks=bottleneck_tasks())
         new_cost = evaluate(candidate, changed)
         evaluations += 1
         delta = new_cost - current_cost
@@ -2650,7 +2686,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         candidates, changed_sets, relocations, features = [], [], [], []
         for _ in range(candidate_count):
             candidate, changed, relocation = _placement_neighbor(
-                placement, n_perturb, free_pool, rng=proposal_rng)
+                placement, n_perturb, free_pool, rng=proposal_rng,
+                anchor_tasks=bottleneck_tasks())
             candidates.append(candidate)
             changed_sets.append(changed)
             relocations.append(relocation)
@@ -2904,6 +2941,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         metadata.update({
             "method": "ppo_guided_adaptive_simulated_annealing",
             "proposal_policy": "candidate_set_ppo",
+            "proposal_focus": (
+                "current_bottleneck_stage" if focus_bottleneck
+                else "uniform_tasks"),
             "acceptance_rule": "fixed_metropolis",
             "temperature_controller": "existing_adaptive_sa",
             "learning_enabled": not disable_learning,
@@ -3602,6 +3642,8 @@ def main():
                         help="Accepted/rejected proposal transitions per PPO-ASA update")
     parser.add_argument("--ppo_asa_disable_learning", action="store_true",
                         help="Keep PPO-ASA proposal scores exactly uniform for a matched control")
+    parser.add_argument("--ppo_asa_focus_bottleneck", action="store_true",
+                        help="Anchor every PPO-ASA candidate on the current bottleneck stage")
     parser.add_argument("--compute_ops", type=str, default=None,
                          help="Optional .npy file containing MAC operations per task; "
                               "converted with Table 1's 128 MACs/core at 400 MHz.")
@@ -4031,6 +4073,7 @@ def main():
             max_grad_norm=args.ppo_max_grad_norm,
             hidden_dim=args.ppo_hidden_dim,
             disable_learning=args.ppo_asa_disable_learning,
+            focus_bottleneck=args.ppo_asa_focus_bottleneck,
             seed=args.seed,
             initial_acceptance=args.asa_initial_acceptance,
             target_acceptance=args.asa_target_acceptance,

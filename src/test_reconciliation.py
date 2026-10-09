@@ -110,6 +110,18 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(control["update_count"], 0)
         self.assertFalse(control["learning_enabled"])
 
+    def test_focused_neighbor_always_moves_an_anchor_task(self):
+        placement = np.arange(8, dtype=np.int32)
+        free_pool = rm._FreeCorePool(placement, placement)
+        rng = random.Random(19)
+        anchors = np.asarray([1, 4], dtype=np.int64)
+        for _ in range(50):
+            candidate, changed, relocation = rm._placement_neighbor(
+                placement, 3, free_pool, rng=rng, anchor_tasks=anchors)
+            self.assertIsNone(relocation)
+            self.assertTrue(set(changed.tolist()) & set(anchors.tolist()))
+            self.assertEqual(len(np.unique(candidate)), len(candidate))
+
     def test_remainder_conserves_work(self):
         ops, kinds = tile_work(5, 7, 2, 3, 9, 2, 3)
         self.assertEqual(sum(o for o, k in zip(ops, kinds) if k == "vmm"), 5*7*2*3*9)
