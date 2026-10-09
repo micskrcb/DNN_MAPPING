@@ -261,6 +261,25 @@ traffic. The next gate is therefore a matched-budget baseline table followed
 by a paired masked-PPO run on AlexNet-FC or VGG16-CONV, where placement spans
 multiple chips.
 
+## AlexNet-FC multi-chip decision (9 October 2026)
+
+The 3,000-placement one-seed extension used 4,101 complete-placement
+evaluations for trained PPO, its frozen control, random search, and ASA. All
+mechanics passed on the 932-core, four-chip FC region. The trained late
+deterministic policy was 24.5048 microseconds versus 24.6424 for the frozen
+control, a 0.558% directional improvement. Only 60 of 100 deterministic
+checkpoints beat the control, the curve remained non-monotonic, and the trained
+stochastic late-window mean was almost identical to control.
+
+Training did not improve the retained optimizer result: trained PPO ended at
+24.1080 microseconds and the frozen stochastic policy at 24.1072. Random search
+was 24.1155, while ASA reached 23.4318 microseconds, 2.80% below trained PPO.
+ASA improved steadily throughout its budget. Consequently, unchanged masked
+PPO should not be scaled to five FC seeds. The useful next ablation is a
+strictly budget-matched ASA/PPO hybrid or ASA-demonstration policy, always
+compared with ASA alone; otherwise the extra RL machinery has no demonstrated
+optimizer value on this fixed instance.
+
 ### Gate 1: implementation sanity
 
 Run bounded synthetic and AlexNet-CONV smoke tests. Required conditions:

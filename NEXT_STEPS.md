@@ -48,12 +48,13 @@ Current paper targets:
 1. Freeze the successful AlexNet-CONV masked-PPO configuration and preserve its archive/hash with the experiment record.
 2. Run BS, RS, fixed SA, ASA, paper DDPG, masked PPO, and the frozen PPO control with matched complete-placement accounting on the same evaluator.
 3. The one-seed AlexNet-FC short gate completed: mechanics passed, but PPO's 0.163% directional policy improvement was weak and its best placement lost to matched-budget RS and ASA.
-4. Run one paired 3,000-placement AlexNet-FC extension with 4,101 matched evaluations for RS and ASA. Scale to five seeds only if the deterministic policy improves materially and PPO beats both search baselines.
-5. Keep the completed guided-DDPG archive as a negative ablation; do not spend the paper-scale budget on it.
-6. Scale toward the paper's 300,000-placement PPO/DDPG budget only after the multi-chip learning gate and matched baseline table pass.
-7. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
-8. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
-9. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
+4. The 3,000-placement AlexNet-FC extension completed: the deterministic policy improved directionally by 0.558%, but trained PPO tied its frozen control's best result and ASA was 2.80% better. Do not scale unchanged PPO to five FC seeds.
+5. Design a fixed-budget ASA-guided PPO or PPO→ASA ablation and compare it with ASA alone using the same total number of complete placement evaluations. Proceed only if the hybrid adds value beyond ASA.
+6. Keep the completed guided-DDPG archive as a negative ablation; do not spend the paper-scale budget on it.
+7. Scale toward the paper's 300,000-placement PPO/DDPG budget only after the multi-chip learning gate and matched baseline table pass.
+8. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
+9. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
+10. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
 
 ## Gate 4: improvements after reproduction
 

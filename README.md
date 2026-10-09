@@ -638,6 +638,13 @@ matched evaluations before considering a five-seed run:
 bash scripts/run_kaggle_masked_ppo_multichip_gate.sh extended
 ```
 
+The extension completed with a 0.558% late deterministic advantage, but no
+best-placement benefit: trained PPO reached 24.1080 microseconds and its frozen
+control 24.1072. Random search reached 24.1155, while ASA reached 23.4318
+microseconds and beat trained PPO by 2.80% under the same 4,101-evaluation
+budget. Do not scale the unchanged PPO configuration to five FC seeds. Any
+ASA/PPO hybrid must share one fixed total evaluation budget and beat ASA alone.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

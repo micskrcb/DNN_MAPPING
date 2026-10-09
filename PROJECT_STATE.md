@@ -102,9 +102,9 @@ The planned H100 12 GB slice was unavailable. Kaggle completed the original diag
 
 ## Next execution sequence
 
-1. Extend one paired AlexNet-FC seed to 3,000 placements and compare it with 4,101-evaluation RS and ASA runs.
-2. Scale AlexNet-FC to five seeds only if both its deterministic policy and retained best placement beat the matched controls materially.
-3. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and its frozen control.
+1. Design a budget-matched ASA-guided PPO or PPO→ASA ablation and compare it with full-budget ASA alone.
+2. Do not scale unchanged AlexNet-FC PPO; its 3,000-placement run tied the frozen control and lost to ASA.
+3. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.
 4. Preserve guided DDPG as the completed negative ablation and paper DDPG as the reproduction method.
 5. Run BS, RS, SA, and ASA using matched evaluator counts, then scale only the method that passes the learning gate.
 6. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
@@ -133,6 +133,15 @@ All three beat the 24.9203-microsecond sequential baseline. The next bounded
 test should extend one paired seed to 3,000 placements with 4,101 matched
 evaluations; scale to five seeds only if both the deterministic policy and best
 placement improve materially.
+
+That extension is now complete. The late deterministic advantage increased to
+0.558%, but only 60 of 100 diagnostic checkpoints beat control and the learned
+policy remained non-monotonic. Best retained costs were 24.1080 microseconds
+trained, 24.1072 frozen control, 24.1155 random search, and 23.4318 ASA. Thus
+training contributed no best-placement advantage, while ASA beat PPO by 2.80%
+under the same 4,101-evaluation budget. Unchanged PPO should not be scaled to
+five FC seeds. A future hybrid must reserve one fixed total budget across its
+PPO and ASA phases and beat a full-budget ASA-only control.
 
 ## Five-seed local control study (2026-09-30)
 
