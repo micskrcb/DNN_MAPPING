@@ -280,6 +280,42 @@ strictly budget-matched ASA/PPO hybrid or ASA-demonstration policy, always
 compared with ASA alone; otherwise the extra RL machinery has no demonstrated
 optimizer value on this fixed instance.
 
+## Five-seed ASA baseline and hybrid research audit (9 October 2026)
+
+The five-seed AlexNet-FC archive is complete and internally consistent at
+revision `b147b14`. ASA best costs were 23.43184, 23.52528, 23.49808,
+23.44928, and 23.59600 microseconds. Matched random-search costs were 24.11552,
+24.12768, 24.16976, 24.07152, and 24.16800. ASA won every paired seed; its
+mean was 23.50010 microseconds versus 24.13050, a 2.61% advantage. The paired
+absolute advantage averaged 0.63040 microseconds, with an exploratory 95%
+interval of 0.57216 to 0.68864. The sequential baseline was 24.92032
+microseconds.
+
+The official [RL-Based-SA implementation](https://github.com/nathanqiu07/RL-Based-SA-Public)
+supports the proposal-learning direction but corrects a material error in the
+Gemini survey. Qiu and Liang train the neighbor proposal with PPO, include
+energy change in the state, and provide an LSTM variant; the Metropolis rule
+and exponential cooling schedule remain fixed. Their implementation targets
+knapsack, bin packing, TSP, and continuous test functions, so its training loop
+and factorized proposal patterns are references rather than drop-in placement
+code.
+
+The survey's sequence-pair, B*-tree, Cartesian-overlap, and HPWL discussion
+describes physical macro floorplanning. This project assigns fixed-size DNN
+tasks to distinct positions in a predefined core grid and optimizes routed
+communication latency. Replacing the placement representation with a B*-tree
+would therefore change the problem rather than repair the policy. Claims about
+combining BOPO, Wolpertinger, MCTS, and learned surrogates are plausible future
+ideas but are not demonstrated for this evaluator by the cited evidence.
+
+The next controlled implementation will let PPO choose a legal local proposal
+while keeping the existing ASA acceptance and temperature logic fixed. It will
+start from the same placements as a uniform-proposal ASA control and share the
+same total objective-evaluation budget. This isolates whether learning improves
+the neighborhood distribution. Temperature control, recurrent history, and
+offline preference learning should be separate later ablations, not combined
+in the first test.
+
 ### Gate 1: implementation sanity
 
 Run bounded synthetic and AlexNet-CONV smoke tests. Required conditions:

@@ -49,12 +49,14 @@ Current paper targets:
 2. Run BS, RS, fixed SA, ASA, paper DDPG, masked PPO, and the frozen PPO control with matched complete-placement accounting on the same evaluator.
 3. The one-seed AlexNet-FC short gate completed: mechanics passed, but PPO's 0.163% directional policy improvement was weak and its best placement lost to matched-budget RS and ASA.
 4. The 3,000-placement AlexNet-FC extension completed: the deterministic policy improved directionally by 0.558%, but trained PPO tied its frozen control's best result and ASA was 2.80% better. Do not scale unchanged PPO to five FC seeds.
-5. Design a fixed-budget ASA-guided PPO or PPO→ASA ablation and compare it with ASA alone using the same total number of complete placement evaluations. Proceed only if the hybrid adds value beyond ASA.
-6. Keep the completed guided-DDPG archive as a negative ablation; do not spend the paper-scale budget on it.
-7. Scale toward the paper's 300,000-placement PPO/DDPG budget only after the multi-chip learning gate and matched baseline table pass.
-8. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
-9. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
-10. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
+5. The five-seed 4,101-evaluation AlexNet-FC baseline is complete: ASA beat random search in all five pairs, averaging 23.5001 versus 24.1305 microseconds (2.61%).
+6. Implement a fixed-budget PPO learned-proposal ASA. Keep Metropolis acceptance and the cooling/adaptation controller fixed initially; train PPO only to select legal relocation/swap proposals using cost-change and search-history features.
+7. Compare the learned proposer with uniform-proposal ASA using identical initial placements and exactly the same objective-evaluation budget. Proceed beyond one seed only if it beats the ASA baseline rather than merely random search.
+8. Keep the completed guided-DDPG archive as a negative ablation; do not spend the paper-scale budget on it.
+9. Scale toward the paper's 300,000-placement PPO/DDPG budget only after the multi-chip learning gate and matched baseline table pass.
+10. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
+11. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
+12. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
 
 ## Gate 4: improvements after reproduction
 
@@ -66,3 +68,8 @@ environments remain future experiments. Freeze and identify the paper-mode
 configuration, then compare every improvement under matched complete-placement
 budgets. The evidence and design rationale are recorded in
 [`RESEARCH_FINDINGS.md`](RESEARCH_FINDINGS.md).
+
+The next experimental method should follow the verified RL-Based-SA structure:
+PPO learns the neighbor proposal while simulated annealing retains its
+accept/reject rule and schedule. Sequence-pair and B*-tree floorplanning
+representations are not applicable to this fixed-grid core-mapping problem.

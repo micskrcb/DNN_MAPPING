@@ -143,6 +143,35 @@ under the same 4,101-evaluation budget. Unchanged PPO should not be scaled to
 five FC seeds. A future hybrid must reserve one fixed total budget across its
 PPO and ASA phases and beat a full-budget ASA-only control.
 
+## Five-seed AlexNet-FC ASA baseline (2026-10-09)
+
+The validated archive at revision `b147b14` contains five paired ASA and random
+search runs. Each ASA condition used one initial placement and 4,100 proposals;
+each random condition evaluated 4,101 complete placements. ASA won all five
+pairs. Its mean best latency was 23.5001 microseconds with sample standard
+deviation 0.0653, compared with 24.1305 and 0.0408 for random search. The paired
+mean advantage was 0.6304 microseconds (2.61%); an exploratory paired 95%
+interval was 0.5722 to 0.6886 microseconds. ASA was 5.70% below the
+24.9203-microsecond sequential baseline and averaged 53.2 seconds per seed,
+versus 74.0 seconds for random search.
+
+The report's generic `complete_placement_evaluations` field records 4,100 for
+ASA because it counts proposals and excludes the separately evaluated initial
+placement. The matched total is nevertheless 4,101 objective evaluations.
+Generated run files made the repository provenance appear dirty, but every
+report records the same source revision and the archive passed integrity
+checking.
+
+The accompanying Gemini survey is useful background for learned neighbor
+proposals, but it discusses physical macro floorplanning, HPWL, sequence pairs,
+and B*-trees that do not represent this fixed-grid DNN core-mapping problem. It
+also incorrectly says the AAMAS 2025 RL-Based-SA implementation learns the
+temperature schedule. The official implementation trains a PPO neighbor
+proposal policy, augments state with energy change, optionally uses an LSTM,
+and leaves Metropolis acceptance and exponential cooling fixed. The next method
+will follow that narrower verified structure and must beat the five-seed ASA
+baseline under matched evaluations.
+
 ## Five-seed local control study (2026-09-30)
 
 Completed five AlexNet-CONV seeds with 12 training placements and six retained deterministic evaluations per seed. DDPG also used 64 baseline samples (82 selectable candidates total). RS used 82 samples; SA/ASA used 82 proposals plus initialization. Mean best latency: trained DDPG 38.24062 µs, untrained control 38.46750 µs, RS 41.13328 µs, fixed SA 42.99555 µs, ASA 42.32438 µs, sequential 42.12586 µs. Training beat its untrained control in two seeds, tied two, and lost one. Its mean benefit was only 0.22687 µs (about 0.59%); the exploratory paired 95% interval [-0.33818, 0.79193] µs includes zero. The initial policy and collision repair already yield strong layouts, so gains over RS/SA do not establish learning. Short annealing budgets and temperature calibration limit that comparison. See `runs/local-cpu-5seed-2026-09-30/STUDY.md` and raw reports. Next priority: improve and validate learning against the untrained control before scaling the training budget.

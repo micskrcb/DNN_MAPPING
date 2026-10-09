@@ -645,6 +645,14 @@ microseconds and beat trained PPO by 2.80% under the same 4,101-evaluation
 budget. Do not scale the unchanged PPO configuration to five FC seeds. Any
 ASA/PPO hybrid must share one fixed total evaluation budget and beat ASA alone.
 
+A subsequent five-seed AlexNet-FC baseline confirmed that ASA's advantage is
+repeatable. With one random initialization plus 4,100 ASA proposals per seed,
+ASA averaged 23.5001 microseconds (sample standard deviation 0.0653) versus
+24.1305 microseconds (0.0408) for 4,101-sample random search. ASA won every
+paired seed by 0.5720--0.6837 microseconds, a mean 2.61% improvement, and was
+5.70% below the 24.9203-microsecond sequential baseline. This is the minimum
+quality threshold for any learned-proposal ASA extension.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.
