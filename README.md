@@ -761,6 +761,25 @@ This separation is required because short restarts generate diverse training
 data but handicap final placement refinement. The holdout gate reports whether
 the learned proposal generalizes and whether it beats ASA as an optimizer.
 
+The five-seed holdout is complete and rejects the saved checkpoint. Frozen
+PPO-ASA averaged 23.63050 microseconds, versus 23.51504 for a fresh uniform
+policy and 23.50518 for ASA. It lost all five pairs to both controls. A local
+five-seed 128-proposal diagnostic showed a weak 0.385% mean advantage over
+uniform in three of five seeds, indicating that the policy was specialized to
+its short training horizon rather than useful for 4,100-step refinement.
+
+The next experiment corrects this specific mismatch. Training uses 4,100-step
+episodes, normalizes progress within each chain, updates PPO at chain
+boundaries, and immediately performs the same five-seed frozen holdout:
+
+```bash
+bash scripts/run_kaggle_ppo_asa_deployment_experiment.sh
+```
+
+This is the final bounded PPO-ASA correction. If its frozen checkpoint does
+not beat the fresh uniform policy in at least four of five holdout seeds, the
+PPO-ASA path is closed and ASA remains the recommended optimizer.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

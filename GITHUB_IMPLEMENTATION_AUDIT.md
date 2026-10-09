@@ -136,3 +136,12 @@ better after one uninterrupted long chain. The follow-up protocol therefore
 freezes the saved policy and evaluates unseen uninterrupted chains. This
 addresses the different purposes of short diverse training episodes and deep
 single-placement optimization before considering an external PPO dependency.
+
+The five-seed frozen holdout subsequently lost every comparison to uniform and
+ASA. A matched 128-step local diagnostic retained only a weak three-of-five
+signal, showing that the learned preference was specialized to short chains.
+The official implementation's default `immediate` reward is therefore not, by
+itself, the missing ingredient; its training and evaluation horizons match.
+The final local change uses 4,100-step training chains and within-chain
+progress, then evaluates the frozen model at the same horizon. Source remains
+independently implemented and externally cited.

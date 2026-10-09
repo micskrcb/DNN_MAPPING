@@ -2433,6 +2433,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 hidden_dim: int = 128, disable_learning: bool = False,
                 focus_bottleneck: bool = False,
                 focus_fraction: float = 0.0, restart_interval: int = 0,
+                update_at_chain_end: bool = False,
                 seed: int = None, initial_acceptance: float = 0.8,
                 target_acceptance: float = 0.30, adapt_window: int = 100,
                 min_perturb_frac: float = 0.005,
@@ -2723,6 +2724,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             np.clip((perturb_fraction - min_perturb_frac) / span, 0.0, 1.0),
         ], dtype=np.float32)
 
+    def current_progress():
+        if restart_interval:
+            return min(1.0, chain_evaluations / restart_interval)
+        return evaluations / n_iter
+
     def make_proposal_pool(n_perturb):
         candidates, changed_sets, relocations, features = [], [], [], []
         focused_candidates = round(candidate_count * focus_fraction)
@@ -2843,7 +2849,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     while evaluations < n_iter:
         candidates, changed_sets, relocations, features = pool
         global_state = make_global_state(
-            evaluations / n_iter, last_delta, last_accepted,
+            current_progress(), last_delta, last_accepted,
             recent_acceptance)
         global_tensor = torch.as_tensor(
             global_state, dtype=torch.float32,
@@ -2918,7 +2924,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                                  min(n, round(perturb_fraction * n)))
             next_pool = make_proposal_pool(next_n_perturb)
             next_global = make_global_state(
-                evaluations / n_iter, last_delta, last_accepted,
+                current_progress(), last_delta, last_accepted,
                 recent_acceptance)
             with torch.no_grad():
                 _, next_value_tensor = model.distribution_and_value(
@@ -2938,7 +2944,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "next_value": next_value,
             "done": done,
         })
-        if len(pending) >= rollout_steps or overall_done:
+        if (len(pending) >= rollout_steps or overall_done or
+                (end_chain and update_at_chain_end)):
             latest_metrics = update_policy(pending)
             pending.clear()
 
@@ -3030,6 +3037,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "hidden_dim": hidden_dim,
             "focus_fraction": focus_fraction,
             "restart_interval": restart_interval,
+            "update_at_chain_end": update_at_chain_end,
             "independent_chains": chain_count,
         }, save_checkpoint)
     if metadata is not None:
@@ -3056,6 +3064,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 evaluations + initialization_evaluations),
             "independent_chains": chain_count,
             "restart_interval": restart_interval,
+            "progress_normalization": (
+                "within_restart_chain" if restart_interval else "within_run"),
+            "update_at_chain_end": update_at_chain_end,
             "proposal_candidates_per_step": candidate_count,
             "unevaluated_proposal_candidates": (
                 calibration + max(0, n_iter - calibration) * candidate_count),
@@ -3762,6 +3773,8 @@ def main():
                         help="Fraction of each PPO-ASA pool anchored on the bottleneck stage")
     parser.add_argument("--ppo_asa_restart_interval", type=int, default=0,
                         help="Start an independent random placement chain after this many proposals; 0 disables restarts")
+    parser.add_argument("--ppo_asa_update_at_chain_end", action="store_true",
+                        help="Update PPO at every restart boundary instead of batching transitions across chains")
     parser.add_argument("--compute_ops", type=str, default=None,
                          help="Optional .npy file containing MAC operations per task; "
                               "converted with Table 1's 128 MACs/core at 400 MHz.")
@@ -4201,6 +4214,7 @@ def main():
             focus_bottleneck=args.ppo_asa_focus_bottleneck,
             focus_fraction=args.ppo_asa_focus_fraction,
             restart_interval=args.ppo_asa_restart_interval,
+            update_at_chain_end=args.ppo_asa_update_at_chain_end,
             seed=args.seed,
             initial_acceptance=args.asa_initial_acceptance,
             target_acceptance=args.asa_target_acceptance,

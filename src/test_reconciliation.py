@@ -93,6 +93,7 @@ class TimingTests(unittest.TestCase):
                 minibatch_size=8, hidden_dim=16, calibration_trials=4,
                 adapt_window=8, checkpoint_every=20, seed=7,
                 focus_fraction=0.5, restart_interval=10,
+                update_at_chain_end=True,
                 diagnostics_path=f"{directory}/trained.jsonl",
                 save_checkpoint=f"{directory}/trained.pt", metadata=trained)
             control_cost = rm.run_ppo_asa(
@@ -118,13 +119,16 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(trained["total_objective_evaluations"], 44)
         self.assertEqual(trained["independent_chains"], 4)
         self.assertEqual(trained["proposal_focus"], "mixed_bottleneck_0.500")
+        self.assertEqual(trained["progress_normalization"],
+                         "within_restart_chain")
+        self.assertTrue(trained["update_at_chain_end"])
         self.assertEqual(trained["policy_steps"], 36)
         self.assertGreater(trained["update_count"], 0)
         self.assertEqual(control["update_count"], 0)
         self.assertFalse(control["learning_enabled"])
         self.assertEqual(loaded["model_initialization"], "loaded_checkpoint")
         self.assertEqual(loaded["source_training_evaluations"], 40)
-        self.assertEqual(loaded["source_training_updates"], 5)
+        self.assertEqual(loaded["source_training_updates"], 7)
 
     def test_focused_neighbor_always_moves_an_anchor_task(self):
         placement = np.arange(8, dtype=np.int32)

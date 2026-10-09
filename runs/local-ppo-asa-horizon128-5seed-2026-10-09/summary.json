@@ -1,0 +1,179 @@
+{
+  "verdict": "NO_HOLDOUT_POLICY_SIGNAL",
+  "mechanics_pass": true,
+  "holdout_seeds": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "required_pair_wins": 4,
+  "policy_generalization_pass": false,
+  "optimizer_pass_against_asa": true,
+  "trained_policy": {
+    "mean_microseconds": 24.284544000000015,
+    "sample_std_microseconds": 0.13339522510195084,
+    "minimum_microseconds": 24.126240000000013,
+    "maximum_microseconds": 24.439520000000012,
+    "individual_microseconds": [
+      24.439520000000012,
+      24.168320000000012,
+      24.371200000000016,
+      24.126240000000013,
+      24.317440000000015
+    ]
+  },
+  "uniform_control": {
+    "mean_microseconds": 24.37833600000001,
+    "sample_std_microseconds": 0.13625343914925261,
+    "minimum_microseconds": 24.250560000000014,
+    "maximum_microseconds": 24.609440000000006,
+    "individual_microseconds": [
+      24.363520000000012,
+      24.250560000000014,
+      24.320160000000016,
+      24.348000000000013,
+      24.609440000000006
+    ]
+  },
+  "ordinary_asa": {
+    "mean_microseconds": 24.565248000000008,
+    "sample_std_microseconds": 0.07369935902027737,
+    "minimum_microseconds": 24.49088000000001,
+    "maximum_microseconds": 24.689120000000006,
+    "individual_microseconds": [
+      24.54464000000001,
+      24.49088000000001,
+      24.689120000000006,
+      24.54864000000001,
+      24.55296000000001
+    ]
+  },
+  "trained_versus_uniform_control": {
+    "candidate_wins": 3,
+    "ties": 0,
+    "mean_improvement_microseconds": 0.0937919999999984,
+    "mean_improvement_percent": 0.3847350368786383,
+    "exploratory_paired_95_percent_interval_microseconds": [
+      -0.10792341925789298,
+      0.2955074192578898
+    ],
+    "individual_improvements_microseconds": [
+      -0.07600000000000051,
+      0.08224000000000231,
+      -0.05104000000000042,
+      0.22175999999999974,
+      0.29199999999999093
+    ]
+  },
+  "trained_versus_asa": {
+    "candidate_wins": 5,
+    "ties": 0,
+    "mean_improvement_microseconds": 0.28070399999999507,
+    "mean_improvement_percent": 1.1426874257487447,
+    "exploratory_paired_95_percent_interval_microseconds": [
+      0.1336990770945795,
+      0.4277089229054106
+    ],
+    "individual_improvements_microseconds": [
+      0.10511999999999588,
+      0.3225599999999993,
+      0.3179199999999902,
+      0.4223999999999961,
+      0.23551999999999396
+    ]
+  },
+  "pairs": [
+    {
+      "seed": 1,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 24.439520000000012,
+      "uniform_control_microseconds": 24.363520000000012,
+      "asa_microseconds": 24.54464000000001,
+      "objective_evaluations": 129,
+      "source_training_evaluations": 250000
+    },
+    {
+      "seed": 2,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 24.168320000000012,
+      "uniform_control_microseconds": 24.250560000000014,
+      "asa_microseconds": 24.49088000000001,
+      "objective_evaluations": 129,
+      "source_training_evaluations": 250000
+    },
+    {
+      "seed": 3,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 24.371200000000016,
+      "uniform_control_microseconds": 24.320160000000016,
+      "asa_microseconds": 24.689120000000006,
+      "objective_evaluations": 129,
+      "source_training_evaluations": 250000
+    },
+    {
+      "seed": 4,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 24.126240000000013,
+      "uniform_control_microseconds": 24.348000000000013,
+      "asa_microseconds": 24.54864000000001,
+      "objective_evaluations": 129,
+      "source_training_evaluations": 250000
+    },
+    {
+      "seed": 5,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 24.317440000000015,
+      "uniform_control_microseconds": 24.609440000000006,
+      "asa_microseconds": 24.55296000000001,
+      "objective_evaluations": 129,
+      "source_training_evaluations": 250000
+    }
+  ]
+}

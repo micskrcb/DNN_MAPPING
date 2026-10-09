@@ -403,6 +403,22 @@ evaluates it on five unseen uninterrupted chains. A fresh uniform scorer and
 ASA receive the same 4,101 objective evaluations in each seed. Training cost
 and inference optimization cost are reported separately.
 
+The holdout rejected the checkpoint. Frozen trained PPO-ASA lost every seed,
+averaging 23.63050 microseconds versus 23.51504 for uniform and 23.50518 for
+ASA. Paired exploratory intervals excluded zero in the wrong direction. A
+five-seed local check at the original 128-proposal horizon was directionally
+better: trained PPO averaged 0.385% below uniform and won three pairs, but the
+interval included zero. Thus the checkpoint contains a weak short-horizon
+preference and no transferable 4,100-step optimizer policy.
+
+The official RL-Based-SA code uses immediate realized gain by default, as this
+implementation does, but its training and evaluation annealing horizons match.
+Its TSP configuration also learns over 256 newly generated instances per
+epoch. The final bounded correction here therefore matches the 4,100-proposal
+training and deployment horizons, normalizes progress within each chain, and
+updates PPO at chain boundaries. No external code is copied. Failure of the
+resulting frozen holdout closes PPO-ASA rather than prompting more tuning.
+
 ### Gate 1: implementation sanity
 
 Run bounded synthetic and AlexNet-CONV smoke tests. Required conditions:
