@@ -56,13 +56,15 @@ Current paper targets:
 9. [x] Complete the 4,101-evaluation focused gate. Neutral proposals fell to 37.2%, but trained PPO finished at 23.7792 microseconds versus 23.7595 for its frozen control and 23.4318 for ASA. Do not scale this neighborhood to five seeds.
 10. [x] Replace single-chain online updates with a shared proposal policy trained across repeated independently initialized placement chains. The implementation retains one policy across restarts, terminates advantages at chain boundaries, and counts every initialization.
 11. [x] Add a mixed global/bottleneck proposal pool and an exact paired runner for a 250,000-proposal trained policy, frozen control, and matched-budget ASA. The local 520-evaluation mechanics smoke passed; it was not a learning test.
-12. Run `multichain-train` on Kaggle. Each condition receives exactly 251,954 true-objective evaluations across 1,954 chains. Compare curves only at matching recorded evaluation counts.
-13. Proceed to five evaluation seeds only if the training-scale learned proposal beats both its uniform control and ordinary ASA.
-14. If the gate fails because policy optimization is unstable, expose the same placement adapter as a Gymnasium vector environment and replace only the optimizer/collector with Stable-Baselines3 Contrib MaskablePPO. Do not switch libraries merely to repeat the same insufficient-data experiment.
-15. Keep guided DDPG and both short-chain PPO-ASA variants as negative ablations.
-16. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
-17. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
-18. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
+12. [x] Complete `multichain-train`: mechanics passed and trained PPO-ASA beat its uniform control by 0.466%, but ordinary ASA was 3.55% better. Preserve this as a one-seed learning-only result.
+13. [x] Preserve the trained proposal checkpoint and add frozen checkpoint loading for inference-only evaluation.
+14. Run the five-seed uninterrupted holdout gate with 4,101 objective evaluations per trained policy, fresh uniform control, and ASA condition.
+15. Proceed to a larger evaluation budget only if the trained checkpoint beats its fresh control in at least four of five seeds and has a lower aggregate mean. An optimizer claim additionally requires the same threshold against ASA.
+16. If holdout policy generalization fails, expose the same placement adapter as a Gymnasium vector environment and replace only the optimizer/collector with Stable-Baselines3 Contrib MaskablePPO. Do not switch libraries merely to repeat the same insufficient-data experiment.
+17. Keep guided DDPG and both short-chain PPO-ASA variants as negative ablations.
+18. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
+19. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
+20. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
 
 ## Gate 4: improvements after reproduction
 

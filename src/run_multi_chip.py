@@ -2440,6 +2440,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 stall_windows: int = 3, calibration_trials: int = 32,
                 diagnostics_path: str = None, metadata: dict = None,
                 incremental: bool = True, save_checkpoint: str = None,
+                load_checkpoint: str = None,
                 checkpoint_every: int = 1000) -> float:
     """PPO-guided adaptive SA with fixed acceptance and temperature logic.
 
@@ -2681,6 +2682,24 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     global_dim, candidate_dim = 8, 9
     model = ProposalPPOActorCritic(
         global_dim, candidate_dim, hidden_dim=hidden_dim).to(torch_device)
+    loaded_checkpoint = None
+    if load_checkpoint:
+        if not os.path.exists(load_checkpoint):
+            raise FileNotFoundError(
+                f"PPO-ASA checkpoint not found: {load_checkpoint}")
+        loaded_checkpoint = torch.load(
+            load_checkpoint, map_location=torch_device, weights_only=False)
+        if loaded_checkpoint.get("algorithm") != "ppo_asa_proposal_v1":
+            raise ValueError("checkpoint is not a PPO-ASA proposal model")
+        if loaded_checkpoint.get("candidate_count") != candidate_count:
+            raise ValueError(
+                "checkpoint candidate count does not match this run")
+        if not math.isclose(
+                float(loaded_checkpoint.get("focus_fraction", 0.0)),
+                focus_fraction, rel_tol=0.0, abs_tol=0.0):
+            raise ValueError(
+                "checkpoint proposal focus does not match this run")
+        model.load_state_dict(loaded_checkpoint["model"])
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, eps=1e-5)
     update_count = 0
 
@@ -3007,6 +3026,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "seed": seed_value,
             "candidate_count": candidate_count,
             "learning_enabled": not disable_learning,
+            "update_count": update_count,
+            "hidden_dim": hidden_dim,
             "focus_fraction": focus_fraction,
             "restart_interval": restart_interval,
             "independent_chains": chain_count,
@@ -3022,6 +3043,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "acceptance_rule": "fixed_metropolis",
             "temperature_controller": "existing_adaptive_sa",
             "learning_enabled": not disable_learning,
+            "model_initialization": (
+                "loaded_checkpoint" if loaded_checkpoint is not None
+                else "zero_score_uniform"),
+            "loaded_checkpoint_path": load_checkpoint,
             "initialization": "seeded_random",
             "initial_cost": initial_cost,
             "best_cost": best_cost,
@@ -3052,6 +3077,15 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "checkpoint_path": save_checkpoint,
             "checkpoint_resumable": False,
         })
+        if loaded_checkpoint is not None:
+            metadata.update({
+                "source_training_evaluations": loaded_checkpoint.get(
+                    "evaluations"),
+                "source_training_updates": loaded_checkpoint.get(
+                    "update_count"),
+                "source_training_best_cost": loaded_checkpoint.get(
+                    "best_cost"),
+            })
         if latest_metrics is not None:
             metadata["final_update_metrics"] = latest_metrics
     return best_cost
@@ -3655,7 +3689,9 @@ def main():
                               "will create it (combine with --save_checkpoint pointing to "
                               "the same path to make a run resumable from itself). Note: "
                               "DDPG replay is not persisted; masked PPO checkpoints are "
-                              "saved only between complete on-policy rollout batches.")
+                              "saved only between complete on-policy rollout batches. "
+                              "For PPO-ASA this loads a frozen proposal model and must be "
+                              "combined with --ppo_asa_disable_learning.")
     parser.add_argument("--checkpoint_every", type=int, default=100,
                          help="Save a checkpoint every N episodes (only used with "
                               "--save_checkpoint).")
@@ -3862,8 +3898,11 @@ def main():
             not 0 < args.ppo_clip_ratio < 1 or args.ppo_entropy_coef < 0 or
             args.ppo_value_coef < 0 or args.ppo_max_grad_norm <= 0):
         parser.error("invalid masked PPO hyperparameters")
-    if args.algo == "ppo_asa" and args.load_checkpoint:
-        parser.error("PPO-ASA checkpoints record final models but are not resumable yet")
+    if (args.algo == "ppo_asa" and args.load_checkpoint and
+            not args.ppo_asa_disable_learning):
+        parser.error(
+            "PPO-ASA checkpoints are supported only for frozen-policy "
+            "evaluation; add --ppo_asa_disable_learning")
     if args.conv_blocks <= 0:
         parser.error("--conv_blocks must be positive")
     if args.timing_model == "paper_pipeline":
@@ -4174,6 +4213,7 @@ def main():
             metadata=algorithm_metadata,
             incremental=not args.asa_full_evaluation,
             save_checkpoint=args.save_checkpoint,
+            load_checkpoint=args.load_checkpoint,
             checkpoint_every=args.checkpoint_every)
     elif args.algo == "ddpg_asa":
         algorithm_metadata = {}

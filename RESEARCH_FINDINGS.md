@@ -387,6 +387,22 @@ does not establish learning. The decision experiment is the 250,000-proposal
 Kaggle `multichain-train` gate, which produces 1,954 chains and 251,954 total
 objective evaluations for each of trained PPO-ASA, frozen control, and ASA.
 
+That training-scale run completed at clean revision `5ea4c65`. Trained
+PPO-ASA reached 23.96800 microseconds versus 24.08032 for its uniform frozen
+control, a 0.466% advantage. It beat control at 3,413 of 3,906 matched
+checkpoints, selected 6.544% improving moves versus 6.228%, and reduced final
+entropy to 2.48776 from the uniform maximum 2.77259. This establishes a useful
+one-seed learning signal. Ordinary ASA reached 23.14624 microseconds and was
+3.55% better, so the optimizer gate failed.
+
+The comparison exposed a protocol issue rather than an unstable PPO update:
+the learned method was intentionally restarted every 128 proposals to collect
+diverse training experience, while ASA refined one chain for 251,953 proposals.
+The next test therefore loads the preserved model without further updates and
+evaluates it on five unseen uninterrupted chains. A fresh uniform scorer and
+ASA receive the same 4,101 objective evaluations in each seed. Training cost
+and inference optimization cost are reported separately.
+
 ### Gate 1: implementation sanity
 
 Run bounded synthetic and AlexNet-CONV smoke tests. Required conditions:

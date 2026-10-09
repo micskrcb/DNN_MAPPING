@@ -128,3 +128,11 @@ cites it in the source and documentation. No external source code was copied.
 Stable-Baselines3 Contrib remains a licensed, maintained fallback if the
 training-scale result identifies an optimizer problem; it was not added as an
 unnecessary dependency before that evidence exists.
+
+The completed training-scale gate showed that this independent implementation
+can learn: trained PPO-ASA beat its frozen control by 0.466% and at 3,413 of
+3,906 matched checkpoints. It did not beat ordinary ASA, which was 3.55%
+better after one uninterrupted long chain. The follow-up protocol therefore
+freezes the saved policy and evaluates unseen uninterrupted chains. This
+addresses the different purposes of short diverse training episodes and deep
+single-placement optimization before considering an external PPO dependency.

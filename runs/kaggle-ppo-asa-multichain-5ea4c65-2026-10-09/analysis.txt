@@ -1,0 +1,68 @@
+{
+  "verdict": "ONE_SEED_LEARNING_ONLY",
+  "mechanics_pass": true,
+  "mechanics": {
+    "initial_placements_match_by_cost": true,
+    "matched_total_objective_evaluations": true,
+    "trained_updates_are_finite": true,
+    "trained_update_count_positive": true,
+    "control_update_count_zero": true,
+    "control_learning_disabled": true,
+    "fixed_metropolis_acceptance": true,
+    "shared_temperature_controller": true,
+    "shared_proposal_focus": true,
+    "shared_restart_protocol": true
+  },
+  "costs_microseconds": {
+    "ppo_asa_trained": 23.968000000000007,
+    "ppo_asa_uniform_control": 24.08032000000001,
+    "ordinary_asa": 23.14624
+  },
+  "trained_improvement_over_control_percent": 0.46643898419956065,
+  "trained_improvement_over_asa_percent": -3.55029585798821,
+  "learning_pass_against_uniform_control": true,
+  "optimizer_pass_against_ordinary_asa": false,
+  "objective_evaluations": {
+    "ppo_asa_trained": 251954,
+    "ppo_asa_control": 251954,
+    "ordinary_asa": 251954
+  },
+  "runtime_seconds": {
+    "ppo_asa_trained": 5717.963646509999,
+    "ppo_asa_control": 5728.109769756,
+    "ordinary_asa": 3119.8751284499995
+  },
+  "proposal_diagnostics": {
+    "trained_updates": 62,
+    "trained_independent_chains": 1954,
+    "control_independent_chains": 1954,
+    "trained_improving_moves": 16360,
+    "control_improving_moves": 15571,
+    "asa_improving_moves": 4314,
+    "trained_neutral_proposals": 214987,
+    "control_neutral_proposals": 216286,
+    "trained_final_update_metrics": {
+      "policy_loss": -5.66446381071728e-06,
+      "value_loss": 6.612450695037841,
+      "entropy": 2.487764096260071,
+      "approximate_kl": 2.4761473525813925e-06,
+      "clip_fraction": 0.0,
+      "gradient_norm": 9.660344886779786
+    },
+    "policy_curve": {
+      "trained_control_aligned_evaluation_points": 3906,
+      "trained_asa_aligned_evaluation_points": 40,
+      "trained_better_than_control_points": 3413,
+      "trained_better_than_asa_points": 0,
+      "trained_neutral_proposal_percent": 85.9948,
+      "control_neutral_proposal_percent": 86.51440000000001,
+      "trained_improving_move_percent": 6.544,
+      "control_improving_move_percent": 6.2284,
+      "uniform_candidate_entropy": 2.772588722239781,
+      "first_reported_entropy": 2.772560840845108,
+      "final_reported_entropy": 2.487764096260071,
+      "final_entropy_gap_from_uniform_percent": 10.272876885599546
+    }
+  }
+}
+Saved /kaggle/working/kaggle-ppo-asa-multichain-5ea4c65/gate-summary.json

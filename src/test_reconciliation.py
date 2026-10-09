@@ -83,9 +83,9 @@ class TimingTests(unittest.TestCase):
         graph[0, 1] = graph[1, 2] = graph[2, 3] = 1.0
         environments = [
             MultiChipEnvironment(1, 1, 2, 3, task_graph=graph, num_tasks=4)
-            for _ in range(2)
+            for _ in range(3)
         ]
-        trained, control = {}, {}
+        trained, control, loaded = {}, {}, {}
         with tempfile.TemporaryDirectory() as directory:
             trained_cost = rm.run_ppo_asa(
                 environments[0], n_iter=40, candidate_count=4,
@@ -102,8 +102,16 @@ class TimingTests(unittest.TestCase):
                 adapt_window=8, checkpoint_every=20, seed=7,
                 focus_fraction=0.5, restart_interval=10,
                 disable_learning=True, metadata=control)
+            loaded_cost = rm.run_ppo_asa(
+                environments[2], n_iter=16, candidate_count=4,
+                rollout_steps=8, device="cpu", update_epochs=1,
+                minibatch_size=8, hidden_dim=16, calibration_trials=4,
+                adapt_window=8, checkpoint_every=20, seed=9,
+                focus_fraction=0.5, disable_learning=True,
+                load_checkpoint=f"{directory}/trained.pt", metadata=loaded)
         self.assertTrue(np.isfinite(trained_cost))
         self.assertTrue(np.isfinite(control_cost))
+        self.assertTrue(np.isfinite(loaded_cost))
         self.assertEqual(trained["initial_cost"], control["initial_cost"])
         self.assertEqual(trained["candidate_evaluations"], 40)
         self.assertEqual(trained["initial_placement_evaluations"], 4)
@@ -114,6 +122,9 @@ class TimingTests(unittest.TestCase):
         self.assertGreater(trained["update_count"], 0)
         self.assertEqual(control["update_count"], 0)
         self.assertFalse(control["learning_enabled"])
+        self.assertEqual(loaded["model_initialization"], "loaded_checkpoint")
+        self.assertEqual(loaded["source_training_evaluations"], 40)
+        self.assertEqual(loaded["source_training_updates"], 5)
 
     def test_focused_neighbor_always_moves_an_anchor_task(self):
         placement = np.arange(8, dtype=np.int32)

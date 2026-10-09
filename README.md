@@ -740,6 +740,27 @@ uses the training structure described by the official RL-Based-SA project but
 does not copy its source; citations and compatibility limits are recorded in
 `GITHUB_IMPLEMENTATION_AUDIT.md`.
 
+The training-scale run is complete. Trained PPO-ASA reached 23.96800
+microseconds versus 24.08032 for its frozen control, a 0.466% improvement, and
+beat control at 3,413 of 3,906 matched checkpoints. Its entropy fell 10.27%
+below the uniform maximum and its improving-move rate was higher, so the policy
+did learn. Ordinary uninterrupted ASA reached 23.14624 microseconds and beat
+the learned search by 3.55%. This is a learning-only result, not an optimizer
+win. Reports, the study, and the trained checkpoint are preserved under
+`runs/kaggle-ppo-asa-multichain-5ea4c65-2026-10-09/`.
+
+The next gate freezes that checkpoint and evaluates it on five unseen,
+uninterrupted chains. Each seed gives the trained policy, a fresh uniform
+policy, and ASA exactly 4,101 objective evaluations:
+
+```bash
+bash scripts/run_kaggle_ppo_asa_holdout.sh
+```
+
+This separation is required because short restarts generate diverse training
+data but handicap final placement refinement. The holdout gate reports whether
+the learned proposal generalizes and whether it beats ASA as an optimizer.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.
