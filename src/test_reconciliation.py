@@ -68,6 +68,48 @@ class TimingTests(unittest.TestCase):
         self.assertGreater(metadata["update_count"], 0)
         self.assertTrue(np.isfinite(metadata["initial_deterministic_cost"]))
 
+    @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
+    def test_ppo_asa_starts_uniform_and_respects_objective_budget(self):
+        import torch
+        torch.set_num_threads(2)
+        model = rm.ProposalPPOActorCritic(8, 8, hidden_dim=16)
+        distribution, values = model.distribution_and_value(
+            torch.zeros((2, 8)), torch.randn((2, 4, 8)))
+        torch.testing.assert_close(
+            distribution.probs, torch.full((2, 4), 0.25))
+        self.assertTrue(torch.isfinite(values).all())
+
+        graph = np.zeros((4, 4), dtype=np.float32)
+        graph[0, 1] = graph[1, 2] = graph[2, 3] = 1.0
+        environments = [
+            MultiChipEnvironment(1, 1, 2, 3, task_graph=graph, num_tasks=4)
+            for _ in range(2)
+        ]
+        trained, control = {}, {}
+        with tempfile.TemporaryDirectory() as directory:
+            trained_cost = rm.run_ppo_asa(
+                environments[0], n_iter=40, candidate_count=4,
+                rollout_steps=8, device="cpu", update_epochs=1,
+                minibatch_size=8, hidden_dim=16, calibration_trials=4,
+                adapt_window=8, checkpoint_every=20, seed=7,
+                diagnostics_path=f"{directory}/trained.jsonl",
+                save_checkpoint=f"{directory}/trained.pt", metadata=trained)
+            control_cost = rm.run_ppo_asa(
+                environments[1], n_iter=40, candidate_count=4,
+                rollout_steps=8, device="cpu", update_epochs=1,
+                minibatch_size=8, hidden_dim=16, calibration_trials=4,
+                adapt_window=8, checkpoint_every=20, seed=7,
+                disable_learning=True, metadata=control)
+        self.assertTrue(np.isfinite(trained_cost))
+        self.assertTrue(np.isfinite(control_cost))
+        self.assertEqual(trained["initial_cost"], control["initial_cost"])
+        self.assertEqual(trained["candidate_evaluations"], 40)
+        self.assertEqual(trained["total_objective_evaluations"], 41)
+        self.assertEqual(trained["policy_steps"], 36)
+        self.assertGreater(trained["update_count"], 0)
+        self.assertEqual(control["update_count"], 0)
+        self.assertFalse(control["learning_enabled"])
+
     def test_remainder_conserves_work(self):
         ops, kinds = tile_work(5, 7, 2, 3, 9, 2, 3)
         self.assertEqual(sum(o for o, k in zip(ops, kinds) if k == "vmm"), 5*7*2*3*9)

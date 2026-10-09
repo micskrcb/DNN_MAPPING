@@ -1411,6 +1411,56 @@ if HAS_TORCH:
             return actions, distribution.log_prob(actions), distribution.entropy(), values
 
 
+    class ProposalPPOActorCritic(nn.Module):
+        """Permutation-equivariant scorer for a small set of legal SA moves.
+
+        Every row receives global annealing state plus a set of candidate-move
+        features.  The zero-initialized score head makes the initial proposal
+        distribution exactly uniform, so a frozen instance is a clean control
+        for the learned proposal policy.
+        """
+
+        def __init__(self, global_dim: int, candidate_dim: int,
+                     hidden_dim: int = 128):
+            super().__init__()
+            self.global_encoder = nn.Sequential(
+                nn.Linear(global_dim, hidden_dim), nn.Tanh())
+            self.candidate_encoder = nn.Sequential(
+                nn.Linear(candidate_dim, hidden_dim), nn.Tanh())
+            self.score_head = nn.Linear(hidden_dim, 1)
+            self.value_head = nn.Linear(hidden_dim, 1)
+            for module in (self.global_encoder[0], self.candidate_encoder[0]):
+                nn.init.orthogonal_(module.weight, gain=math.sqrt(2.0))
+                nn.init.zeros_(module.bias)
+            nn.init.zeros_(self.score_head.weight)
+            nn.init.zeros_(self.score_head.bias)
+            nn.init.orthogonal_(self.value_head.weight, gain=1.0)
+            nn.init.zeros_(self.value_head.bias)
+
+        def forward(self, global_states, candidate_features):
+            global_embedding = self.global_encoder(global_states)
+            candidate_embedding = self.candidate_encoder(candidate_features)
+            joint = torch.tanh(candidate_embedding + global_embedding[:, None, :])
+            logits = self.score_head(joint).squeeze(-1)
+            pooled = candidate_embedding.mean(dim=1)
+            values = self.value_head(
+                torch.tanh(global_embedding + pooled)).squeeze(-1)
+            return logits, values
+
+        def distribution_and_value(self, global_states, candidate_features):
+            logits, values = self(global_states, candidate_features)
+            return torch.distributions.Categorical(logits=logits), values
+
+        def action_and_value(self, global_states, candidate_features,
+                             generator=None):
+            distribution, values = self.distribution_and_value(
+                global_states, candidate_features)
+            actions = torch.multinomial(
+                distribution.probs, 1, generator=generator).squeeze(-1)
+            return (actions, distribution.log_prob(actions),
+                    distribution.entropy(), values)
+
+
 def run_masked_ppo(env: MultiChipEnvironment, n_episodes: int = 500,
                    baseline_trials: int = 1000, device: str = None,
                    learning_rate: float = 3e-4, rollout_episodes: int = 10,
@@ -2045,8 +2095,9 @@ class _FreeCorePool:
     def __bool__(self):
         return bool(self.items)
 
-    def choice(self):
-        return self.items[random.randrange(len(self.items))]
+    def choice(self, rng=None):
+        rng = random if rng is None else rng
+        return self.items[rng.randrange(len(self.items))]
 
     def accept_relocation(self, used_core, freed_core):
         index = self.positions.pop(int(used_core))
@@ -2054,21 +2105,22 @@ class _FreeCorePool:
         self.positions[int(freed_core)] = index
 
 
-def _placement_neighbor(placement, n_perturb, free_pool):
+def _placement_neighbor(placement, n_perturb, free_pool, rng=None):
     """Return a valid swap/relocation neighbor and its changed task indices."""
+    rng = random if rng is None else rng
     n = len(placement)
-    indices = np.asarray(random.sample(range(n), min(n_perturb, n)), dtype=np.int64)
+    indices = np.asarray(rng.sample(range(n), min(n_perturb, n)), dtype=np.int64)
     candidate = placement.copy()
     original = candidate[indices].copy()
     permuted = original.tolist()
-    random.shuffle(permuted)
+    rng.shuffle(permuted)
     if len(permuted) >= 2 and np.array_equal(permuted, original):
         permuted[0], permuted[1] = permuted[1], permuted[0]
     candidate[indices] = permuted
 
     relocation = None
-    if free_pool and (n == 1 or random.random() < 0.5):
-        used_core = free_pool.choice()
+    if free_pool and (n == 1 or rng.random() < 0.5):
+        used_core = free_pool.choice(rng)
         freed_core = int(candidate[indices[0]])
         candidate[indices[0]] = used_core
         relocation = (used_core, freed_core)
@@ -2343,6 +2395,547 @@ def run_adaptive_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             "incremental_evaluation": evaluator is not None,
             "diagnostics_path": diagnostics_path,
         })
+    return best_cost
+
+
+def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
+                candidate_count: int = 16, rollout_steps: int = 256,
+                device: str = None, learning_rate: float = 3e-4,
+                update_epochs: int = 4, minibatch_size: int = 256,
+                gamma: float = 0.98, gae_lambda: float = 0.95,
+                clip_ratio: float = 0.2, entropy_coefficient: float = 0.01,
+                value_coefficient: float = 0.5, max_grad_norm: float = 0.5,
+                hidden_dim: int = 128, disable_learning: bool = False,
+                seed: int = None, initial_acceptance: float = 0.8,
+                target_acceptance: float = 0.30, adapt_window: int = 100,
+                min_perturb_frac: float = 0.005,
+                max_perturb_frac: float = 0.05,
+                stall_windows: int = 3, calibration_trials: int = 32,
+                diagnostics_path: str = None, metadata: dict = None,
+                incremental: bool = True, save_checkpoint: str = None,
+                checkpoint_every: int = 1000) -> float:
+    """PPO-guided adaptive SA with fixed acceptance and temperature logic.
+
+    This follows the verified structure of Qiu and Liang's RL-Based-SA: PPO
+    learns the neighbor proposal distribution, while simulated annealing keeps
+    ownership of Metropolis acceptance and cooling.  The policy ranks a small
+    set of legal, unevaluated swap/relocation candidates.  Only the selected
+    candidate calls the true placement objective, so ``n_iter`` has the same
+    meaning as ordinary ASA.  A disabled-learning run stays exactly uniform
+    because the proposal score head is initialized to zero.
+    """
+    if not HAS_TORCH:
+        raise RuntimeError("PPO-guided ASA requires PyTorch")
+    if min(n_iter, candidate_count, rollout_steps, update_epochs,
+           minibatch_size, hidden_dim, adapt_window, stall_windows,
+           calibration_trials, checkpoint_every) <= 0:
+        raise ValueError("PPO-ASA budgets and sizes must be positive")
+    if candidate_count < 2:
+        raise ValueError("PPO-ASA requires at least two proposal candidates")
+    if (not 0 < gamma <= 1 or not 0 <= gae_lambda <= 1 or
+            not 0 < clip_ratio < 1 or learning_rate <= 0 or
+            entropy_coefficient < 0 or value_coefficient < 0 or
+            max_grad_norm <= 0):
+        raise ValueError("invalid PPO-ASA hyperparameters")
+    if not (0 < initial_acceptance < 1 and 0 < target_acceptance < 1):
+        raise ValueError("ASA acceptance targets must be in (0, 1)")
+    if not (0 < min_perturb_frac <= max_perturb_frac <= 1):
+        raise ValueError("ASA perturbation fractions must satisfy 0 < min <= max <= 1")
+    if device == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CUDA requested but torch.cuda.is_available() is false")
+
+    torch_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    seed_value = 0 if seed is None else int(seed)
+    proposal_rng = random.Random(seed_value)
+    acceptance_rng = random.Random(seed_value + 1_000_003)
+    torch.manual_seed(seed_value + 2_000_003)
+    if torch_device.type == "cuda":
+        torch.cuda.manual_seed_all(seed_value + 2_000_003)
+    action_generator = torch.Generator(device=torch_device)
+    action_generator.manual_seed(seed_value + 3_000_003)
+    update_generator = torch.Generator(device=torch_device)
+    update_generator.manual_seed(seed_value + 4_000_003)
+
+    n = env.num_tasks
+    placement = np.asarray(
+        proposal_rng.sample(env.allowed_cores.tolist(), n), dtype=np.int32)
+    env.place(placement)
+    current_cost = float(env.evaluate())
+    initial_cost = current_cost
+    best_cost, best_placement = current_cost, placement.copy()
+    free_pool = _FreeCorePool(env.allowed_cores, placement)
+    evaluator = None
+    if incremental:
+        try:
+            evaluator = IncrementalPipelineEvaluator(env)
+        except (TypeError, AttributeError):
+            evaluator = None
+
+    diagnostics = None
+    if diagnostics_path:
+        parent = os.path.dirname(diagnostics_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        diagnostics = open(diagnostics_path, "w", encoding="utf-8")
+
+    edge_sources, edge_destinations = np.nonzero(env.task_graph)
+    edge_sources = edge_sources.astype(np.int64, copy=False)
+    edge_destinations = edge_destinations.astype(np.int64, copy=False)
+    edge_volumes = env.task_graph[edge_sources, edge_destinations].astype(
+        np.float64, copy=False)
+    incident_edges = [[] for _ in range(n)]
+    for edge_index, (source, destination) in enumerate(
+            zip(edge_sources.tolist(), edge_destinations.tolist())):
+        incident_edges[source].append(edge_index)
+        incident_edges[destination].append(edge_index)
+    task_pressure = (env.task_graph.sum(axis=0, dtype=np.float64) +
+                     env.task_graph.sum(axis=1, dtype=np.float64))
+    task_pressure = np.log1p(task_pressure)
+    pressure_scale = max(float(task_pressure.max(initial=0.0)),
+                         np.finfo(float).eps)
+    task_pressure /= pressure_scale
+    total_edge_volume = max(float(edge_volumes.sum()), np.finfo(float).eps)
+
+    topo = env.topo
+    core_ids = np.arange(env.total_cores, dtype=np.int64)
+    core_chips = core_ids // topo.cores_per_chip
+    local_ids = core_ids % topo.cores_per_chip
+    core_rows = local_ids // topo.cols_per_chip
+    core_cols = local_ids % topo.cols_per_chip
+    chip_x = core_chips % topo.num_chips_x
+    chip_y = core_chips // topo.num_chips_x
+    motion_denominator = max(
+        1, topo.rows_per_chip + topo.cols_per_chip +
+        topo.num_chips_x + topo.num_chips_y - 4)
+
+    def proxy_latencies(source_cores, destination_cores):
+        on_hops = (np.abs(core_rows[source_cores] - core_rows[destination_cores]) +
+                   np.abs(core_cols[source_cores] - core_cols[destination_cores]))
+        chip_hops = (np.abs(chip_x[source_cores] - chip_x[destination_cores]) +
+                     np.abs(chip_y[source_cores] - chip_y[destination_cores]))
+        return (on_hops * topo.on_chip_latency +
+                chip_hops * topo.off_chip_latency)
+
+    def candidate_features(candidate, changed, relocation, expected_changes):
+        changed = np.asarray(changed, dtype=np.int64)
+        if len(changed):
+            old_cores = placement[changed]
+            new_cores = candidate[changed]
+            motion = (np.abs(core_rows[old_cores] - core_rows[new_cores]) +
+                      np.abs(core_cols[old_cores] - core_cols[new_cores]) +
+                      np.abs(chip_x[old_cores] - chip_x[new_cores]) +
+                      np.abs(chip_y[old_cores] - chip_y[new_cores]))
+            chip_change = np.mean(core_chips[old_cores] != core_chips[new_cores])
+            pressure_mean = float(task_pressure[changed].mean())
+            pressure_max = float(task_pressure[changed].max())
+            edge_indices = np.unique(np.concatenate(
+                [np.asarray(incident_edges[index], dtype=np.int64)
+                 for index in changed if incident_edges[index]])) \
+                if any(incident_edges[index] for index in changed) \
+                else np.empty(0, dtype=np.int64)
+        else:
+            motion = np.zeros(1, dtype=np.float64)
+            chip_change = pressure_mean = pressure_max = 0.0
+            edge_indices = np.empty(0, dtype=np.int64)
+
+        if len(edge_indices):
+            sources = edge_sources[edge_indices]
+            destinations = edge_destinations[edge_indices]
+            volumes = edge_volumes[edge_indices]
+            old_proxy = float(np.sum(
+                volumes * proxy_latencies(placement[sources], placement[destinations])))
+            new_proxy = float(np.sum(
+                volumes * proxy_latencies(candidate[sources], candidate[destinations])))
+            proxy_gain = np.clip(
+                (old_proxy - new_proxy) / max(abs(old_proxy), np.finfo(float).eps),
+                -1.0, 1.0)
+            affected_volume = float(volumes.sum()) / total_edge_volume
+        else:
+            proxy_gain = affected_volume = 0.0
+        if evaluator is not None and len(changed):
+            bottleneck_stage = int(np.argmax(evaluator.stage_costs))
+            bottleneck_fraction = float(np.mean(
+                evaluator.task_stage[changed] == bottleneck_stage))
+        else:
+            bottleneck_fraction = 0.0
+        return np.asarray([
+            len(changed) / max(1, expected_changes),
+            float(relocation is not None),
+            pressure_mean,
+            pressure_max,
+            float(np.mean(motion)) / motion_denominator,
+            float(chip_change),
+            bottleneck_fraction,
+            float(proxy_gain),
+            float(min(1.0, affected_volume)),
+        ], dtype=np.float32)
+
+    def evaluate(candidate, changed):
+        env.place(candidate)
+        return (evaluator.candidate_cost(changed) if evaluator is not None
+                else float(env.evaluate()))
+
+    accepted = improving = reheats = neutral_proposals = evaluations = 0
+    positive_deltas = []
+    perturb_fraction = min_perturb_frac
+
+    def finish_proposal(candidate, new_cost, relocation, accept):
+        nonlocal placement, current_cost, best_cost, best_placement
+        nonlocal accepted, improving
+        if accept:
+            if new_cost < current_cost:
+                improving += 1
+            accepted += 1
+            placement, current_cost = candidate, new_cost
+            if evaluator is not None:
+                evaluator.accept()
+            if relocation is not None:
+                free_pool.accept_relocation(*relocation)
+            if new_cost < best_cost:
+                best_cost, best_placement = new_cost, candidate.copy()
+        else:
+            env.place(placement)
+            if evaluator is not None:
+                evaluator.reject()
+
+    calibration = min(n_iter, max(1, calibration_trials))
+    for _ in range(calibration):
+        n_perturb = max(2 if n > 1 else 1,
+                        min(n, round(perturb_fraction * n)))
+        candidate, changed, relocation = _placement_neighbor(
+            placement, n_perturb, free_pool, rng=proposal_rng)
+        new_cost = evaluate(candidate, changed)
+        evaluations += 1
+        delta = new_cost - current_cost
+        if delta > 0:
+            positive_deltas.append(delta)
+        elif delta == 0:
+            neutral_proposals += 1
+        finish_proposal(candidate, new_cost, relocation, delta <= 0)
+
+    scale = (float(np.median(positive_deltas)) if positive_deltas
+             else max(abs(current_cost) * 1e-3, np.finfo(float).eps))
+    initial_temperature = max(-scale / math.log(initial_acceptance),
+                              np.finfo(float).eps)
+    temperature = initial_temperature
+    min_temperature = initial_temperature * 1e-6
+    max_temperature = initial_temperature * 10.0
+    reward_scale = max(abs(initial_cost) * 1e-3, np.finfo(float).eps)
+
+    global_dim, candidate_dim = 8, 9
+    model = ProposalPPOActorCritic(
+        global_dim, candidate_dim, hidden_dim=hidden_dim).to(torch_device)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, eps=1e-5)
+    update_count = 0
+
+    def make_global_state(progress, last_delta, last_accepted,
+                          recent_acceptance):
+        temperature_log = math.log(max(temperature, np.finfo(float).eps) /
+                                   initial_temperature)
+        span = max(max_perturb_frac - min_perturb_frac, np.finfo(float).eps)
+        return np.asarray([
+            progress,
+            np.clip(temperature_log / 14.0, -1.0, 1.0),
+            np.clip((initial_cost - current_cost) /
+                    max(abs(initial_cost) * 0.05, np.finfo(float).eps), -2.0, 2.0),
+            np.clip((initial_cost - best_cost) /
+                    max(abs(initial_cost) * 0.05, np.finfo(float).eps), -2.0, 2.0),
+            np.clip(last_delta / reward_scale, -10.0, 10.0) / 10.0,
+            float(last_accepted),
+            float(recent_acceptance),
+            np.clip((perturb_fraction - min_perturb_frac) / span, 0.0, 1.0),
+        ], dtype=np.float32)
+
+    def make_proposal_pool(n_perturb):
+        candidates, changed_sets, relocations, features = [], [], [], []
+        for _ in range(candidate_count):
+            candidate, changed, relocation = _placement_neighbor(
+                placement, n_perturb, free_pool, rng=proposal_rng)
+            candidates.append(candidate)
+            changed_sets.append(changed)
+            relocations.append(relocation)
+            features.append(candidate_features(
+                candidate, changed, relocation, n_perturb))
+        return candidates, changed_sets, relocations, np.stack(features)
+
+    latest_metrics = None
+    pending = []
+
+    def update_policy(transitions):
+        nonlocal update_count
+        if disable_learning or not transitions:
+            return None
+        global_states = torch.as_tensor(
+            np.asarray([row["global_state"] for row in transitions]),
+            dtype=torch.float32, device=torch_device)
+        candidates = torch.as_tensor(
+            np.asarray([row["candidate_features"] for row in transitions]),
+            dtype=torch.float32, device=torch_device)
+        actions = torch.as_tensor(
+            [row["action"] for row in transitions], dtype=torch.long,
+            device=torch_device)
+        old_log_probs = torch.as_tensor(
+            [row["log_prob"] for row in transitions], dtype=torch.float32,
+            device=torch_device)
+        rewards = np.asarray([row["reward"] for row in transitions],
+                             dtype=np.float32)
+        values = np.asarray([row["value"] for row in transitions],
+                            dtype=np.float32)
+        next_values = np.asarray([row["next_value"] for row in transitions],
+                                 dtype=np.float32)
+        dones = np.asarray([row["done"] for row in transitions], dtype=bool)
+        advantages = np.zeros_like(rewards)
+        last_advantage = 0.0
+        for index in range(len(rewards) - 1, -1, -1):
+            nonterminal = 0.0 if dones[index] else 1.0
+            delta = (rewards[index] + gamma * next_values[index] * nonterminal -
+                     values[index])
+            last_advantage = (delta + gamma * gae_lambda * nonterminal *
+                              last_advantage)
+            advantages[index] = last_advantage
+        returns = advantages + values
+        advantages_tensor = torch.as_tensor(
+            advantages, dtype=torch.float32, device=torch_device)
+        returns_tensor = torch.as_tensor(
+            returns, dtype=torch.float32, device=torch_device)
+        if len(advantages_tensor) > 1:
+            advantages_tensor = ((advantages_tensor - advantages_tensor.mean()) /
+                                 (advantages_tensor.std(unbiased=False) + 1e-8))
+
+        metrics = []
+        for _ in range(update_epochs):
+            permutation = torch.randperm(
+                len(transitions), generator=update_generator, device=torch_device)
+            for start in range(0, len(transitions), minibatch_size):
+                indices = permutation[start:start + minibatch_size]
+                distribution, new_values = model.distribution_and_value(
+                    global_states[indices], candidates[indices])
+                new_log_probs = distribution.log_prob(actions[indices])
+                log_ratio = new_log_probs - old_log_probs[indices]
+                ratio = log_ratio.exp()
+                policy_loss = -torch.minimum(
+                    ratio * advantages_tensor[indices],
+                    torch.clamp(ratio, 1.0 - clip_ratio, 1.0 + clip_ratio) *
+                    advantages_tensor[indices]).mean()
+                value_loss = F.mse_loss(new_values, returns_tensor[indices])
+                entropy = distribution.entropy().mean()
+                loss = (policy_loss + value_coefficient * value_loss -
+                        entropy_coefficient * entropy)
+                optimizer.zero_grad()
+                loss.backward()
+                gradient_norm = torch.nn.utils.clip_grad_norm_(
+                    model.parameters(), max_grad_norm)
+                optimizer.step()
+                with torch.no_grad():
+                    approximate_kl = ((ratio - 1.0) - log_ratio).mean()
+                    clip_fraction = ((ratio - 1.0).abs() > clip_ratio).float().mean()
+                metrics.append({
+                    "policy_loss": float(policy_loss.detach().cpu()),
+                    "value_loss": float(value_loss.detach().cpu()),
+                    "entropy": float(entropy.detach().cpu()),
+                    "approximate_kl": float(approximate_kl.detach().cpu()),
+                    "clip_fraction": float(clip_fraction.detach().cpu()),
+                    "gradient_norm": float(gradient_norm.detach().cpu()),
+                })
+        update_count += 1
+        return {key: float(np.mean([entry[key] for entry in metrics]))
+                for key in metrics[0]}
+
+    stagnant = 0
+    window_accepted = window_improving = window_evaluations = 0
+    window_rewards = []
+    window_selected_proxy = []
+    last_delta = 0.0
+    last_accepted = False
+    recent_acceptance = target_acceptance
+    policy_steps = max(0, n_iter - calibration)
+
+    if policy_steps:
+        n_perturb = max(2 if n > 1 else 1,
+                        min(n, round(perturb_fraction * n)))
+        pool = make_proposal_pool(n_perturb)
+    else:
+        pool = None
+
+    while evaluations < n_iter:
+        candidates, changed_sets, relocations, features = pool
+        global_state = make_global_state(
+            evaluations / n_iter, last_delta, last_accepted,
+            recent_acceptance)
+        global_tensor = torch.as_tensor(
+            global_state, dtype=torch.float32,
+            device=torch_device).unsqueeze(0)
+        feature_tensor = torch.as_tensor(
+            features, dtype=torch.float32,
+            device=torch_device).unsqueeze(0)
+        with torch.no_grad():
+            action, log_prob, _, value = model.action_and_value(
+                global_tensor, feature_tensor, generator=action_generator)
+        selected = int(action.item())
+        candidate = candidates[selected]
+        changed = changed_sets[selected]
+        relocation = relocations[selected]
+        before_cost = current_cost
+        previous_accepted, previous_improving = accepted, improving
+        new_cost = evaluate(candidate, changed)
+        evaluations += 1
+        delta = new_cost - before_cost
+        if delta == 0:
+            neutral_proposals += 1
+        accept = (delta <= 0 or acceptance_rng.random() <
+                  math.exp(-delta / max(temperature, np.finfo(float).eps)))
+        finish_proposal(candidate, new_cost, relocation, accept)
+        realized_reward = float(np.clip(
+            (before_cost - current_cost) / reward_scale, -10.0, 10.0))
+        window_rewards.append(realized_reward)
+        window_selected_proxy.append(float(features[selected, 7]))
+        window_evaluations += 1
+        window_accepted += accepted - previous_accepted
+        window_improving += improving - previous_improving
+        last_delta = delta
+        last_accepted = accept
+
+        end_window = window_evaluations >= adapt_window or evaluations == n_iter
+        write_record = False
+        if end_window:
+            recent_acceptance = window_accepted / window_evaluations
+            if recent_acceptance < target_acceptance * 0.5:
+                temperature *= 1.5
+            elif recent_acceptance > min(0.95, target_acceptance * 1.5):
+                temperature *= 0.75
+            else:
+                temperature *= 0.95
+            if window_improving == 0:
+                stagnant += 1
+            else:
+                stagnant = 0
+                perturb_fraction = max(
+                    min_perturb_frac, perturb_fraction * 0.9)
+            if stagnant >= stall_windows:
+                temperature = max(temperature, initial_temperature * 0.5)
+                perturb_fraction = min(
+                    max_perturb_frac,
+                    max(min_perturb_frac, perturb_fraction * 1.5))
+                reheats += 1
+                stagnant = 0
+            temperature = min(
+                max_temperature, max(min_temperature, temperature))
+            write_record = True
+
+        done = evaluations == n_iter
+        next_pool = None
+        next_value = 0.0
+        if not done:
+            next_n_perturb = max(2 if n > 1 else 1,
+                                 min(n, round(perturb_fraction * n)))
+            next_pool = make_proposal_pool(next_n_perturb)
+            next_global = make_global_state(
+                evaluations / n_iter, last_delta, last_accepted,
+                recent_acceptance)
+            with torch.no_grad():
+                _, next_value_tensor = model.distribution_and_value(
+                    torch.as_tensor(next_global, dtype=torch.float32,
+                                    device=torch_device).unsqueeze(0),
+                    torch.as_tensor(next_pool[3], dtype=torch.float32,
+                                    device=torch_device).unsqueeze(0))
+            next_value = float(next_value_tensor.item())
+
+        pending.append({
+            "global_state": global_state,
+            "candidate_features": features,
+            "action": selected,
+            "log_prob": float(log_prob.item()),
+            "value": float(value.item()),
+            "reward": realized_reward,
+            "next_value": next_value,
+            "done": done,
+        })
+        if len(pending) >= rollout_steps or done:
+            latest_metrics = update_policy(pending)
+            pending.clear()
+
+        if write_record:
+            record = {
+                "evaluations": evaluations,
+                "temperature": temperature,
+                "acceptance_ratio": recent_acceptance,
+                "perturb_fraction": perturb_fraction,
+                "current_cost": current_cost,
+                "best_cost": best_cost,
+                "reheats": reheats,
+                "mean_realized_reward": float(np.mean(window_rewards)),
+                "mean_selected_proxy_gain": float(
+                    np.mean(window_selected_proxy)),
+                "learning_enabled": not disable_learning,
+                "update_count": update_count,
+            }
+            for key in ("policy_loss", "value_loss", "entropy",
+                        "approximate_kl", "clip_fraction", "gradient_norm"):
+                record[key] = (latest_metrics.get(key)
+                               if latest_metrics is not None else None)
+            if diagnostics is not None:
+                diagnostics.write(json.dumps(record, allow_nan=False) + "\n")
+                diagnostics.flush()
+            window_accepted = window_improving = window_evaluations = 0
+            window_rewards.clear()
+            window_selected_proxy.clear()
+        pool = next_pool
+
+    if diagnostics is not None:
+        diagnostics.close()
+    env.place(best_placement)
+    if save_checkpoint:
+        parent = os.path.dirname(save_checkpoint)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        torch.save({
+            "algorithm": "ppo_asa_proposal_v1",
+            "resumable": False,
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "evaluations": evaluations,
+            "best_cost": best_cost,
+            "best_placement": best_placement,
+            "seed": seed_value,
+            "candidate_count": candidate_count,
+            "learning_enabled": not disable_learning,
+        }, save_checkpoint)
+    if metadata is not None:
+        metadata.update({
+            "method": "ppo_guided_adaptive_simulated_annealing",
+            "proposal_policy": "candidate_set_ppo",
+            "acceptance_rule": "fixed_metropolis",
+            "temperature_controller": "existing_adaptive_sa",
+            "learning_enabled": not disable_learning,
+            "initialization": "seeded_random",
+            "initial_cost": initial_cost,
+            "best_cost": best_cost,
+            "candidate_evaluations": evaluations,
+            "initial_placement_evaluations": 1,
+            "total_objective_evaluations": evaluations + 1,
+            "proposal_candidates_per_step": candidate_count,
+            "unevaluated_proposal_candidates": (
+                calibration + max(0, n_iter - calibration) * candidate_count),
+            "calibration_evaluations": calibration,
+            "policy_steps": policy_steps,
+            "accepted_moves": accepted,
+            "improving_moves": improving,
+            "neutral_proposals": neutral_proposals,
+            "reheats": reheats,
+            "initial_temperature": initial_temperature,
+            "final_temperature": temperature,
+            "final_perturb_fraction": perturb_fraction,
+            "incremental_evaluation": evaluator is not None,
+            "update_count": update_count,
+            "random_seed": seed_value,
+            "state_dimension": global_dim,
+            "candidate_feature_dimension": candidate_dim,
+            "diagnostics_path": diagnostics_path,
+            "checkpoint_path": save_checkpoint,
+            "checkpoint_resumable": False,
+        })
+        if latest_metrics is not None:
+            metadata["final_update_metrics"] = latest_metrics
     return best_cost
 
 
@@ -2893,12 +3486,15 @@ def run_sequential(env: MultiChipEnvironment) -> float:
 def main():
     parser = argparse.ArgumentParser(description="Multi-chip core placement")
     parser.add_argument("--algo", choices=["ddpg", "ddpg_guided", "ppo_masked",
-                                            "sa", "asa", "ddpg_asa", "random", "bs"],
+                                            "ppo_asa", "sa", "asa", "ddpg_asa",
+                                            "random", "bs"],
                         default="ddpg",
                         help="Placement method; ddpg_guided uses ASA demonstrations, "
                              "legal top-k actions, episode-return replay and stable twin "
                              "critics; ppo_masked is an experimental exact legal-action "
-                             "baseline; ddpg remains the paper-faithful baseline")
+                             "baseline; ppo_asa learns legal local proposals while keeping "
+                             "ASA acceptance and temperature control; ddpg remains the "
+                             "paper-faithful baseline")
     parser.add_argument("--chips_x", type=int, default=2)
     parser.add_argument("--chips_y", type=int, default=2)
     parser.add_argument("--rows", type=int, default=4, help="Rows per chip")
@@ -3000,6 +3596,12 @@ def main():
     parser.add_argument("--ppo_hidden_dim", type=int, default=256)
     parser.add_argument("--ppo_disable_learning", action="store_true",
                         help="Freeze masked PPO for a matched untrained-policy control")
+    parser.add_argument("--ppo_asa_candidates", type=int, default=16,
+                        help="Unevaluated legal neighbors ranked at each PPO-ASA step")
+    parser.add_argument("--ppo_asa_rollout_steps", type=int, default=256,
+                        help="Accepted/rejected proposal transitions per PPO-ASA update")
+    parser.add_argument("--ppo_asa_disable_learning", action="store_true",
+                        help="Keep PPO-ASA proposal scores exactly uniform for a matched control")
     parser.add_argument("--compute_ops", type=str, default=None,
                          help="Optional .npy file containing MAC operations per task; "
                               "converted with Table 1's 128 MACs/core at 400 MHz.")
@@ -3125,11 +3727,15 @@ def main():
     if min(args.ppo_rollout_placements, args.ppo_update_epochs,
            args.ppo_minibatch_size, args.ppo_hidden_dim) <= 0:
         parser.error("masked PPO sizes and update budgets must be positive")
+    if args.ppo_asa_candidates < 2 or args.ppo_asa_rollout_steps <= 0:
+        parser.error("PPO-ASA requires at least two candidates and a positive rollout")
     if (not math.isfinite(args.ppo_learning_rate) or args.ppo_learning_rate <= 0 or
             not 0 < args.ppo_gamma <= 1 or not 0 <= args.ppo_gae_lambda <= 1 or
             not 0 < args.ppo_clip_ratio < 1 or args.ppo_entropy_coef < 0 or
             args.ppo_value_coef < 0 or args.ppo_max_grad_norm <= 0):
         parser.error("invalid masked PPO hyperparameters")
+    if args.algo == "ppo_asa" and args.load_checkpoint:
+        parser.error("PPO-ASA checkpoints record final models but are not resumable yet")
     if args.conv_blocks <= 0:
         parser.error("--conv_blocks must be positive")
     if args.timing_model == "paper_pipeline":
@@ -3407,6 +4013,37 @@ def main():
         algorithm_metadata.update({"declared_epochs": args.epochs,
                                    "placements_per_epoch": args.placements_per_epoch,
                                    "complete_placement_evaluations": complete_placements})
+    elif args.algo == "ppo_asa":
+        algorithm_metadata = {}
+        print(f">> PPO-ASA budget: one initialization + {args.iters} "
+              f"evaluated proposals; {args.ppo_asa_candidates} legal candidates/step")
+        cost = run_ppo_asa(
+            env, n_iter=args.iters,
+            candidate_count=args.ppo_asa_candidates,
+            rollout_steps=args.ppo_asa_rollout_steps,
+            device=args.device, learning_rate=args.ppo_learning_rate,
+            update_epochs=args.ppo_update_epochs,
+            minibatch_size=args.ppo_minibatch_size,
+            gamma=args.ppo_gamma, gae_lambda=args.ppo_gae_lambda,
+            clip_ratio=args.ppo_clip_ratio,
+            entropy_coefficient=args.ppo_entropy_coef,
+            value_coefficient=args.ppo_value_coef,
+            max_grad_norm=args.ppo_max_grad_norm,
+            hidden_dim=args.ppo_hidden_dim,
+            disable_learning=args.ppo_asa_disable_learning,
+            seed=args.seed,
+            initial_acceptance=args.asa_initial_acceptance,
+            target_acceptance=args.asa_target_acceptance,
+            adapt_window=args.asa_adapt_window,
+            min_perturb_frac=args.asa_min_perturb_frac,
+            max_perturb_frac=args.asa_max_perturb_frac,
+            stall_windows=args.asa_stall_windows,
+            calibration_trials=args.asa_calibration_trials,
+            diagnostics_path=(args.asa_diagnostics or args.diagnostics),
+            metadata=algorithm_metadata,
+            incremental=not args.asa_full_evaluation,
+            save_checkpoint=args.save_checkpoint,
+            checkpoint_every=args.checkpoint_every)
     elif args.algo == "ddpg_asa":
         algorithm_metadata = {}
         print(f">> Hybrid budget: {complete_placements} DDPG placements + "
@@ -3445,6 +4082,8 @@ def main():
             limitations.append("ddpg_guided is a sample-efficiency extension, not the paper's original DDPG")
         if args.algo == "ppo_masked":
             limitations.append("ppo_masked is an experimental discrete policy, not the paper's original DDPG")
+        if args.algo == "ppo_asa":
+            limitations.append("ppo_asa is an experimental learned-neighbor extension, not the paper's original DDPG")
         if args.partition_mode != "paper_targets":
             limitations.append("logic-core allocation does not match Figure-6 aggregate counts")
         else:
@@ -3466,6 +4105,8 @@ def main():
         evaluated_placements = (complete_placements if args.algo == "ddpg"
                                 else algorithm_metadata["total_candidate_evaluations"]
                                 if args.algo in ("ddpg_guided", "ppo_masked")
+                                else algorithm_metadata["total_objective_evaluations"]
+                                if args.algo == "ppo_asa"
                                 else complete_placements + args.iters
                                 if args.algo == "ddpg_asa"
                                 else 1 if args.algo == "bs" else args.iters)

@@ -316,6 +316,23 @@ the neighborhood distribution. Temperature control, recurrent history, and
 offline preference learning should be separate later ablations, not combined
 in the first test.
 
+That first implementation is now present as `--algo ppo_asa`. It uses the
+reference method's core separation without copying its problem-specific code:
+the policy selects a proposal, the existing Metropolis rule decides acceptance,
+and the existing ASA controller changes temperature. The action is a
+permutation-invariant choice among 16 legal candidates rather than a
+932-by-1,024 flat action. A frozen zero-logit policy is exactly uniform, so the
+learning comparison does not depend on a weak random neural initialization.
+
+The 1,001-evaluation local smoke is intentionally reported as a provisional
+gate. Learned PPO-ASA beat its uniform proposal control by 0.47% (23.9986
+versus 24.1123 microseconds), but ordinary ASA reached 23.9629 and remained
+0.15% better. PPO updates were finite and the learned condition recorded 41
+improving moves versus 39 for its control. Roughly 89% of selected proposals
+were objective-neutral, confirming that bottleneck-stage credit remains the
+central difficulty. The full 4,101-evaluation one-seed gate must establish
+whether additional online updates create a real optimizer advantage.
+
 ### Gate 1: implementation sanity
 
 Run bounded synthetic and AlexNet-CONV smoke tests. Required conditions:

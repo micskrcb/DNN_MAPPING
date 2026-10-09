@@ -22,6 +22,7 @@ The maintained development branch is `cpu` in `micskrcb/DNN_MAPPING`; it is a de
 - Sequential BS, random search, fixed simulated annealing, adaptive simulated annealing, DDPG, and DDPG→ASA.
 - Experimental guided DDPG with ASA demonstrations, permanent demonstration replay, collision-free legal projection, normalized complete-episode return targets, a uniform legal warm-up, deterministic candidate retention, and a matched no-learning control.
 - Experimental masked categorical PPO with exact legal-action masking, clipped policy updates, deterministic diagnostics, checkpoints, and a matched frozen-policy control.
+- Experimental PPO-guided ASA with legal candidate proposals, a permutation-equivariant candidate scorer, PPO updates, fixed Metropolis acceptance, the existing adaptive temperature controller, and an exactly uniform frozen-policy control.
 - Explicit placement accounting: DDPG epochs × placements/epoch, separate reward-normalizer trials, and independently configurable RS/SA budgets.
 - Five-seed orchestration, periodic JSONL diagnostics, checkpoints, JSON reports, BS-normalized summaries, hop counts, link-load summaries, and a placement-sensitivity preflight.
 - One command that orchestrates separate CONV and FC paper-mode suites.
@@ -171,6 +172,24 @@ proposal policy, augments state with energy change, optionally uses an LSTM,
 and leaves Metropolis acceptance and exponential cooling fixed. The next method
 will follow that narrower verified structure and must beat the five-seed ASA
 baseline under matched evaluations.
+
+The first implementation is now complete. It ranks 16 legal, unevaluated
+swap/relocation candidates at each step and invokes the true objective only for
+the selected candidate. The state includes progress, temperature, current and
+best improvement, previous proposed energy change, acceptance history, and
+neighborhood size. Candidate features include communication pressure,
+movement, chip crossing, current-bottleneck-stage coverage, and a cheap routed
+distance proxy. A zero-initialized score head makes the frozen control exactly
+uniform. The implementation does not import code from the reference project;
+it follows its verified separation between learned proposal, Metropolis
+acceptance, and temperature scheduling.
+
+A local one-seed AlexNet-FC smoke used 1,001 total objective evaluations per
+condition. Learned PPO-ASA reached 23.9986 microseconds, its uniform control
+24.1123, and ordinary ASA 23.9629. Learning therefore showed a 0.47%
+directional advantage over its direct control, but the optimizer gate failed
+by 0.15% against ASA. The next run is the 4,101-evaluation paired Kaggle gate;
+five seeds remain conditional on beating both controls.
 
 ## Five-seed local control study (2026-09-30)
 

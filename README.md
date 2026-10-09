@@ -1,6 +1,6 @@
 # DNN Mapping with Reinforcement Learning
 
-This repository maps DNN computation tasks onto a multi-chip many-core accelerator using DDPG, guided DDPG, masked categorical PPO, random search, fixed simulated annealing, adaptive simulated annealing (ASA), a DDPG→ASA hybrid, or the sequential baseline (BS). Its reproduction target is Wu et al., **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning**, ACM TODAES 2020 ([DOI 10.1145/3418498](https://doi.org/10.1145/3418498)).
+This repository maps DNN computation tasks onto a multi-chip many-core accelerator using DDPG, guided DDPG, masked categorical PPO, PPO-guided adaptive simulated annealing, random search, fixed simulated annealing, adaptive simulated annealing (ASA), a DDPG→ASA hybrid, or the sequential baseline (BS). Its reproduction target is Wu et al., **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning**, ACM TODAES 2020 ([DOI 10.1145/3418498](https://doi.org/10.1145/3418498)).
 
 The `cpu` branch is the CPU-oriented continuation of the reconciled paper implementation. It is runnable and tested on CPU, explicitly controls PyTorch thread use, supports concurrent independent experiments, reduces diagnostic overhead, and uses exact affected-stage reevaluation for ASA. The paper does not publish its simulator or every parameter, so the code records reconstruction assumptions instead of claiming exact numerical reproduction.
 
@@ -17,6 +17,7 @@ The `cpu` branch is the CPU-oriented continuation of the reconciled paper implem
 | Adaptive SA and DDPG→ASA | Implemented as research extensions with matched-budget support |
 | Guided DDPG | Implemented as an experimental learning repair using legal actions, ASA demonstrations, complete-episode returns, prioritized replay, and twin critics |
 | Masked PPO | Implemented as an experimental exact legal-action policy with a paired frozen control |
+| PPO-guided ASA | Implemented as an experimental legal-neighbor proposal policy with fixed Metropolis acceptance, the existing ASA temperature controller, and a uniform frozen control |
 | Objective sensitivity preflight | Implemented; flat paper-mode objectives stop before long optimization |
 | 30 placements/epoch and paper search budgets | Explicitly accounted for by the paper runner |
 | XY routing and link contention | Reconstructed and implemented |
@@ -48,6 +49,9 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
   learning gate and packages its reports.
 - `scripts/run_kaggle_masked_ppo_multichip_gate.sh` tests AlexNet-FC PPO against
   its frozen control and matched-budget RS/ASA/BS baselines.
+- `scripts/run_kaggle_ppo_asa_gate.sh` compares learned proposals, an exactly
+  uniform frozen proposal control, and ordinary ASA under the same objective
+  evaluation budget.
 - `prev version readmes/` preserves earlier README snapshots.
 
 The older single-chip PPO/GCN programs and `run_multi_chip_fast.py` are not part of the validated paper reproduction path.
@@ -652,6 +656,37 @@ ASA averaged 23.5001 microseconds (sample standard deviation 0.0653) versus
 paired seed by 0.5720--0.6837 microseconds, a mean 2.61% improvement, and was
 5.70% below the 24.9203-microsecond sequential baseline. This is the minimum
 quality threshold for any learned-proposal ASA extension.
+
+## PPO-guided ASA gate
+
+`--algo ppo_asa` is an experimental hybrid based on the verified design of
+[Qiu and Liang's RL-Based-SA](https://github.com/nathanqiu07/RL-Based-SA-Public).
+PPO ranks a configurable set of legal swap/relocation candidates. Candidate
+features include task communication pressure, physical movement, whether the
+current bottleneck stage is touched, a cheap communication-distance change,
+temperature, progress, the previous energy change, and recent acceptance.
+Only the selected proposal evaluates the true objective. Metropolis acceptance
+and the existing adaptive temperature controller remain outside the policy.
+
+The proposal head begins at exactly uniform probability. Passing
+`--ppo_asa_disable_learning` therefore provides a matched uniform-proposal
+control with identical initialization and evaluation accounting. Generated
+model files are final snapshots for audit and are explicitly not resumable.
+
+The local 1,001-evaluation smoke produced 23.9986 microseconds for learned
+PPO-ASA, 24.1123 for its uniform control, and 23.9629 for ordinary ASA. This is
+a directional one-seed learning signal, while the optimizer gate remains
+failed because ordinary ASA was still 0.15% better. Run the full one-seed
+4,101-evaluation Kaggle gate before considering five seeds:
+
+```bash
+bash scripts/run_kaggle_ppo_asa_gate.sh extended
+```
+
+The output archive contains both policy snapshots, JSONL diagnostics, all
+three reports, logs, and `gate-summary.json`. A successful first gate requires
+the learned condition to beat both its uniform control and ordinary ASA. The
+five-seed threshold remains the established ASA mean of 23.5001 microseconds.
 
 ## Interpreting results
 
