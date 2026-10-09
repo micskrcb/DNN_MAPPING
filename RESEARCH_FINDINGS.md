@@ -2,6 +2,16 @@
 
 Updated: 8 October 2026
 
+The direct public-code and training-scale comparison is recorded in
+[`GITHUB_IMPLEMENTATION_AUDIT.md`](GITHUB_IMPLEMENTATION_AUDIT.md). Its main
+finding is that the official RL-Based-SA configuration uses 10.24 million
+transitions across 256 parallel problem instances, whereas the extended
+PPO-ASA gates use 4,068 policy transitions from one fixed instance. Public
+core-placement code does not include Wu et al.'s missing multi-chip simulator.
+A maintained PPO library can improve reliability and parallel collection, but
+no available repository is a drop-in replacement for this project's DNN
+partition, routing, timing, and legal-placement environment.
+
 ## Purpose
 
 This document records the investigation prompted by the 3,000-placement

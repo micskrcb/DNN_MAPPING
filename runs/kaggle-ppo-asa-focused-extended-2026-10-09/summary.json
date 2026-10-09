@@ -1,0 +1,63 @@
+{
+  "verdict": "NO_LEARNING_SIGNAL",
+  "mechanics_pass": true,
+  "mechanics": {
+    "initial_placements_match_by_cost": true,
+    "matched_total_objective_evaluations": true,
+    "trained_updates_are_finite": true,
+    "trained_update_count_positive": true,
+    "control_update_count_zero": true,
+    "control_learning_disabled": true,
+    "fixed_metropolis_acceptance": true,
+    "shared_temperature_controller": true,
+    "shared_proposal_focus": true
+  },
+  "costs_microseconds": {
+    "ppo_asa_trained": 23.779200000000003,
+    "ppo_asa_uniform_control": 23.759520000000002,
+    "ordinary_asa": 23.431839999999998
+  },
+  "trained_improvement_over_control_percent": -0.08282995616073531,
+  "trained_improvement_over_asa_percent": -1.4824273296506243,
+  "learning_pass_against_uniform_control": false,
+  "optimizer_pass_against_ordinary_asa": false,
+  "objective_evaluations": {
+    "ppo_asa_trained": 4101,
+    "ppo_asa_control": 4101,
+    "ordinary_asa": 4101
+  },
+  "runtime_seconds": {
+    "ppo_asa_trained": 84.15057136800002,
+    "ppo_asa_control": 84.83820562400001,
+    "ordinary_asa": 50.700966637999954
+  },
+  "proposal_diagnostics": {
+    "trained_updates": 32,
+    "trained_improving_moves": 137,
+    "control_improving_moves": 151,
+    "asa_improving_moves": 112,
+    "trained_neutral_proposals": 1524,
+    "control_neutral_proposals": 1404,
+    "trained_final_update_metrics": {
+      "policy_loss": -0.00036792873477686783,
+      "value_loss": 0.008178938762284815,
+      "entropy": 2.764632999897003,
+      "approximate_kl": 2.545416307953019e-06,
+      "clip_fraction": 0.0,
+      "gradient_norm": 0.24650171771645546
+    },
+    "policy_curve": {
+      "aligned_diagnostic_points": 41,
+      "trained_better_than_control_points": 29,
+      "trained_better_than_asa_points": 13,
+      "trained_neutral_proposal_percent": 37.170731707317074,
+      "control_neutral_proposal_percent": 34.243902439024396,
+      "trained_improving_move_percent": 3.3414634146341466,
+      "control_improving_move_percent": 3.6829268292682924,
+      "uniform_candidate_entropy": 2.772588722239781,
+      "first_reported_entropy": 2.7725730538368225,
+      "final_reported_entropy": 2.764632999897003,
+      "final_entropy_gap_from_uniform_percent": 0.28694202926538265
+    }
+  }
+}

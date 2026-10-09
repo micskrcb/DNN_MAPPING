@@ -699,14 +699,20 @@ The matched focused neighborhood is enabled with
 from the current maximum-latency pipeline stage, while leaving the policy,
 acceptance, temperature controller, and evaluation accounting unchanged. A
 local 1,001-evaluation smoke reached 24.0627 microseconds trained, 24.1598 for
-the focused uniform control, and 23.9629 for ASA. Run the one permitted
-extended gate with:
+the focused uniform control, and 23.9629 for ASA. The completed extended gate
+reached 23.7792 trained, 23.7595 control, and 23.4318 ASA. Although focusing
+cut neutral proposals to 37.2%, trained PPO lost both comparisons. The command
+that reproduces the completed experiment is:
 
 ```bash
 bash scripts/run_kaggle_ppo_asa_gate.sh focused-extended
 ```
 
-Proceed to five seeds only if the learned focused condition beats both controls.
+Do not scale either short-chain PPO-ASA variant to five seeds. The public-code
+and training-scale audit in `GITHUB_IMPLEMENTATION_AUDIT.md` shows that the
+closest official RL-Based-SA setup uses millions of transitions across many
+parallel problem instances. The next RL implementation must make that training
+regime possible while retaining the current evaluator and matched controls.
 
 ## Interpreting results
 

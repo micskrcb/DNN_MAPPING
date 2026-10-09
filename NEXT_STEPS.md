@@ -53,13 +53,14 @@ Current paper targets:
 6. [x] Implement a fixed-budget PPO learned-proposal ASA. Metropolis acceptance and the cooling/adaptation controller remain fixed; PPO ranks legal relocation/swap candidates using graph, movement, bottleneck, cost-change, and search-history features.
 7. [x] Complete the one-seed 4,101-evaluation PPO-ASA gate. Mechanics passed, but learned PPO-ASA reached 23.5602 microseconds versus 23.4213 for its uniform control and 23.4318 for ASA. It failed both gates.
 8. [x] Add a matched bottleneck-focused neighborhood and test it locally. At 1,001 evaluations it cut neutral proposals from about 89% to 72.8% and raised improving moves to 7.5%. Trained PPO beat its focused control by 0.40% but remained 0.42% behind ASA.
-9. Run one 4,101-evaluation `focused-extended` gate. Every exact candidate evaluation still counts against the shared budget.
-10. Proceed to five seeds only if the focused learned proposal beats both its uniform control and ordinary ASA. The five-seed target remains lower than the established 23.5001-microsecond ASA mean with the same objective-evaluation budget.
-11. Keep the completed guided-DDPG and first PPO-ASA archives as negative ablations; do not spend the paper-scale budget on them.
-12. Scale toward the paper's 300,000-placement PPO/DDPG budget only after the multi-chip learning gate and matched baseline table pass.
-13. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
-14. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
-15. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
+9. [x] Complete the 4,101-evaluation focused gate. Neutral proposals fell to 37.2%, but trained PPO finished at 23.7792 microseconds versus 23.7595 for its frozen control and 23.4318 for ASA. Do not scale this neighborhood to five seeds.
+10. Replace single-chain online updates with a shared proposal policy trained across parallel independent placement chains. The first training-scale target is at least 250,000 true-objective evaluations, paired with a frozen policy and ASA.
+11. Use the official RL-Based-SA structure or Stable-Baselines3 Contrib MaskablePPO for the optimizer and parallel collection; keep this project's evaluator, legal placement, and matched accounting.
+12. Proceed to five evaluation seeds only if the training-scale learned proposal beats both its uniform control and ordinary ASA.
+13. Keep guided DDPG and both short-chain PPO-ASA variants as negative ablations.
+14. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
+15. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
+16. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
 
 ## Gate 4: improvements after reproduction
 

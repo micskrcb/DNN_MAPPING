@@ -103,14 +103,13 @@ The planned H100 12 GB slice was unavailable. Kaggle completed the original diag
 
 ## Next execution sequence
 
-1. Preserve the completed 4,101-evaluation PPO-ASA run as a negative ablation; do not scale its unchanged candidate policy.
-2. Design one bounded bottleneck-focused proposal ablation that reduces neutral moves while retaining the frozen uniform control, ordinary ASA, and exact matched-budget accounting.
-3. Do not scale unchanged AlexNet-FC masked PPO; its 3,000-placement run tied the frozen control and lost to ASA.
-4. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.
-5. Preserve guided DDPG as a completed negative ablation and paper DDPG as the reproduction method.
-6. Run BS, RS, SA, and ASA using matched evaluator counts, then scale only the method that passes the learning gate.
-7. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
-8. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
+1. Preserve guided DDPG and both 4,101-evaluation PPO-ASA variants as negative ablations; do not scale their unchanged policies.
+2. Train the next proposal policy across parallel independent placement chains, using at least 250,000 true-objective evaluations and matched frozen-policy and ASA controls.
+3. Use the official RL-Based-SA structure or MaskablePPO for maintained PPO and parallel collection while retaining this project's evaluator and legal placement.
+4. Do not scale unchanged AlexNet-FC masked PPO; its 3,000-placement run tied the frozen control and lost to ASA.
+5. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.
+6. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
+7. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
 
 The paper-faithful mode remains frozen separately from guided DDPG and future masked-policy experiments.
 
@@ -215,6 +214,15 @@ PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate
 rose to 7.5%, while neutral proposals fell to 72.8%. This passes a bounded
 learning-only gate and justifies one 4,101-evaluation `focused-extended` run;
 it does not justify five seeds yet.
+
+That extended gate is complete at revision `91fd7dc`. Trained focused PPO-ASA
+reached 23.7792 microseconds, its frozen focused control reached 23.7595, and
+ordinary ASA reached 23.4318. Training therefore finished 0.083% behind its
+control and 1.482% behind ASA. Focusing reduced neutral proposals to 37.2%,
+but trained PPO found fewer improving moves than control (137 versus 151) and
+its best value stopped improving around evaluation 1,232. This closes the
+short-chain PPO-ASA path. The next RL experiment requires multi-instance,
+training-scale data rather than another neighborhood or hyperparameter tweak.
 
 ## Five-seed local control study (2026-09-30)
 
