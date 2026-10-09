@@ -674,19 +674,25 @@ control with identical initialization and evaluation accounting. Generated
 model files are final snapshots for audit and are explicitly not resumable.
 
 The local 1,001-evaluation smoke produced 23.9986 microseconds for learned
-PPO-ASA, 24.1123 for its uniform control, and 23.9629 for ordinary ASA. This is
-a directional one-seed learning signal, while the optimizer gate remains
-failed because ordinary ASA was still 0.15% better. Run the full one-seed
-4,101-evaluation Kaggle gate before considering five seeds:
+PPO-ASA, 24.1123 for its uniform control, and 23.9629 for ordinary ASA. The
+completed 4,101-evaluation Kaggle gate reversed that small early signal:
+learned PPO-ASA reached 23.5602 microseconds, compared with 23.4213 for the
+uniform control and 23.4318 for ordinary ASA. The learned run was 0.593% worse
+than its control and 0.548% worse than ASA. Its policy entropy remained within
+0.132% of uniform and 76.7% of selected proposals were objective-neutral.
+
+The command that reproduces the completed gate is:
 
 ```bash
 bash scripts/run_kaggle_ppo_asa_gate.sh extended
 ```
 
 The output archive contains both policy snapshots, JSONL diagnostics, all
-three reports, logs, and `gate-summary.json`. A successful first gate requires
-the learned condition to beat both its uniform control and ordinary ASA. The
-five-seed threshold remains the established ASA mean of 23.5001 microseconds.
+three reports, logs, and `gate-summary.json`. Do not scale this unchanged
+policy to five seeds. The next bounded experiment must first reduce neutral
+proposals with a matched bottleneck-focused neighborhood, then beat both its
+uniform control and ordinary ASA. The five-seed threshold remains the
+established ASA mean of 23.5001 microseconds.
 
 ## Interpreting results
 

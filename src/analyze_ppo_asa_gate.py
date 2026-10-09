@@ -11,6 +11,13 @@ def load(path):
         return json.load(stream)
 
 
+def load_jsonl(path):
+    if not path.exists():
+        return []
+    with path.open() as stream:
+        return [json.loads(line) for line in stream if line.strip()]
+
+
 def finite_metrics(metadata):
     metrics = metadata.get("final_update_metrics") or {}
     return bool(metrics) and all(
@@ -57,6 +64,49 @@ def main():
     asa_cost = asa["best_cost"]
     learning_pass = trained_cost < control_cost
     optimizer_pass = trained_cost < asa_cost
+    trained_curve = load_jsonl(args.directory / "ppo-asa-trained.jsonl")
+    control_curve = load_jsonl(args.directory / "ppo-asa-control.jsonl")
+    asa_curve = load_jsonl(args.directory / "asa.jsonl")
+    aligned_points = min(
+        len(trained_curve), len(control_curve), len(asa_curve))
+    entropies = [
+        row["entropy"] for row in trained_curve
+        if isinstance(row.get("entropy"), (int, float))
+        and math.isfinite(row["entropy"])
+    ]
+    candidate_count = trained_meta["proposal_candidates_per_step"]
+    uniform_entropy = math.log(candidate_count)
+    policy_curve = {
+        "aligned_diagnostic_points": aligned_points,
+        "trained_better_than_control_points": sum(
+            trained_curve[index]["best_cost"] <
+            control_curve[index]["best_cost"]
+            for index in range(aligned_points)),
+        "trained_better_than_asa_points": sum(
+            trained_curve[index]["best_cost"] < asa_curve[index]["best_cost"]
+            for index in range(aligned_points)),
+        "trained_neutral_proposal_percent": (
+            trained_meta["neutral_proposals"] /
+            trained_meta["candidate_evaluations"] * 100),
+        "control_neutral_proposal_percent": (
+            control_meta["neutral_proposals"] /
+            control_meta["candidate_evaluations"] * 100),
+        "trained_improving_move_percent": (
+            trained_meta["improving_moves"] /
+            trained_meta["candidate_evaluations"] * 100),
+        "control_improving_move_percent": (
+            control_meta["improving_moves"] /
+            control_meta["candidate_evaluations"] * 100),
+    }
+    if entropies:
+        policy_curve.update({
+            "uniform_candidate_entropy": uniform_entropy,
+            "first_reported_entropy": entropies[0],
+            "final_reported_entropy": entropies[-1],
+            "final_entropy_gap_from_uniform_percent": (
+                (uniform_entropy - entropies[-1]) /
+                uniform_entropy * 100),
+        })
     summary = {
         "verdict": (
             "ONE_SEED_LEARNING_AND_OPTIMIZER_PASS"
@@ -96,6 +146,7 @@ def main():
             "control_neutral_proposals": control_meta["neutral_proposals"],
             "trained_final_update_metrics": trained_meta.get(
                 "final_update_metrics"),
+            "policy_curve": policy_curve,
         },
     }
     destination = args.directory / "gate-summary.json"

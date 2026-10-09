@@ -333,6 +333,23 @@ were objective-neutral, confirming that bottleneck-stage credit remains the
 central difficulty. The full 4,101-evaluation one-seed gate must establish
 whether additional online updates create a real optimizer advantage.
 
+The 4,101-evaluation gate rejected this first learned neighborhood. The trained
+run ended at 23.5602 microseconds, behind the uniform control at 23.4213 and
+ordinary ASA at 23.4318. The policy stayed close to uniform: final entropy was
+2.76893 against a 2.77259 maximum, final approximate KL was `6.71e-6`, and the
+clip fraction was zero. It found 107 improving moves, fewer than the control's
+114, while 3,145 of its 4,100 proposals were objective-neutral. This pattern
+points to insufficiently informative proposal sets and credit, not evidence
+that a well-separated learned proposal distribution needs only a longer run.
+
+The next defensible ablation should change one factor: construct candidate
+pools around tasks participating in the current bottleneck stage for both the
+trained and uniform conditions. PPO may then rank destinations or swap partners
+within that matched pool. Exact delta labels can also be tested, but every
+candidate evaluated by the true objective must count against the common budget.
+An LSTM or a larger training budget comes later because memory and duration do
+not address a neighborhood in which most actions have no measured effect.
+
 ### Gate 1: implementation sanity
 
 Run bounded synthetic and AlexNet-CONV smoke tests. Required conditions:

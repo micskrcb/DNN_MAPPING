@@ -51,13 +51,14 @@ Current paper targets:
 4. The 3,000-placement AlexNet-FC extension completed: the deterministic policy improved directionally by 0.558%, but trained PPO tied its frozen control's best result and ASA was 2.80% better. Do not scale unchanged PPO to five FC seeds.
 5. The five-seed 4,101-evaluation AlexNet-FC baseline is complete: ASA beat random search in all five pairs, averaging 23.5001 versus 24.1305 microseconds (2.61%).
 6. [x] Implement a fixed-budget PPO learned-proposal ASA. Metropolis acceptance and the cooling/adaptation controller remain fixed; PPO ranks legal relocation/swap candidates using graph, movement, bottleneck, cost-change, and search-history features.
-7. Run the one-seed 4,101-evaluation Kaggle gate comparing learned proposals, the exactly uniform frozen policy, and ordinary ASA. The local 1,001-evaluation smoke beat the uniform control by 0.47% but remained 0.15% behind ASA, so it is a learning-only signal rather than an optimizer pass.
-8. Proceed to five seeds only if learned PPO-ASA beats both controls. The five-seed target is lower than the established 23.5001-microsecond ASA mean with the same objective-evaluation budget.
-9. Keep the completed guided-DDPG archive as a negative ablation; do not spend the paper-scale budget on it.
-10. Scale toward the paper's 300,000-placement PPO/DDPG budget only after the multi-chip learning gate and matched baseline table pass.
-11. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
-12. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
-13. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
+7. [x] Complete the one-seed 4,101-evaluation PPO-ASA gate. Mechanics passed, but learned PPO-ASA reached 23.5602 microseconds versus 23.4213 for its uniform control and 23.4318 for ASA. It failed both gates.
+8. Do not scale the unchanged PPO-ASA policy to five seeds. First test a bottleneck-focused matched proposal neighborhood that reduces objective-neutral moves; count every exact candidate evaluation against the shared budget.
+9. Proceed to five seeds only if the redesigned learned proposal beats both its uniform control and ordinary ASA. The five-seed target remains lower than the established 23.5001-microsecond ASA mean with the same objective-evaluation budget.
+10. Keep the completed guided-DDPG and first PPO-ASA archives as negative ablations; do not spend the paper-scale budget on them.
+11. Scale toward the paper's 300,000-placement PPO/DDPG budget only after the multi-chip learning gate and matched baseline table pass.
+12. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
+13. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
+14. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
 
 ## Gate 4: improvements after reproduction
 

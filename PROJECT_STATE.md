@@ -103,13 +103,14 @@ The planned H100 12 GB slice was unavailable. Kaggle completed the original diag
 
 ## Next execution sequence
 
-1. Design a budget-matched ASA-guided PPO or PPO→ASA ablation and compare it with full-budget ASA alone.
-2. Do not scale unchanged AlexNet-FC PPO; its 3,000-placement run tied the frozen control and lost to ASA.
-3. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.
-4. Preserve guided DDPG as the completed negative ablation and paper DDPG as the reproduction method.
-5. Run BS, RS, SA, and ASA using matched evaluator counts, then scale only the method that passes the learning gate.
-6. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
-7. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
+1. Preserve the completed 4,101-evaluation PPO-ASA run as a negative ablation; do not scale its unchanged candidate policy.
+2. Design one bounded bottleneck-focused proposal ablation that reduces neutral moves while retaining the frozen uniform control, ordinary ASA, and exact matched-budget accounting.
+3. Do not scale unchanged AlexNet-FC masked PPO; its 3,000-placement run tied the frozen control and lost to ASA.
+4. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.
+5. Preserve guided DDPG as a completed negative ablation and paper DDPG as the reproduction method.
+6. Run BS, RS, SA, and ASA using matched evaluator counts, then scale only the method that passes the learning gate.
+7. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
+8. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
 
 The paper-faithful mode remains frozen separately from guided DDPG and future masked-policy experiments.
 
@@ -190,6 +191,16 @@ condition. Learned PPO-ASA reached 23.9986 microseconds, its uniform control
 directional advantage over its direct control, but the optimizer gate failed
 by 0.15% against ASA. The next run is the 4,101-evaluation paired Kaggle gate;
 five seeds remain conditional on beating both controls.
+
+The 4,101-evaluation Kaggle gate is now complete at revision `1c5c633`. All
+mechanics checks passed, but learned PPO-ASA reached 23.5602 microseconds,
+versus 23.4213 for the uniform frozen policy and 23.4318 for ordinary ASA. It
+was therefore 0.593% worse than its direct control and 0.548% worse than ASA.
+The learned condition beat the control at only 10 of 41 recorded checkpoints.
+Its final entropy was 2.76893 versus the uniform maximum `ln(16)=2.77259`, and
+76.7% of selected proposals were objective-neutral. The unchanged method will
+not be scaled to five seeds. See
+`runs/kaggle-ppo-asa-alexnet-fc-extended-2026-10-09/STUDY.md`.
 
 ## Five-seed local control study (2026-09-30)
 
