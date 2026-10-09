@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 runs/kaggle-guided-*/
 runs/kaggle-masked-ppo-*/
+runs/kaggle-masked-ppo-*.zip
