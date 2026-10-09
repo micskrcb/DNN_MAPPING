@@ -76,17 +76,35 @@ The first corrected Kaggle pair used seed 0 and 300 online placements per condit
 
 The original paper and later work do not make continuous DDPG an obviously suitable choice for this discrete placement problem. DDPG can deadlock under sparse deterministic rewards; Wolpertinger-style methods use a continuous proto-action only to retrieve discrete candidates; invalid-action masking and later masked placement policies enforce legality directly. If guided DDPG does not beat its matched control across seeds, the next agent should be masked categorical PPO rather than further tuning an unstable continuous actor. See [`RESEARCH_FINDINGS.md`](RESEARCH_FINDINGS.md) for the evidence, Gemini review, sources, and decision gates.
 
+## Masked-PPO learning result (2026-10-09)
+
+The five-seed extensive masked-PPO archive is complete and valid at commit
+`e3576b0`. Every trained/control pair used 3,000 placements, began with the
+same deterministic policy, produced zero collision repairs, and retained
+finite diagnostics. Training beat the frozen deterministic policy in all five
+seeds. Mean late deterministic latency was 42.6118 microseconds trained versus
+45.3588 microseconds control, an aggregate 6.06% improvement. The exploratory
+paired 95% interval for absolute improvement was 1.0972 to 4.3969
+microseconds, entirely above zero.
+
+The best retained solution improved more modestly: 39.9989 microseconds trained
+versus 40.5094 microseconds control on average, about 1.26%. This distinction
+matters: PPO has demonstrated policy learning, while random exploration still
+contributes much of the best-placement quality. The result is confined to the
+one-chip AlexNet-CONV reconstruction and is not yet a paper-comparable
+multi-chip benchmark.
+
 ## GPU state
 
 DDPG networks and sampled tensors support CUDA; the environment, routing, collision handling, replay storage, and process orchestration remain CPU-side. GPU acceleration therefore speeds neural-network work but does not remove the CPU evaluator bottleneck.
 
-The planned H100 12 GB slice was unavailable. Kaggle completed the original 3,000-placement diagnostic and the five-seed guided-DDPG ablation. The next GPU experiment is the paired masked-PPO short gate.
+The planned H100 12 GB slice was unavailable. Kaggle completed the original diagnostic, the five-seed guided-DDPG ablation, and the five-seed masked-PPO AlexNet-CONV learning gate on two T4 GPUs.
 
 ## Next execution sequence
 
-1. Run the paired masked-PPO short gate on Kaggle with `scripts/run_kaggle_masked_ppo_ablation.sh short`.
-2. Scale to five seeds only if trained PPO beats its frozen control and all mechanics checks pass.
-3. Repeat a successful method on AlexNet-FC or VGG16-CONV, where multi-chip communication and optimization headroom provide a stronger learning signal.
+1. Produce a matched-budget AlexNet-CONV table for BS, RS, SA, ASA, paper DDPG, masked PPO, and its frozen control.
+2. Repeat masked PPO on AlexNet-FC or VGG16-CONV, where multi-chip communication provides a stronger learning target.
+3. Scale only after the multi-chip trained policy beats its paired frozen control across seeds.
 4. Preserve guided DDPG as the completed negative ablation and paper DDPG as the reproduction method.
 5. Run BS, RS, SA, and ASA using matched evaluator counts, then scale only the method that passes the learning gate.
 6. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.

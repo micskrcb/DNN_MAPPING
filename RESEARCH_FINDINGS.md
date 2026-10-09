@@ -238,9 +238,28 @@ entropy regularization, a value baseline, gradient clipping, deterministic
 diagnostics, and an exactly matched `--ppo_disable_learning` control. The
 paper-aligned DDPG remains unchanged and available for reproduction tables.
 
-The first masked-PPO gate is the paired one-seed Kaggle short run. Scale to five
-seeds only if the trained deterministic policy beats its frozen control while
-diagnostics remain finite.
+## Five-seed masked-PPO decision (9 October 2026)
+
+The extensive AlexNet-CONV archive contains all ten expected runs at commit
+`e3576b0`: five trained and five frozen controls, each with 3,000 complete
+placements, 1,000 random-baseline trials, 101 deterministic evaluations, and
+valid completion markers. Initial deterministic costs match exactly within
+each seed, every run has zero repairs, and all PPO diagnostics are finite.
+
+Trained PPO beat its paired frozen deterministic policy in all five seeds. The
+aggregate late deterministic mean was 42.6118 microseconds trained versus
+45.3588 microseconds control, a 2.7471-microsecond or 6.06% improvement. The
+exploratory paired 95% interval for improvement was 1.0972 to 4.3969
+microseconds. A wider final-300-placement window gives the same conclusion.
+This passes the learning-signal gate for this reconstructed workload.
+
+The result does not yet establish a better optimizer or paper-level
+performance. Best retained solutions averaged 39.9989 microseconds trained and
+40.5094 microseconds control, only a 1.26% advantage, because random rollout
+search is already strong. AlexNet-CONV occupies one chip and has zero off-chip
+traffic. The next gate is therefore a matched-budget baseline table followed
+by a paired masked-PPO run on AlexNet-FC or VGG16-CONV, where placement spans
+multiple chips.
 
 ### Gate 1: implementation sanity
 
@@ -254,12 +273,11 @@ Run bounded synthetic and AlexNet-CONV smoke tests. Required conditions:
 
 This gate passes locally.
 
-### Gate 2: learning, not search luck
+### Gate 2: learning, not search luck — passed for masked PPO on AlexNet-CONV
 
-Run the trained and `--guided_disable_learning` conditions with identical
-budgets for at least five seeds. Compare the zero-noise deterministic policy,
-not only best-so-far cost. The trained condition passes only if it improves the
-deterministic cost consistently while Q values remain bounded.
+Masked PPO passed its trained-versus-frozen comparison at 3,000 placements over
+five seeds. Guided DDPG failed the same gate. This conclusion concerns policy
+learning on the reconstructed AlexNet-CONV objective, not paper reproduction.
 
 ### Gate 3: stronger placement-sensitive workload
 

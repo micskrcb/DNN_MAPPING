@@ -600,6 +600,19 @@ Both presets use the paper-style sparse terminal reward. With the fixed episode
 horizon, `gamma=1` and `GAE lambda=1` assign the complete-placement return to
 every placement decision without adding partial objective evaluations.
 
+The extensive AlexNet-CONV experiment is complete. Trained PPO beat its frozen
+deterministic control in all five seeds. Its aggregate late deterministic mean
+was 42.6118 microseconds versus 45.3588 microseconds, a 6.06% improvement; the
+exploratory paired 95% interval for absolute improvement was 1.0972 to 4.3969
+microseconds. All initial-policy comparisons matched, collision repairs were
+zero, and training diagnostics were finite.
+
+This establishes a repeatable learning signal on the reconstructed one-chip
+AlexNet-CONV objective. It does not establish paper-level performance. Best
+retained solutions improved by only 1.26% on average because random rollout
+search remained competitive. The next experiment must use a multi-chip region
+and compare all methods under matched evaluation budgets.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.
