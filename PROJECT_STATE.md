@@ -1,6 +1,6 @@
 # Project state: paper-faithful DNN core placement
 
-Updated 2026-10-08.
+Updated 2026-10-10.
 
 ## Goal and branch
 
@@ -109,11 +109,13 @@ The planned H100 12 GB slice was unavailable. Kaggle completed the original diag
 4. [Complete] The five-seed uninterrupted holdout rejected the frozen checkpoint. It lost all five pairs, averaging 23.63050 microseconds versus 23.51504 for uniform and 23.50518 for ASA.
 5. A matched 128-proposal local diagnostic showed a weak short-horizon signal: trained PPO averaged 0.385% below uniform, won three of five pairs, and beat severely budget-limited ASA. This identifies horizon specialization rather than useful deep refinement.
 6. Run one final deployment-matched experiment: train on 4,100-proposal chains with within-chain progress and chain-boundary PPO updates, then automatically run the five-seed 4,101-call holdout.
-7. Close PPO-ASA if that frozen policy does not beat uniform in at least four of five seeds. Claim an optimizer improvement only if it also beats ASA.
-8. Do not scale unchanged AlexNet-FC masked PPO; its 3,000-placement run tied the frozen control and lost to ASA.
-9. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.
-10. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
-11. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
+7. [Complete] The deployment-matched checkpoint received 61 PPO updates and showed no holdout signal: 23.51635 microseconds trained versus 23.51504 uniform and 23.50518 ASA. Its policy remained nearly uniform, so the checkpoint is rejected but training was insufficient to reject the architecture against the closest 1,000-epoch paper.
+8. Run the sufficient-scale protocol: one million proposals, exactly 1,000 PPO updates, no entropy bonus, public-paper PPO hyperparameters, and a 10-seed frozen holdout.
+9. Close the current candidate-scoring architecture if it fails the positive-mean/eight-of-10 uniform gate. Claim an optimizer improvement only if it also passes the same gate against ASA. Repeat a passing gate with at least three independent training seeds.
+10. Do not scale unchanged AlexNet-FC masked PPO; its 3,000-placement run tied the frozen control and lost to ASA.
+11. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.
+12. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
+13. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
 
 The paper-faithful mode remains frozen separately from guided DDPG and future masked-policy experiments.
 

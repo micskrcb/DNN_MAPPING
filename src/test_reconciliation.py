@@ -122,6 +122,7 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(trained["progress_normalization"],
                          "within_restart_chain")
         self.assertTrue(trained["update_at_chain_end"])
+        self.assertEqual(trained["weight_decay"], 0.0)
         self.assertEqual(trained["policy_steps"], 36)
         self.assertGreater(trained["update_count"], 0)
         self.assertEqual(control["update_count"], 0)

@@ -29,10 +29,11 @@ def paired_summary(reference, candidate):
     differences = [left - right for left, right in zip(reference, candidate)]
     mean = statistics.mean(differences)
     std = statistics.stdev(differences) if len(differences) > 1 else 0.0
-    # Student-t 97.5% quantiles for the intended five-seed evaluation, with
-    # conservative small-sample values for shorter diagnostic invocations.
-    critical = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776}.get(
-        len(differences) - 1, 1.96)
+    # Student-t 97.5% quantiles for the supported small-sample evaluations.
+    critical = {
+        1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
+        6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262,
+    }.get(len(differences) - 1, 1.96)
     half_width = critical * std / math.sqrt(len(differences))
     return {
         "candidate_wins": sum(value > 0 for value in differences),

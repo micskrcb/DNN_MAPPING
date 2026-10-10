@@ -60,13 +60,14 @@ Current paper targets:
 13. [x] Preserve the trained proposal checkpoint and add frozen checkpoint loading for inference-only evaluation.
 14. [x] Complete the five-seed uninterrupted holdout: the frozen checkpoint lost every pair, averaging 0.491% worse than uniform and 0.533% worse than ASA.
 15. [x] Diagnose training horizon locally: at the original 128-proposal horizon, trained PPO had a weak 0.385% mean advantage over uniform but passed only three of five pairs. The 4,100-step failure is consistent with horizon specialization.
-16. Train once with 4,100-proposal episodes, within-chain progress, and PPO updates at every chain boundary; immediately run the frozen five-seed 4,101-call holdout.
-17. Close PPO-ASA if the deployment-matched checkpoint fails the prespecified four-of-five uniform-control gate. Do not add more iterations to a rejected checkpoint.
-18. If the path closes, retain ASA as the strongest optimizer and treat MaskablePPO/Gymnasium as future work rather than another urgent tuning run.
-19. Keep guided DDPG and both short-chain PPO-ASA variants as negative ablations.
-20. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
-21. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
-22. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
+16. [x] Train once with 4,100-proposal episodes, within-chain progress, and PPO updates at every chain boundary; immediately run the frozen five-seed 4,101-call holdout.
+17. [x] Reject that checkpoint: it received only 61 PPO updates, stayed nearly uniform, and had no positive holdout mean against uniform or ASA. This is enough to reject the checkpoint, not the architecture.
+18. Run the paper-informed sufficient-scale protocol with one million proposals, exactly 1,000 PPO updates, no entropy bonus, and 10 frozen holdout seeds. This resolves the update-count shortfall relative to the closest public RL-Based-SA setup.
+19. Close the current candidate-scoring architecture if it fails the positive-mean/eight-of-10 uniform gate. If it passes both uniform and ASA gates, repeat training with at least three independent training seeds.
+20. Keep guided DDPG and both short-chain PPO-ASA variants as negative ablations.
+21. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
+22. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
+23. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
 
 ## Gate 4: improvements after reproduction
 

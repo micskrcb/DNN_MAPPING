@@ -776,9 +776,27 @@ boundaries, and immediately performs the same five-seed frozen holdout:
 bash scripts/run_kaggle_ppo_asa_deployment_experiment.sh
 ```
 
-This is the final bounded PPO-ASA correction. If its frozen checkpoint does
-not beat the fresh uniform policy in at least four of five holdout seeds, the
-PPO-ASA path is closed and ASA remains the recommended optimizer.
+That deployment-matched run is complete. Training used 250,000 proposals but
+only 61 PPO updates. Its frozen checkpoint averaged 23.51635 microseconds over
+five unseen seeds, versus 23.51504 for a fresh uniform policy and 23.50518 for
+ASA. It beat uniform in three pairs and ASA in one; both paired intervals
+included zero. Final entropy remained within 0.31% of uniform, approximate KL
+was near zero, and PPO clipping never activated. The checkpoint is rejected.
+
+The paper audit in `PAPER_SCALE_DECISION.md` shows why this result does not yet
+reject the method: the closest RL-Based-SA implementation trains for 1,000 PPO
+epochs, while this checkpoint received 61 updates. The sufficient-scale run
+uses one million proposals, exactly 1,000 updates, paper-aligned PPO settings
+without an entropy bonus, and a 10-seed frozen holdout:
+
+```bash
+bash scripts/run_kaggle_ppo_asa_sufficient_scale.sh
+```
+
+If that checkpoint does not beat the fresh uniform policy in at least eight
+of 10 holdout seeds with a positive paired mean, the current candidate-scoring
+architecture is closed. ASA remains the recommended optimizer unless the
+trained policy also beats ASA under the same objective-call budget.
 
 ## Interpreting results
 

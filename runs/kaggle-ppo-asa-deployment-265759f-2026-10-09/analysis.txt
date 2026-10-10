@@ -1,0 +1,180 @@
+{
+  "verdict": "NO_HOLDOUT_POLICY_SIGNAL",
+  "mechanics_pass": true,
+  "holdout_seeds": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "required_pair_wins": 4,
+  "policy_generalization_pass": false,
+  "optimizer_pass_against_asa": false,
+  "trained_policy": {
+    "mean_microseconds": 23.516352,
+    "sample_std_microseconds": 0.015553942265549483,
+    "minimum_microseconds": 23.495199999999997,
+    "maximum_microseconds": 23.53312,
+    "individual_microseconds": [
+      23.52784,
+      23.5192,
+      23.5064,
+      23.495199999999997,
+      23.53312
+    ]
+  },
+  "uniform_control": {
+    "mean_microseconds": 23.51504,
+    "sample_std_microseconds": 0.03376094785399305,
+    "minimum_microseconds": 23.46864,
+    "maximum_microseconds": 23.556160000000002,
+    "individual_microseconds": [
+      23.556160000000002,
+      23.46864,
+      23.5304,
+      23.524639999999998,
+      23.495359999999998
+    ]
+  },
+  "ordinary_asa": {
+    "mean_microseconds": 23.505184,
+    "sample_std_microseconds": 0.05941782628134655,
+    "minimum_microseconds": 23.449279999999998,
+    "maximum_microseconds": 23.596000000000004,
+    "individual_microseconds": [
+      23.52528,
+      23.498079999999998,
+      23.449279999999998,
+      23.596000000000004,
+      23.457279999999997
+    ]
+  },
+  "trained_versus_uniform_control": {
+    "candidate_wins": 3,
+    "ties": 0,
+    "mean_improvement_microseconds": -0.0013120000000000688,
+    "mean_improvement_percent": -0.005579407902347046,
+    "exploratory_paired_95_percent_interval_microseconds": [
+      -0.050260447203526126,
+      0.047636447203525986
+    ],
+    "individual_improvements_microseconds": [
+      0.02832000000000079,
+      -0.050560000000000827,
+      0.02400000000000091,
+      0.02944000000000102,
+      -0.037760000000002236
+    ]
+  },
+  "trained_versus_asa": {
+    "candidate_wins": 1,
+    "ties": 0,
+    "mean_improvement_microseconds": -0.011168000000000688,
+    "mean_improvement_percent": -0.047512923106667396,
+    "exploratory_paired_95_percent_interval_microseconds": [
+      -0.09673913293805006,
+      0.07440313293804868
+    ],
+    "individual_improvements_microseconds": [
+      -0.0025600000000025602,
+      -0.02112000000000336,
+      -0.05712000000000117,
+      0.10080000000000666,
+      -0.07584000000000302
+    ]
+  },
+  "pairs": [
+    {
+      "seed": 1,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.52784,
+      "uniform_control_microseconds": 23.556160000000002,
+      "asa_microseconds": 23.52528,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 250000
+    },
+    {
+      "seed": 2,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.5192,
+      "uniform_control_microseconds": 23.46864,
+      "asa_microseconds": 23.498079999999998,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 250000
+    },
+    {
+      "seed": 3,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.5064,
+      "uniform_control_microseconds": 23.5304,
+      "asa_microseconds": 23.449279999999998,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 250000
+    },
+    {
+      "seed": 4,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.495199999999997,
+      "uniform_control_microseconds": 23.524639999999998,
+      "asa_microseconds": 23.596000000000004,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 250000
+    },
+    {
+      "seed": 5,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.53312,
+      "uniform_control_microseconds": 23.495359999999998,
+      "asa_microseconds": 23.457279999999997,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 250000
+    }
+  ]
+}
+Saved /kaggle/working/kaggle-ppo-asa-deployment-265759f/holdout/holdout-summary.json

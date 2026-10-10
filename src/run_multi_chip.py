@@ -2426,6 +2426,7 @@ def run_adaptive_sa(env: MultiChipEnvironment, n_iter: int = 100000,
 def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 candidate_count: int = 16, rollout_steps: int = 256,
                 device: str = None, learning_rate: float = 3e-4,
+                weight_decay: float = 0.0,
                 update_epochs: int = 4, minibatch_size: int = 256,
                 gamma: float = 0.98, gae_lambda: float = 0.95,
                 clip_ratio: float = 0.2, entropy_coefficient: float = 0.01,
@@ -2473,6 +2474,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         focus_fraction = 1.0
     if (not 0 < gamma <= 1 or not 0 <= gae_lambda <= 1 or
             not 0 < clip_ratio < 1 or learning_rate <= 0 or
+            weight_decay < 0 or
             entropy_coefficient < 0 or value_coefficient < 0 or
             max_grad_norm <= 0):
         raise ValueError("invalid PPO-ASA hyperparameters")
@@ -2701,7 +2703,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             raise ValueError(
                 "checkpoint proposal focus does not match this run")
         model.load_state_dict(loaded_checkpoint["model"])
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate, eps=1e-5)
+    optimizer = optim.Adam(
+        model.parameters(), lr=learning_rate, eps=1e-5,
+        weight_decay=weight_decay)
     update_count = 0
 
     def make_global_state(progress, last_delta, last_accepted,
@@ -3067,6 +3071,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "progress_normalization": (
                 "within_restart_chain" if restart_interval else "within_run"),
             "update_at_chain_end": update_at_chain_end,
+            "weight_decay": weight_decay,
             "proposal_candidates_per_step": candidate_count,
             "unevaluated_proposal_candidates": (
                 calibration + max(0, n_iter - calibration) * candidate_count),
@@ -3765,6 +3770,8 @@ def main():
                         help="Unevaluated legal neighbors ranked at each PPO-ASA step")
     parser.add_argument("--ppo_asa_rollout_steps", type=int, default=256,
                         help="Accepted/rejected proposal transitions per PPO-ASA update")
+    parser.add_argument("--ppo_asa_weight_decay", type=float, default=0.0,
+                        help="Adam weight decay for the PPO-ASA proposal model")
     parser.add_argument("--ppo_asa_disable_learning", action="store_true",
                         help="Keep PPO-ASA proposal scores exactly uniform for a matched control")
     parser.add_argument("--ppo_asa_focus_bottleneck", action="store_true",
@@ -4202,6 +4209,7 @@ def main():
             candidate_count=args.ppo_asa_candidates,
             rollout_steps=args.ppo_asa_rollout_steps,
             device=args.device, learning_rate=args.ppo_learning_rate,
+            weight_decay=args.ppo_asa_weight_decay,
             update_epochs=args.ppo_update_epochs,
             minibatch_size=args.ppo_minibatch_size,
             gamma=args.ppo_gamma, gae_lambda=args.ppo_gae_lambda,

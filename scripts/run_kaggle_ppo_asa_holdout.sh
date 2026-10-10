@@ -4,8 +4,14 @@ set -euo pipefail
 proposals="${1:-4100}"
 output_dir="${2:-runs/kaggle-ppo-asa-holdout-${proposals}}"
 checkpoint="${3:-runs/kaggle-ppo-asa-multichain-5ea4c65-2026-10-09/ppo-asa-trained.pt}"
+seed_count="${4:-5}"
 archive="${output_dir%/}.zip"
 mkdir -p "${output_dir}"
+
+if [[ ! "${seed_count}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "Holdout seed count must be a positive integer." >&2
+  exit 1
+fi
 
 if [[ ! -f "${checkpoint}" ]]; then
   echo "Trained PPO-ASA checkpoint not found: ${checkpoint}" >&2
@@ -51,7 +57,7 @@ common=(
   --ppo_hidden_dim 128
 )
 
-for seed in 1 2 3 4 5; do
+for seed in $(seq 1 "${seed_count}"); do
   echo "===== Holdout seed ${seed}: trained checkpoint versus uniform ====="
   CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 \
     python src/run_multi_chip.py --algo ppo_asa "${common[@]}" \

@@ -145,3 +145,12 @@ itself, the missing ingredient; its training and evaluation horizons match.
 The final local change uses 4,100-step training chains and within-chain
 progress, then evaluates the frozen model at the same horizon. Source remains
 independently implemented and externally cited.
+
+The deployment-matched Kaggle run completed with 250,000 proposals and 61 PPO
+updates. The five-seed frozen holdout found no policy signal, and final entropy
+remained within 0.31% of the uniform maximum. Because the official default
+performs 1,000 PPO epochs and does not add an entropy term to its discrete PPO
+loss, the next controlled run uses one million proposals, 1,000 update cycles,
+zero entropy bonus, and its published learning rate, weight decay, gamma,
+trace decay, clipping ratio, and PPO epoch count. Ten holdout seeds replace the
+five-seed screening gate. See `PAPER_SCALE_DECISION.md`.
