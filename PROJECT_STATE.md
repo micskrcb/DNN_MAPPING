@@ -110,7 +110,7 @@ The planned H100 12 GB slice was unavailable. Kaggle completed the original diag
 5. A matched 128-proposal local diagnostic showed a weak short-horizon signal: trained PPO averaged 0.385% below uniform, won three of five pairs, and beat severely budget-limited ASA. This identifies horizon specialization rather than useful deep refinement.
 6. Run one final deployment-matched experiment: train on 4,100-proposal chains with within-chain progress and chain-boundary PPO updates, then automatically run the five-seed 4,101-call holdout.
 7. [Complete] The deployment-matched checkpoint received 61 PPO updates and showed no holdout signal: 23.51635 microseconds trained versus 23.51504 uniform and 23.50518 ASA. Its policy remained nearly uniform, so the checkpoint is rejected but training was insufficient to reject the architecture against the closest 1,000-epoch paper.
-8. Run the sufficient-scale protocol: one million proposals, exactly 1,000 PPO updates, no entropy bonus, public-paper PPO hyperparameters, and a 10-seed frozen holdout.
+8. Run the sufficient-scale protocol: 1.25 million proposals, exactly 1,250 PPO updates, no entropy bonus, public-paper PPO hyperparameters, and a 10-seed frozen holdout.
 9. Close the current candidate-scoring architecture if it fails the positive-mean/eight-of-10 uniform gate. Claim an optimizer improvement only if it also passes the same gate against ASA. Repeat a passing gate with at least three independent training seeds.
 10. Do not scale unchanged AlexNet-FC masked PPO; its 3,000-placement run tied the frozen control and lost to ASA.
 11. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.

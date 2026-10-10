@@ -33,7 +33,7 @@ if [[ "${gpu_count}" -lt 2 ]]; then
   exit 1
 fi
 
-echo "Training PPO-ASA for 1,000 PPO updates on deployment-matched chains."
+echo "Training PPO-ASA for 1,250 PPO updates on deployment-matched chains."
 CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 \
   python src/run_multi_chip.py \
     --algo ppo_asa --device cuda \
@@ -41,7 +41,7 @@ CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 \
     --partition_mode paper_targets --workload_region fc \
     --timing_model paper_pipeline --routing_model paper_xy \
     --chips_x 4 --chips_y 4 --rows 16 --cols 16 \
-    --sensitivity_trials 64 --seed 0 --iters 1000000 \
+    --sensitivity_trials 64 --seed 0 --iters 1250000 \
     --asa_calibration_trials 32 --asa_adapt_window 100 \
     --ppo_asa_candidates 16 --ppo_asa_focus_fraction 0.5 \
     --ppo_asa_restart_interval 4100 \
@@ -85,8 +85,8 @@ with open(sys.argv[1]) as stream:
 print(report["algorithm_metadata"]["update_count"])
 PY
 )"
-if [[ "${actual_updates}" -ne 1000 ]]; then
-  echo "Expected exactly 1,000 PPO updates, observed ${actual_updates}." >&2
+if [[ "${actual_updates}" -ne 1250 ]]; then
+  echo "Expected exactly 1,250 PPO updates, observed ${actual_updates}." >&2
   exit 1
 fi
 

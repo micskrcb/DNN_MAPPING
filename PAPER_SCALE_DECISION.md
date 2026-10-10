@@ -48,8 +48,8 @@ orders of magnitude smaller and has the wrong sign.
 test of the current candidate-scoring architecture before an architectural
 change:
 
-- 1,000,000 evaluated proposals across 244 independent 4,100-step chains;
-- exactly 1,000 PPO update cycles with 10 optimization passes each;
+- 1,250,000 evaluated proposals across 305 independent 4,100-step chains;
+- exactly 1,250 PPO update cycles with 10 optimization passes each;
 - 1,000-transition on-policy batches, with chain boundaries terminating GAE;
 - learning rate `2e-4`, weight decay `0.01`, gamma/GAE lambda `0.9`, clip
   ratio `0.25`, and zero entropy bonus, following the closest public setup;
@@ -59,7 +59,7 @@ change:
 This still uses fewer total transitions than the vectorized public benchmark,
 but it removes the 61-versus-1,000 update discrepancy and the entropy pressure
 that kept the previous policy close to uniform. On Kaggle T4 x2, the expected
-wall time is approximately 6--9 hours; the script archives partial output if
+wall time is approximately 8--11 hours; the script archives partial output if
 the process fails.
 
 If the checkpoint beats uniform on at least eight of 10 holdout seeds with a

@@ -62,7 +62,7 @@ Current paper targets:
 15. [x] Diagnose training horizon locally: at the original 128-proposal horizon, trained PPO had a weak 0.385% mean advantage over uniform but passed only three of five pairs. The 4,100-step failure is consistent with horizon specialization.
 16. [x] Train once with 4,100-proposal episodes, within-chain progress, and PPO updates at every chain boundary; immediately run the frozen five-seed 4,101-call holdout.
 17. [x] Reject that checkpoint: it received only 61 PPO updates, stayed nearly uniform, and had no positive holdout mean against uniform or ASA. This is enough to reject the checkpoint, not the architecture.
-18. Run the paper-informed sufficient-scale protocol with one million proposals, exactly 1,000 PPO updates, no entropy bonus, and 10 frozen holdout seeds. This resolves the update-count shortfall relative to the closest public RL-Based-SA setup.
+18. Run the paper-informed sufficient-scale protocol with 1.25 million proposals, exactly 1,250 PPO updates, no entropy bonus, and 10 frozen holdout seeds. This resolves the update-count shortfall relative to the closest public RL-Based-SA setup.
 19. Close the current candidate-scoring architecture if it fails the positive-mean/eight-of-10 uniform gate. If it passes both uniform and ASA gates, repeat training with at least three independent training seeds.
 20. Keep guided DDPG and both short-chain PPO-ASA variants as negative ablations.
 21. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.

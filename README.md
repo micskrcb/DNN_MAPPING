@@ -786,7 +786,7 @@ was near zero, and PPO clipping never activated. The checkpoint is rejected.
 The paper audit in `PAPER_SCALE_DECISION.md` shows why this result does not yet
 reject the method: the closest RL-Based-SA implementation trains for 1,000 PPO
 epochs, while this checkpoint received 61 updates. The sufficient-scale run
-uses one million proposals, exactly 1,000 updates, paper-aligned PPO settings
+uses 1.25 million proposals, exactly 1,250 updates, paper-aligned PPO settings
 without an entropy bonus, and a 10-seed frozen holdout:
 
 ```bash
