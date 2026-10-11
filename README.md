@@ -894,6 +894,24 @@ that RL+ASA improves final placement cost. Exact oracle evaluations are
 diagnostic data-generation work and are counted separately from optimizer
 proposals.
 
+That fresh gate failed: late deterministic capture was 7.03% with a 4.28% to
+9.81% chain-bootstrap interval, and sampled capture was only 0.73%. The
+checkpoint must not proceed to an optimizer holdout. The next required run is
+the paper-scale baseline calibration:
+
+```bash
+bash scripts/run_kaggle_paper_baseline_calibration.sh
+```
+
+It runs one-million-placement random search, one million fixed-SA proposals,
+and one million adaptive-SA proposals concurrently for AlexNet FC, then
+reports BS-normalized costs and exact objective counts. The source paper
+publishes fixed SA's 0.99 cooldown but says its initial and ending temperatures
+are application-specific. The corrected fixed SA measures its initial
+temperature in the active objective units and then keeps the schedule fixed;
+`--sa_legacy_absolute_temperature` reproduces the former `100` to `0.1`
+seconds-unit behavior only for historical comparisons.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

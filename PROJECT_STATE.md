@@ -309,6 +309,37 @@ clipped utility `max(gain, 0)`; it is not called accepted gain because finite-
 temperature simulated annealing can accept neutral and worsening proposals.
 The historical signed-gain mode remains available for reproducibility.
 
+The fresh improvement-only gate then completed at revision `91a70bc` using
+16,394 audited pools from 20 complete 4,100-proposal chains. Ten chains were
+used for gradient training and ten complete chains were held out. The
+prespecified gate failed. Across all held-out pools, deterministic argmax
+captured 9.22% of improvement-only oracle headroom, with a chain-bootstrap
+95% interval from 7.54% to 10.87%, and all ten chains were positive. In the
+prespecified late half, capture fell to 7.03%, with an interval from 4.28% to
+9.81%. The selected candidate improved 3.63% of the time versus a 2.07%
+candidate base rate (1.76x), and nine of ten chains remained positive.
+However, softmax sampling captured only 0.73% of late headroom.
+
+The run therefore passed the hit-rate-ratio and positive-chain criteria but
+failed all three capture criteria: 10% late argmax capture, a 5% lower bound,
+and 5% sampled-policy capture. The thresholds remain frozen; no optimizer
+holdout is authorized from this checkpoint. This result confirms a weak,
+transferable deterministic ranking signal while rejecting it as a deployed
+stochastic RL+ASA proposal policy. The collection used 82,020 optimization
+objective evaluations plus 245,910 additional oracle evaluations and took
+5,744.8 seconds. The archive SHA-256 is
+`b8266b249398967bf2e5c5f2dc61d02737ceab7b763016e52a3f37ec91a7ed2e`.
+
+Reviewing the next baseline-calibration step exposed a separate paper-mode
+problem in fixed SA. The paper fixes the cooldown at 0.99 but states that T0
+and Tend are application-specific; it does not publish their values. The code
+had used absolute temperatures 100 and 0.1 against a seconds-valued objective,
+making almost every practical uphill move acceptable. Fixed SA now measures
+T0 from budgeted uphill deltas in the current objective units, freezes a
+geometric 0.99 schedule down to a prespecified ratio, and reports the measured
+temperatures and exact evaluation counts. The old behavior remains available
+only through `--sa_legacy_absolute_temperature` for historical reproduction.
+
 A second, controlled proposal neighborhood is now available through
 `--ppo_asa_focus_bottleneck`. Every candidate is anchored on a task in the
 current maximum-latency pipeline stage, and the anchor is guaranteed to move.

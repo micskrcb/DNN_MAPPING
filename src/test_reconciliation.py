@@ -386,11 +386,18 @@ class TimingTests(unittest.TestCase):
                 self.calls += 1
                 return float(self.placement[0])
         obj = Objective()
+        metadata = {}
         random.seed(3)
         with contextlib.redirect_stdout(io.StringIO()):
-            result = rm.run_sa(obj, n_iter=1000)
+            result = rm.run_sa(obj, n_iter=1000, metadata=metadata)
         self.assertEqual(obj.calls, 1001)  # initial plus budgeted neighbors
         self.assertEqual(result, 0)
+        self.assertEqual(metadata["candidate_evaluations"], 1000)
+        self.assertEqual(metadata["total_objective_evaluations"], 1001)
+        self.assertEqual(metadata["temperature_mode"],
+                         "measured_objective_scale")
+        self.assertGreater(metadata["initial_temperature"],
+                           metadata["ending_temperature"])
 
     def test_adaptive_sa_exact_budget_and_warm_start(self):
         class Objective:
@@ -438,6 +445,33 @@ class TimingTests(unittest.TestCase):
                 self.assertAlmostEqual(incremental, full, places=12)
                 evaluator.accept()
                 placement = candidate
+
+    def test_fixed_sa_incremental_path_matches_full_evaluation(self):
+        graph = np.zeros((6, 6), dtype=np.float32)
+        graph[0, 2], graph[1, 2] = 2.0, 3.0
+        graph[2, 3], graph[2, 4] = 4.0, 5.0
+        graph[3, 5], graph[4, 5] = 6.0, 7.0
+
+        def run(incremental):
+            env = MultiChipEnvironment(
+                2, 1, 2, 2, on_chip_latency=1.0,
+                off_chip_latency=5.0, task_graph=graph, num_tasks=6,
+                routing_model="paper_xy", pipeline_model="xy_contention")
+            metadata = {}
+            random.seed(41)
+            with contextlib.redirect_stdout(io.StringIO()):
+                result = rm.run_sa(
+                    env, n_iter=240, calibration_trials=16,
+                    metadata=metadata, incremental=incremental)
+            return result, env.placement.copy(), metadata
+
+        incremental_result = run(True)
+        full_result = run(False)
+        self.assertAlmostEqual(incremental_result[0], full_result[0], places=12)
+        np.testing.assert_array_equal(
+            incremental_result[1], full_result[1])
+        self.assertTrue(incremental_result[2]["incremental_evaluation"])
+        self.assertFalse(full_result[2]["incremental_evaluation"])
 
     def test_hybrid_warm_starts_asa_from_ddpg_best(self):
         class Objective:

@@ -2365,6 +2365,16 @@ def run_adaptive_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     evaluations = accepted = improving = reheats = 0
     positive_deltas = []
     perturb_fraction = min_perturb_frac
+    progress_interval = max(1, n_iter // 50)
+    next_progress = progress_interval
+
+    def report_progress():
+        nonlocal next_progress
+        if evaluations >= next_progress or evaluations == n_iter:
+            print(f"[ASA] proposals={evaluations}/{n_iter} "
+                  f"best={best_cost:.9g}", flush=True)
+            while next_progress <= evaluations:
+                next_progress += progress_interval
 
     def evaluate(candidate, changed):
         env.place(candidate)
@@ -2403,6 +2413,7 @@ def run_adaptive_sa(env: MultiChipEnvironment, n_iter: int = 100000,
         if delta > 0:
             positive_deltas.append(delta)
         finish_proposal(candidate, new_cost, relocation, delta <= 0)
+        report_progress()
 
     scale = (float(np.median(positive_deltas)) if positive_deltas
              else max(abs(current_cost) * 1e-3, np.finfo(float).eps))
@@ -2427,6 +2438,7 @@ def run_adaptive_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             -delta / max(temperature, np.finfo(float).eps))
         previous_accepted, previous_improving = accepted, improving
         finish_proposal(candidate, new_cost, relocation, accept)
+        report_progress()
         window_accepted += accepted - previous_accepted
         window_improving += improving - previous_improving
 
@@ -3999,8 +4011,12 @@ def run_ddpg_asa(env: MultiChipEnvironment, ddpg_placements: int,
     return final_cost
 
 def run_sa(env: MultiChipEnvironment, n_iter: int = 100000,
-           T_start: float = 100.0, T_end: float = 0.1, cooldown: float = 0.99,
-           perturb_frac: float = 0.01) -> float:
+           T_start: float = None, T_end: float = None,
+           cooldown: float = 0.99, perturb_frac: float = 0.01,
+           initial_acceptance: float = 0.8,
+           final_temperature_ratio: float = 1e-6,
+           calibration_trials: int = 32, metadata: dict = None,
+           incremental: bool = True) -> float:
     """
     PAPER FIX (Algorithm 2, Sec 4.2): the paper's SA uses a FIXED cooldown
     factor of 0.99 in a nested loop (outer: cool temperature; inner:
@@ -4017,14 +4033,31 @@ def run_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     cores (keeps the placement a valid bijection while changing exactly
     that many task->core assignments).
 
+    The paper says T0 and Tend are application-specific but does not publish
+    their values.  By default, T0 is therefore measured from uphill deltas in
+    the current objective units and Tend is a fixed ratio of T0.  Supplying
+    both T_start and T_end retains the historical absolute-temperature mode.
+
     NOTE: `n_iter=100000` here is still far short of the paper's ~1,000,000
     -- raise it explicitly via the CLI if you want closer to paper-scale
     search; a printed warning fires below this threshold so it's never
     silently unclear which regime a given run used.
     """
     n = env.num_tasks
-    if n_iter <= 0 or not (0 < T_end < T_start) or not (0 < cooldown < 1):
-        raise ValueError("SA requires positive budget, T_start > T_end > 0, and cooldown in (0,1)")
+    if n_iter <= 0 or not (0 < cooldown < 1):
+        raise ValueError("SA requires a positive budget and cooldown in (0,1)")
+    if (T_start is None) != (T_end is None):
+        raise ValueError("SA requires both T_start and T_end, or neither")
+    calibrated_temperature = T_start is None
+    if calibrated_temperature:
+        if not (0 < initial_acceptance < 1):
+            raise ValueError("SA initial_acceptance must be in (0,1)")
+        if not (0 < final_temperature_ratio < 1):
+            raise ValueError("SA final_temperature_ratio must be in (0,1)")
+        if calibration_trials <= 0:
+            raise ValueError("SA calibration_trials must be positive")
+    elif not (0 < T_end < T_start):
+        raise ValueError("SA requires T_start > T_end > 0")
     if n_iter < 1_000_000:
         print(f"[SA] WARNING: n_iter={n_iter} is far below the paper's ~1,000,000-placement "
               f"search budget (Sec 4.2). Results are not directly comparable to the paper's "
@@ -4034,16 +4067,79 @@ def run_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     placement = np.array(random.sample(allowed, n), dtype=np.int32)
     env.place(placement)
     best_cost = env.evaluate()
+    initial_cost = best_cost
     best_p = placement.copy()
     cur_cost = best_cost
     free_pool = _FreeCorePool(env.allowed_cores, placement)
 
-    num_temp_steps = max(1, math.ceil(math.log(T_end / T_start) / math.log(cooldown)))
-    iters_per_temp = max(1, math.ceil(n_iter / num_temp_steps))
+    evaluator = None
+    if incremental:
+        try:
+            evaluator = IncrementalPipelineEvaluator(env)
+        except (TypeError, AttributeError):
+            evaluator = None
+
+    accepted = improving = total_done = 0
+    positive_deltas = []
+    progress_interval = max(1, n_iter // 50)
+    next_progress = progress_interval
+
+    def report_progress():
+        nonlocal next_progress
+        if total_done >= next_progress or total_done == n_iter:
+            print(f"[SA] proposals={total_done}/{n_iter} "
+                  f"best={best_cost:.9g}", flush=True)
+            while next_progress <= total_done:
+                next_progress += progress_interval
+
+    def evaluate(candidate, changed):
+        env.place(candidate)
+        return (evaluator.candidate_cost(changed) if evaluator is not None
+                else float(env.evaluate()))
+
+    def finish(candidate, new_cost, relocation, accept):
+        nonlocal placement, cur_cost, best_cost, best_p, accepted, improving
+        if accept:
+            if new_cost < cur_cost:
+                improving += 1
+            accepted += 1
+            placement, cur_cost = candidate, new_cost
+            if evaluator is not None:
+                evaluator.accept()
+            if relocation is not None:
+                free_pool.accept_relocation(*relocation)
+            if new_cost < best_cost:
+                best_cost, best_p = new_cost, candidate.copy()
+        else:
+            env.place(placement)
+            if evaluator is not None:
+                evaluator.reject()
+
     n_perturb = max(1, min(n, max(2, round(perturb_frac * n))))
+    if calibrated_temperature:
+        calibration = min(n_iter, calibration_trials)
+        for _ in range(calibration):
+            candidate, changed, relocation = _placement_neighbor(
+                placement, n_perturb, free_pool)
+            new_cost = evaluate(candidate, changed)
+            total_done += 1
+            delta = new_cost - cur_cost
+            if delta > 0:
+                positive_deltas.append(delta)
+            finish(candidate, new_cost, relocation, delta <= 0)
+            report_progress()
+        scale = (float(np.median(positive_deltas)) if positive_deltas else
+                 max(abs(cur_cost) * 1e-3, np.finfo(float).eps))
+        T_start = max(-scale / math.log(initial_acceptance),
+                      np.finfo(float).eps)
+        T_end = max(T_start * final_temperature_ratio,
+                    np.finfo(float).tiny)
+
+    num_temp_steps = max(1, math.ceil(math.log(T_end / T_start) / math.log(cooldown)))
+    remaining = n_iter - total_done
+    iters_per_temp = max(1, math.ceil(remaining / num_temp_steps))
 
     T = T_start
-    total_done = 0
     while T > T_end and total_done < n_iter:
         for _ in range(iters_per_temp):
             # Paper's neighborhood: randomly perturb ~1% of logic cores.
@@ -4051,28 +4147,43 @@ def run_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             # currently-assigned cores, which changes exactly that subset's
             # task->core assignments while keeping the placement a valid
             # bijection (no core assigned to two tasks).
-            new_p, _, relocation = _placement_neighbor(
+            new_p, changed, relocation = _placement_neighbor(
                 placement, n_perturb, free_pool)
-
-            env.place(new_p)
-            new_cost = env.evaluate()
-
-            if new_cost < cur_cost or random.random() < math.exp(-(new_cost - cur_cost) / max(T, 1e-9)):
-                placement = new_p
-                cur_cost = new_cost
-                if relocation is not None:
-                    free_pool.accept_relocation(*relocation)
-                if new_cost < best_cost:
-                    best_cost, best_p = new_cost, new_p.copy()
-            else:
-                env.place(placement)
+            new_cost = evaluate(new_p, changed)
+            delta = new_cost - cur_cost
+            accept = (delta <= 0 or random.random() <
+                      math.exp(-delta / max(T, np.finfo(float).eps)))
+            finish(new_p, new_cost, relocation, accept)
 
             total_done += 1
+            report_progress()
             if total_done >= n_iter:
                 break
         T *= cooldown
 
     env.place(best_p)
+    if metadata is not None:
+        metadata.update({
+            "method": "fixed_schedule_simulated_annealing",
+            "temperature_mode": ("measured_objective_scale"
+                                 if calibrated_temperature
+                                 else "legacy_absolute"),
+            "initial_cost": initial_cost,
+            "best_cost": best_cost,
+            "candidate_evaluations": total_done,
+            "initial_placement_evaluations": 1,
+            "total_objective_evaluations": total_done + 1,
+            "accepted_moves": accepted,
+            "improving_moves": improving,
+            "initial_temperature": T_start,
+            "ending_temperature": T_end,
+            "final_temperature": T,
+            "cooldown": cooldown,
+            "perturb_fraction": perturb_frac,
+            "calibration_trials": (min(n_iter, calibration_trials)
+                                   if calibrated_temperature else 0),
+            "incremental_evaluation": evaluator is not None,
+        })
     return best_cost
 
 def run_random(env: MultiChipEnvironment, n_trials: int = 1000) -> float:
@@ -4087,10 +4198,17 @@ def run_random(env: MultiChipEnvironment, n_trials: int = 1000) -> float:
     n = env.num_tasks
     best_cost, best_p = float("inf"), None
     allowed = env.allowed_cores.tolist()
-    for _ in range(n_trials):
+    progress_interval = max(1, n_trials // 50)
+    next_progress = progress_interval
+    for trial in range(1, n_trials + 1):
         p = np.array(random.sample(allowed, n), dtype=np.int32)
         env.place(p); cost = env.evaluate()
         if cost < best_cost: best_cost, best_p = cost, p.copy()
+        if trial >= next_progress or trial == n_trials:
+            print(f"[RS] samples={trial}/{n_trials} best={best_cost:.9g}",
+                  flush=True)
+            while next_progress <= trial:
+                next_progress += progress_interval
     env.place(best_p)
     return best_cost
 
@@ -4325,6 +4443,16 @@ def main():
                         help="Run the costly deterministic DDPG diagnostic every N complete placements")
     parser.add_argument("--asa_diagnostics",
                         help="Optional JSONL path for per-window adaptive-SA diagnostics")
+    parser.add_argument("--sa_initial_acceptance", type=float, default=0.8,
+                        help="Target uphill acceptance used to measure fixed SA's initial temperature")
+    parser.add_argument("--sa_final_temperature_ratio", type=float, default=1e-6,
+                        help="Fixed SA ending temperature as a fraction of its measured initial temperature")
+    parser.add_argument("--sa_calibration_trials", type=int, default=32,
+                        help="Budgeted proposals used to measure fixed SA's objective scale")
+    parser.add_argument("--sa_legacy_absolute_temperature", action="store_true",
+                        help="Reproduce the historical unit-mismatched fixed SA temperatures 100 to 0.1")
+    parser.add_argument("--sa_full_evaluation", action="store_true",
+                        help="Disable exact affected-stage incremental evaluation for fixed SA")
     parser.add_argument("--asa_initial_acceptance", type=float, default=0.8,
                         help="Target uphill acceptance used to calibrate ASA's initial temperature")
     parser.add_argument("--asa_target_acceptance", type=float, default=0.30,
@@ -4407,6 +4535,12 @@ def main():
         parser.error("diagnostic and CPU thread counts must be positive")
     if args.asa_adapt_window <= 0 or args.asa_stall_windows <= 0 or args.asa_calibration_trials <= 0:
         parser.error("ASA windows and calibration counts must be positive")
+    if args.sa_calibration_trials <= 0:
+        parser.error("SA calibration count must be positive")
+    if not 0 < args.sa_initial_acceptance < 1:
+        parser.error("SA initial acceptance must be in (0,1)")
+    if not 0 < args.sa_final_temperature_ratio < 1:
+        parser.error("SA final temperature ratio must be in (0,1)")
     if not (0 < args.asa_initial_acceptance < 1 and 0 < args.asa_target_acceptance < 1):
         parser.error("ASA acceptance targets must be in (0,1)")
     if not (0 < args.asa_min_perturb_frac <= args.asa_max_perturb_frac <= 1):
@@ -4782,7 +4916,16 @@ def main():
         cost = run_adaptive_sa(env, n_iter=args.iters,
                                metadata=algorithm_metadata, **asa_options)
     elif args.algo == "sa":
-        cost = run_sa(env, n_iter=args.iters)
+        algorithm_metadata = {}
+        cost = run_sa(
+            env, n_iter=args.iters,
+            T_start=(100.0 if args.sa_legacy_absolute_temperature else None),
+            T_end=(0.1 if args.sa_legacy_absolute_temperature else None),
+            initial_acceptance=args.sa_initial_acceptance,
+            final_temperature_ratio=args.sa_final_temperature_ratio,
+            calibration_trials=args.sa_calibration_trials,
+            metadata=algorithm_metadata,
+            incremental=not args.sa_full_evaluation)
     elif args.algo == "bs":
         cost = run_sequential(env)
     else:
@@ -4809,6 +4952,12 @@ def main():
             limitations.append("ppo_masked is an experimental discrete policy, not the paper's original DDPG")
         if args.algo == "ppo_asa":
             limitations.append("ppo_asa is an experimental learned-neighbor extension, not the paper's original DDPG")
+        if args.algo == "sa":
+            limitations.append(
+                "the paper does not publish application-specific T0/Tend; "
+                "fixed SA measures T0 in objective units and freezes the schedule"
+                if not args.sa_legacy_absolute_temperature else
+                "legacy fixed-SA absolute temperatures are retained only for historical reproduction")
         if args.partition_mode != "paper_targets":
             limitations.append("logic-core allocation does not match Figure-6 aggregate counts")
         else:
