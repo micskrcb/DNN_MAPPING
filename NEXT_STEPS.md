@@ -70,11 +70,13 @@ Current paper targets:
 23. [x] Run `scripts/run_kaggle_ppo_asa_diagnostic_gate.sh`. Both planted-signal conditions passed, but the real split pilot stayed uniform and produced no holdout policy signal after 300,032 evaluations.
 24. [x] Establish that oracle headroom exists: best-of-16 gained about 0.70% of current cost over uniform on sampled real pools. The existing proxy's 4.5% oracle match rate is below the 6.25% uniform expectation.
 25. [x] Add exact oracle-dataset export and a trajectory-grouped supervised ranking gate. It collects ten independently restarted chains, holds out complete chains, reports selected advantage, confidence interval, oracle-headroom capture, and top-1 performance, and emits a PPO-compatible actor checkpoint.
-26. Run `scripts/run_kaggle_oracle_supervised_ranker.sh`. It stops before PPO if unseen-pool ranking fails; on a pass it automatically runs frozen supervised and PPO-fine-tuned five-seed holdouts.
+26. [x] Complete the first oracle-supervised run at revision `8fe5da4`. The frozen supervised actor beat uniform and ASA in four of five fresh-seed pairs by 0.131% and 0.180% on average, but both five-seed intervals crossed zero. PPO fine-tuning then lost all five pairs to uniform and four of five to ASA; close PPO fine-tuning for this checkpoint.
 27. Keep guided DDPG and failed candidate-set PPO-ASA variants as negative ablations.
 28. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
 29. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
 30. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
+31. Re-run supervised data collection and ranking from revision `164edfe`, which holds out complete annealing chains. Keep the resulting actor frozen and compare it with uniform proposals and ASA over at least ten new seeds; do not spend another long run on PPO fine-tuning.
+32. If the trajectory-safe ten-seed gate passes with a positive paired interval, repeat the frozen supervised method on VGG16 and ResNet50 and report both matched evaluations and wall-clock cost. Otherwise retain the five-seed result as a provisional positive direction only.
 
 ## Gate 4: improvements after reproduction
 

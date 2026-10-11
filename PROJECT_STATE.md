@@ -214,6 +214,52 @@ Its final entropy was 2.76893 versus the uniform maximum `ln(16)=2.77259`, and
 not be scaled to five seeds. See
 `runs/kaggle-ppo-asa-alexnet-fc-extended-2026-10-09/STUDY.md`.
 
+## Oracle-supervised proposal ranking result (2026-10-11)
+
+The staged AlexNet-FC oracle-supervised run completed from revision `8fe5da4`.
+Its 8,000 diagnostic pools contained 16 candidates each. The exact best
+candidate had a mean 0.6639% advantage over a uniformly selected candidate;
+58.56% of candidates were objective-neutral and 39.04% of pools contained an
+improving candidate. The old handcrafted routed-distance proxy matched an
+exact best candidate in only 4.95% of pools.
+
+The supervised actor passed its original randomly held-out pool gate. On 1,600
+validation pools it captured 86.02% of measured best-of-pool advantage and
+matched an exact best candidate in 56.19% of informative pools. The relevant
+random expectation was 35.13%, rather than 6.25%, because many candidates tied
+for the best exact gain. Its mean selected advantage over uniform was 0.1348
+microseconds per pool, with the reported normal-approximation interval fully
+above zero. However, revision `8fe5da4` randomly split pools from continuous
+annealing trajectories, so adjacent correlated states could cross the
+train/validation boundary. This validation result is therefore provisional.
+Revision `164edfe` fixes the protocol by exporting chain identifiers,
+collecting ten independently restarted chains, and holding out complete
+chains.
+
+The more informative independent optimizer holdout used five fresh seeds and
+kept the supervised actor frozen. It averaged 23.462912 microseconds versus
+23.493728 for the uniform proposal control and 23.505184 for ordinary ASA.
+The supervised actor won four of five pairs against each baseline, a mean
+improvement of 0.1312% over uniform and 0.1798% over ASA. Both exploratory
+five-seed 95% intervals crossed zero, so this is a positive directional signal
+and not yet a statistically reliable superiority claim.
+
+PPO fine-tuning from that checkpoint failed. After 200,032 proposals and 200
+updates, the frozen fine-tuned actor averaged 23.536416 microseconds. It lost
+all five pairs to uniform by 0.1817% on average; that paired interval was
+entirely negative. It lost four of five pairs to ASA by 0.1329% on average.
+Entropy fell from a moderately selective supervised policy while logit spread
+increased, showing that PPO made the policy more confident while degrading its
+generalization. More PPO fine-tuning of this objective is not justified.
+
+The current positive lead is therefore **supervised candidate ranking plus
+ASA**, not PPO plus ASA. It must be confirmed from revision `164edfe` with
+complete-chain validation and at least ten fresh frozen-policy holdout seeds.
+If confirmed, the next tests are VGG16 and ResNet50, matched wall-clock and
+objective-evaluation accounting, and an ablation comparing the frozen
+supervised actor with the correlated manual features. The archived run SHA-256
+is `7f774ba7d79ac4b052e5e52c88551c54cedd06dad87e3981153d024fa39299f1`.
+
 A second, controlled proposal neighborhood is now available through
 `--ppo_asa_focus_bottleneck`. Every candidate is anchored on a task in the
 current maximum-latency pipeline stage, and the anchor is guaranteed to move.
