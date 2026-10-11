@@ -252,13 +252,39 @@ Entropy fell from a moderately selective supervised policy while logit spread
 increased, showing that PPO made the policy more confident while degrading its
 generalization. More PPO fine-tuning of this objective is not justified.
 
-The current positive lead is therefore **supervised candidate ranking plus
-ASA**, not PPO plus ASA. It must be confirmed from revision `164edfe` with
-complete-chain validation and at least ten fresh frozen-policy holdout seeds.
-If confirmed, the next tests are VGG16 and ResNet50, matched wall-clock and
-objective-evaluation accounting, and an ablation comparing the frozen
-supervised actor with the correlated manual features. The archived run SHA-256
-is `7f774ba7d79ac4b052e5e52c88551c54cedd06dad87e3981153d024fa39299f1`.
+At this point the apparent positive lead was **supervised candidate ranking
+plus ASA**, not PPO plus ASA, and still required confirmation from revision
+`164edfe`. The provisional archive SHA-256 is
+`7f774ba7d79ac4b052e5e52c88551c54cedd06dad87e3981153d024fa39299f1`.
+
+The trajectory-safe confirmation subsequently completed at revision
+`164edfe` and failed its prespecified gate. It collected all 8,000 pools from
+ten independently restarted chains, used eight complete chains for training,
+and reserved chains 5 and 7 for validation. The validation actor captured only
+3.36% of the oracle advantage. Its exact-best match was 35.55% versus a
+tie-adjusted random expectation of 33.38%, while its selected advantage over
+uniform was only 0.00223 microseconds per pool with a 95% interval from
+-0.00147 to 0.00594 microseconds. Because the interval crossed zero, the runner
+correctly stopped before optimizer holdouts and PPO fine-tuning.
+
+The safe dataset also exposed stronger trajectory dependence than the original
+random split suggested. Candidate neutrality rose to 84.61%, best-of-16
+headroom fell to 0.2815% of current cost, and the previously strong manual
+feature correlations fell to roughly 0.08 to 0.11 in magnitude. The actor
+captured 10.31% of oracle advantage on its eight training chains but did not
+transfer that ranking reliably to the two held-out chains. More epochs on the
+same representation are therefore not justified.
+
+This result supersedes the earlier five-seed directional result as the
+authoritative representation test. The earlier frozen checkpoint remains a
+documented provisional result, but its 0.18% ASA advantage was statistically
+uncertain and was trained with a leakage-prone random pool split. There is now
+no confirmed positive learned-ranking or PPO+ASA result. ASA remains the
+strongest validated optimizer. Further RL+ASA work requires a new state/action
+design and a fresh prespecified gate after simulator calibration, rather than
+additional training of the current scorer. The trajectory-safe archive
+SHA-256 is
+`cb70a2b4361ff51f5483e5bccf8912d1d3bb05e32086ccbea3295d15910e60b4`.
 
 A second, controlled proposal neighborhood is now available through
 `--ppo_asa_focus_bottleneck`. Every candidate is anchored on a task in the

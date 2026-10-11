@@ -75,8 +75,10 @@ Current paper targets:
 28. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
 29. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
 30. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
-31. Re-run supervised data collection and ranking from revision `164edfe`, which holds out complete annealing chains. Keep the resulting actor frozen and compare it with uniform proposals and ASA over at least ten new seeds; do not spend another long run on PPO fine-tuning.
-32. If the trajectory-safe ten-seed gate passes with a positive paired interval, repeat the frozen supervised method on VGG16 and ResNet50 and report both matched evaluations and wall-clock cost. Otherwise retain the five-seed result as a provisional positive direction only.
+31. [x] Complete the trajectory-safe supervised gate at revision `164edfe`. It used ten chains with two held out, captured only 3.36% of oracle advantage on validation, and produced a selected-advantage interval crossing zero. The runner correctly stopped before optimizer holdouts and PPO fine-tuning.
+32. [x] Close the current supervised candidate scorer. The earlier 0.18% five-seed ASA advantage remains a leakage-prone, statistically uncertain provisional result and is superseded by the failed chain-held-out representation gate.
+33. Run fixed-workload RS, SA, and ASA calibration near the paper's one-million-placement budget and compare normalized ratios, evaluator sensitivity, and wall-clock cost before changing the learning architecture.
+34. If RL+ASA remains the method goal after calibration, redesign what RL controls (for example, selecting among distinct ASA move operators or using a topology-aware representation), and require a chain-held-out supervised or planted-signal gate before any long PPO training.
 
 ## Gate 4: improvements after reproduction
 
