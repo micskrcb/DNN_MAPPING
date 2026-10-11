@@ -1461,6 +1461,69 @@ if HAS_TORCH:
                     distribution.entropy(), values)
 
 
+    class ProposalPPOActor(nn.Module):
+        """Candidate scorer with no value-function parameters.
+
+        This separation follows the actor/critic ownership used by the
+        official RL-Based-SA PPO implementation.  It prevents critic gradients
+        from changing the representation used to rank proposal candidates.
+        """
+
+        def __init__(self, global_dim: int, candidate_dim: int,
+                     hidden_dim: int = 128):
+            super().__init__()
+            self.global_encoder = nn.Sequential(
+                nn.Linear(global_dim, hidden_dim), nn.Tanh())
+            self.candidate_encoder = nn.Sequential(
+                nn.Linear(candidate_dim, hidden_dim), nn.Tanh())
+            self.score_head = nn.Linear(hidden_dim, 1)
+            for module in (self.global_encoder[0], self.candidate_encoder[0]):
+                nn.init.orthogonal_(module.weight, gain=math.sqrt(2.0))
+                nn.init.zeros_(module.bias)
+            nn.init.zeros_(self.score_head.weight)
+            nn.init.zeros_(self.score_head.bias)
+
+        def distribution(self, global_states, candidate_features):
+            global_embedding = self.global_encoder(global_states)
+            candidate_embedding = self.candidate_encoder(candidate_features)
+            joint = torch.tanh(
+                candidate_embedding + global_embedding[:, None, :])
+            logits = self.score_head(joint).squeeze(-1)
+            return torch.distributions.Categorical(logits=logits)
+
+        def action(self, global_states, candidate_features, generator=None):
+            distribution = self.distribution(global_states, candidate_features)
+            actions = torch.multinomial(
+                distribution.probs, 1, generator=generator).squeeze(-1)
+            return (actions, distribution.log_prob(actions),
+                    distribution.entropy())
+
+
+    class ProposalPPOCritic(nn.Module):
+        """Value network independent from the proposal-scoring actor."""
+
+        def __init__(self, global_dim: int, candidate_dim: int,
+                     hidden_dim: int = 128):
+            super().__init__()
+            self.global_encoder = nn.Sequential(
+                nn.Linear(global_dim, hidden_dim), nn.Tanh())
+            self.candidate_encoder = nn.Sequential(
+                nn.Linear(candidate_dim, hidden_dim), nn.Tanh())
+            self.value_head = nn.Linear(hidden_dim, 1)
+            for module in (self.global_encoder[0], self.candidate_encoder[0]):
+                nn.init.orthogonal_(module.weight, gain=math.sqrt(2.0))
+                nn.init.zeros_(module.bias)
+            nn.init.orthogonal_(self.value_head.weight, gain=1.0)
+            nn.init.zeros_(self.value_head.bias)
+
+        def forward(self, global_states, candidate_features):
+            global_embedding = self.global_encoder(global_states)
+            candidate_embedding = self.candidate_encoder(candidate_features)
+            pooled = candidate_embedding.mean(dim=1)
+            return self.value_head(
+                torch.tanh(global_embedding + pooled)).squeeze(-1)
+
+
 def run_masked_ppo(env: MultiChipEnvironment, n_episodes: int = 500,
                    baseline_trials: int = 1000, device: str = None,
                    learning_rate: float = 3e-4, rollout_episodes: int = 10,
@@ -2432,6 +2495,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 clip_ratio: float = 0.2, entropy_coefficient: float = 0.01,
                 value_coefficient: float = 0.5, max_grad_norm: float = 0.5,
                 hidden_dim: int = 128, disable_learning: bool = False,
+                update_style: str = "shared_gae",
                 focus_bottleneck: bool = False,
                 focus_fraction: float = 0.0, restart_interval: int = 0,
                 update_at_chain_end: bool = False,
@@ -2468,6 +2532,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("PPO-ASA requires at least two proposal candidates")
     if not 0.0 <= focus_fraction <= 1.0:
         raise ValueError("PPO-ASA focus fraction must be in [0, 1]")
+    if update_style not in {"shared_gae", "reference_separate"}:
+        raise ValueError("unknown PPO-ASA update style")
     if restart_interval < 0:
         raise ValueError("PPO-ASA restart interval cannot be negative")
     if focus_bottleneck:
@@ -2683,8 +2749,15 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     reward_scale = max(abs(initial_cost) * 1e-3, np.finfo(float).eps)
 
     global_dim, candidate_dim = 8, 9
-    model = ProposalPPOActorCritic(
-        global_dim, candidate_dim, hidden_dim=hidden_dim).to(torch_device)
+    model = actor = critic = None
+    if update_style == "reference_separate":
+        actor = ProposalPPOActor(
+            global_dim, candidate_dim, hidden_dim=hidden_dim).to(torch_device)
+        critic = ProposalPPOCritic(
+            global_dim, candidate_dim, hidden_dim=hidden_dim).to(torch_device)
+    else:
+        model = ProposalPPOActorCritic(
+            global_dim, candidate_dim, hidden_dim=hidden_dim).to(torch_device)
     loaded_checkpoint = None
     if load_checkpoint:
         if not os.path.exists(load_checkpoint):
@@ -2692,7 +2765,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 f"PPO-ASA checkpoint not found: {load_checkpoint}")
         loaded_checkpoint = torch.load(
             load_checkpoint, map_location=torch_device, weights_only=False)
-        if loaded_checkpoint.get("algorithm") != "ppo_asa_proposal_v1":
+        expected_algorithm = (
+            "ppo_asa_reference_separate_v2"
+            if update_style == "reference_separate"
+            else "ppo_asa_proposal_v1")
+        if loaded_checkpoint.get("algorithm") != expected_algorithm:
             raise ValueError("checkpoint is not a PPO-ASA proposal model")
         if loaded_checkpoint.get("candidate_count") != candidate_count:
             raise ValueError(
@@ -2702,10 +2779,23 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 focus_fraction, rel_tol=0.0, abs_tol=0.0):
             raise ValueError(
                 "checkpoint proposal focus does not match this run")
-        model.load_state_dict(loaded_checkpoint["model"])
-    optimizer = optim.Adam(
-        model.parameters(), lr=learning_rate, eps=1e-5,
-        weight_decay=weight_decay)
+        if update_style == "reference_separate":
+            actor.load_state_dict(loaded_checkpoint["actor"])
+            critic.load_state_dict(loaded_checkpoint["critic"])
+        else:
+            model.load_state_dict(loaded_checkpoint["model"])
+    optimizer = actor_optimizer = critic_optimizer = None
+    if update_style == "reference_separate":
+        actor_optimizer = optim.Adam(
+            actor.parameters(), lr=learning_rate, eps=1e-5,
+            weight_decay=weight_decay)
+        critic_optimizer = optim.Adam(
+            critic.parameters(), lr=learning_rate, eps=1e-5,
+            weight_decay=weight_decay)
+    else:
+        optimizer = optim.Adam(
+            model.parameters(), lr=learning_rate, eps=1e-5,
+            weight_decay=weight_decay)
     update_count = 0
 
     def make_global_state(progress, last_delta, last_accepted,
@@ -2783,7 +2873,20 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             last_advantage = (delta + gamma * gae_lambda * nonterminal *
                               last_advantage)
             advantages[index] = last_advantage
-        returns = advantages + values
+        if update_style == "reference_separate":
+            returns = np.zeros_like(rewards)
+            # The reference implementation updates on complete episodes.  Our
+            # adapter can also update on fixed-size rollout fragments, so
+            # bootstrap the final fragment unless it ended at a chain boundary.
+            discounted_reward = (
+                0.0 if dones[-1] else float(next_values[-1]))
+            for index in range(len(rewards) - 1, -1, -1):
+                nonterminal = 0.0 if dones[index] else 1.0
+                discounted_reward = (
+                    rewards[index] + gamma * nonterminal * discounted_reward)
+                returns[index] = discounted_reward
+        else:
+            returns = advantages + values
         advantages_tensor = torch.as_tensor(
             advantages, dtype=torch.float32, device=torch_device)
         returns_tensor = torch.as_tensor(
@@ -2798,8 +2901,14 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 len(transitions), generator=update_generator, device=torch_device)
             for start in range(0, len(transitions), minibatch_size):
                 indices = permutation[start:start + minibatch_size]
-                distribution, new_values = model.distribution_and_value(
-                    global_states[indices], candidates[indices])
+                if update_style == "reference_separate":
+                    distribution = actor.distribution(
+                        global_states[indices], candidates[indices])
+                    new_values = critic(
+                        global_states[indices], candidates[indices])
+                else:
+                    distribution, new_values = model.distribution_and_value(
+                        global_states[indices], candidates[indices])
                 new_log_probs = distribution.log_prob(actions[indices])
                 log_ratio = new_log_probs - old_log_probs[indices]
                 ratio = log_ratio.exp()
@@ -2809,13 +2918,33 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                     advantages_tensor[indices]).mean()
                 value_loss = F.mse_loss(new_values, returns_tensor[indices])
                 entropy = distribution.entropy().mean()
-                loss = (policy_loss + value_coefficient * value_loss -
-                        entropy_coefficient * entropy)
-                optimizer.zero_grad()
-                loss.backward()
-                gradient_norm = torch.nn.utils.clip_grad_norm_(
-                    model.parameters(), max_grad_norm)
-                optimizer.step()
+                if update_style == "reference_separate":
+                    actor_loss = (policy_loss -
+                                  entropy_coefficient * entropy)
+                    actor_optimizer.zero_grad()
+                    actor_loss.backward()
+                    actor_gradient_norm = torch.nn.utils.clip_grad_norm_(
+                        actor.parameters(), max_grad_norm)
+                    actor_optimizer.step()
+                    critic_loss = value_coefficient * value_loss
+                    critic_optimizer.zero_grad()
+                    critic_loss.backward()
+                    critic_gradient_norm = torch.nn.utils.clip_grad_norm_(
+                        critic.parameters(), max_grad_norm)
+                    critic_optimizer.step()
+                    gradient_norm = max(
+                        float(actor_gradient_norm),
+                        float(critic_gradient_norm))
+                else:
+                    loss = (policy_loss + value_coefficient * value_loss -
+                            entropy_coefficient * entropy)
+                    optimizer.zero_grad()
+                    loss.backward()
+                    gradient_norm = torch.nn.utils.clip_grad_norm_(
+                        model.parameters(), max_grad_norm)
+                    optimizer.step()
+                    actor_gradient_norm = gradient_norm
+                    critic_gradient_norm = gradient_norm
                 with torch.no_grad():
                     approximate_kl = ((ratio - 1.0) - log_ratio).mean()
                     clip_fraction = ((ratio - 1.0).abs() > clip_ratio).float().mean()
@@ -2825,7 +2954,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                     "entropy": float(entropy.detach().cpu()),
                     "approximate_kl": float(approximate_kl.detach().cpu()),
                     "clip_fraction": float(clip_fraction.detach().cpu()),
-                    "gradient_norm": float(gradient_norm.detach().cpu()),
+                    "gradient_norm": float(gradient_norm),
+                    "actor_gradient_norm": float(actor_gradient_norm),
+                    "critic_gradient_norm": float(critic_gradient_norm),
                 })
         update_count += 1
         return {key: float(np.mean([entry[key] for entry in metrics]))
@@ -2862,8 +2993,13 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             features, dtype=torch.float32,
             device=torch_device).unsqueeze(0)
         with torch.no_grad():
-            action, log_prob, _, value = model.action_and_value(
-                global_tensor, feature_tensor, generator=action_generator)
+            if update_style == "reference_separate":
+                action, log_prob, _ = actor.action(
+                    global_tensor, feature_tensor, generator=action_generator)
+                value = critic(global_tensor, feature_tensor)
+            else:
+                action, log_prob, _, value = model.action_and_value(
+                    global_tensor, feature_tensor, generator=action_generator)
         selected = int(action.item())
         candidate = candidates[selected]
         changed = changed_sets[selected]
@@ -2931,11 +3067,18 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 current_progress(), last_delta, last_accepted,
                 recent_acceptance)
             with torch.no_grad():
-                _, next_value_tensor = model.distribution_and_value(
-                    torch.as_tensor(next_global, dtype=torch.float32,
-                                    device=torch_device).unsqueeze(0),
-                    torch.as_tensor(next_pool[3], dtype=torch.float32,
-                                    device=torch_device).unsqueeze(0))
+                next_global_tensor = torch.as_tensor(
+                    next_global, dtype=torch.float32,
+                    device=torch_device).unsqueeze(0)
+                next_feature_tensor = torch.as_tensor(
+                    next_pool[3], dtype=torch.float32,
+                    device=torch_device).unsqueeze(0)
+                if update_style == "reference_separate":
+                    next_value_tensor = critic(
+                        next_global_tensor, next_feature_tensor)
+                else:
+                    _, next_value_tensor = model.distribution_and_value(
+                        next_global_tensor, next_feature_tensor)
             next_value = float(next_value_tensor.item())
 
         pending.append({
@@ -2970,7 +3113,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 "chain": chain_count,
             }
             for key in ("policy_loss", "value_loss", "entropy",
-                        "approximate_kl", "clip_fraction", "gradient_norm"):
+                        "approximate_kl", "clip_fraction", "gradient_norm",
+                        "actor_gradient_norm", "critic_gradient_norm"):
                 record[key] = (latest_metrics.get(key)
                                if latest_metrics is not None else None)
             if diagnostics is not None:
@@ -3026,11 +3170,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         parent = os.path.dirname(save_checkpoint)
         if parent:
             os.makedirs(parent, exist_ok=True)
-        torch.save({
-            "algorithm": "ppo_asa_proposal_v1",
+        checkpoint = {
+            "algorithm": ("ppo_asa_reference_separate_v2"
+                          if update_style == "reference_separate"
+                          else "ppo_asa_proposal_v1"),
             "resumable": False,
-            "model": model.state_dict(),
-            "optimizer": optimizer.state_dict(),
             "evaluations": evaluations,
             "best_cost": best_cost,
             "best_placement": best_placement,
@@ -3043,7 +3187,21 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "restart_interval": restart_interval,
             "update_at_chain_end": update_at_chain_end,
             "independent_chains": chain_count,
-        }, save_checkpoint)
+            "update_style": update_style,
+        }
+        if update_style == "reference_separate":
+            checkpoint.update({
+                "actor": actor.state_dict(),
+                "critic": critic.state_dict(),
+                "actor_optimizer": actor_optimizer.state_dict(),
+                "critic_optimizer": critic_optimizer.state_dict(),
+            })
+        else:
+            checkpoint.update({
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+            })
+        torch.save(checkpoint, save_checkpoint)
     if metadata is not None:
         metadata.update({
             "method": "ppo_guided_adaptive_simulated_annealing",
@@ -3072,6 +3230,15 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 "within_restart_chain" if restart_interval else "within_run"),
             "update_at_chain_end": update_at_chain_end,
             "weight_decay": weight_decay,
+            "update_style": update_style,
+            "policy_value_parameter_sharing": (
+                update_style != "reference_separate"),
+            "reference_implementation": (
+                "https://github.com/nathanqiu07/RL-Based-SA-Public"
+                if update_style == "reference_separate" else None),
+            "reference_implementation_commit": (
+                "6e64bec12b9a7c6db601a4a4ae254b942e4aed79"
+                if update_style == "reference_separate" else None),
             "proposal_candidates_per_step": candidate_count,
             "unevaluated_proposal_candidates": (
                 calibration + max(0, n_iter - calibration) * candidate_count),
@@ -3772,6 +3939,11 @@ def main():
                         help="Accepted/rejected proposal transitions per PPO-ASA update")
     parser.add_argument("--ppo_asa_weight_decay", type=float, default=0.0,
                         help="Adam weight decay for the PPO-ASA proposal model")
+    parser.add_argument(
+        "--ppo_asa_update_style",
+        choices=["shared_gae", "reference_separate"], default="shared_gae",
+        help="PPO update implementation: historical shared actor/critic or "
+             "RL-Based-SA-compatible separate actor and critic")
     parser.add_argument("--ppo_asa_disable_learning", action="store_true",
                         help="Keep PPO-ASA proposal scores exactly uniform for a matched control")
     parser.add_argument("--ppo_asa_focus_bottleneck", action="store_true",
@@ -4219,6 +4391,7 @@ def main():
             max_grad_norm=args.ppo_max_grad_norm,
             hidden_dim=args.ppo_hidden_dim,
             disable_learning=args.ppo_asa_disable_learning,
+            update_style=args.ppo_asa_update_style,
             focus_bottleneck=args.ppo_asa_focus_bottleneck,
             focus_fraction=args.ppo_asa_focus_fraction,
             restart_interval=args.ppo_asa_restart_interval,

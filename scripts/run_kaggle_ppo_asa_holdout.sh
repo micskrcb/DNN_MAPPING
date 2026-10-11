@@ -5,11 +5,18 @@ proposals="${1:-4100}"
 output_dir="${2:-runs/kaggle-ppo-asa-holdout-${proposals}}"
 checkpoint="${3:-runs/kaggle-ppo-asa-multichain-5ea4c65-2026-10-09/ppo-asa-trained.pt}"
 seed_count="${4:-5}"
+update_style="${5:-shared_gae}"
 archive="${output_dir%/}.zip"
 mkdir -p "${output_dir}"
 
 if [[ ! "${seed_count}" =~ ^[1-9][0-9]*$ ]]; then
   echo "Holdout seed count must be a positive integer." >&2
+  exit 1
+fi
+
+if [[ "${update_style}" != "shared_gae" && \
+      "${update_style}" != "reference_separate" ]]; then
+  echo "Unknown PPO-ASA update style: ${update_style}" >&2
   exit 1
 fi
 
@@ -54,6 +61,7 @@ common=(
   --asa_calibration_trials 32 --asa_adapt_window 100
   --ppo_asa_candidates 16 --ppo_asa_rollout_steps 4096
   --ppo_asa_focus_fraction 0.5 --ppo_asa_disable_learning
+  --ppo_asa_update_style "${update_style}"
   --ppo_hidden_dim 128
 )
 

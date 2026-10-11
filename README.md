@@ -807,6 +807,26 @@ are not justified. The candidate-set PPO-ASA path is closed as a documented
 negative result; ASA remains the recommended AlexNet-FC optimizer. See
 `runs/kaggle-ppo-asa-v1250-2026-10-11/STUDY.md`.
 
+A source-level audit then found one untested implementation confounder. The
+closest official RL-Based-SA code trains independent actor and critic modules
+with independent optimizers and uses discounted reward-to-go for the critic;
+the rejected local implementation shared its feature encoders and combined
+both losses. The `reference_separate` mode now adopts those mechanics while
+leaving the placement environment, legal candidate set, SA controller, and
+objective accounting unchanged. Run the final implementation-isolation gate:
+
+```bash
+bash scripts/run_kaggle_ppo_asa_reference_split.sh
+```
+
+This performs the reconciliation tests, repeats 1.25 million training
+proposals and exactly 1,250 PPO updates, and then runs the same 10-seed frozen
+holdout against uniform and ASA. It needs a Kaggle T4 x2 session and is expected
+to take roughly the same 7--10 hours as the completed sufficient-scale run.
+The runner archives partial output on failure. The exact source comparison,
+compatibility boundary, and attribution are in `PPO_REFERENCE_ADAPTER.md` and
+`THIRD_PARTY_NOTICES.md`.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

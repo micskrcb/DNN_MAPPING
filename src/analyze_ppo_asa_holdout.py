@@ -86,6 +86,9 @@ def main():
             "shared_proposal_focus": (
                 trained_meta["proposal_focus"] ==
                 control_meta["proposal_focus"]),
+            "shared_update_style": (
+                trained_meta.get("update_style") ==
+                control_meta.get("update_style")),
             "single_uninterrupted_chain": (
                 trained_meta["independent_chains"] ==
                 control_meta["independent_chains"] == 1 and

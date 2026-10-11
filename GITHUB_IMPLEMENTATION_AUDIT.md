@@ -1,6 +1,6 @@
 # Public implementation and training-scale audit
 
-Audit date: 2026-10-09.
+Audit date: 2026-10-11.
 
 ## Why the current RL gates do not reproduce the paper's advantage
 
@@ -45,6 +45,16 @@ physical-core mapping, or multi-chip routing. It can reproduce its own
 benchmarks directly; using it here still requires a new vectorized placement
 problem and policy/action adapter.
 
+An exact source-level comparison at commit
+`6e64bec12b9a7c6db601a4a4ae254b942e4aed79` found a material difference from
+our first adapter: the public implementation uses fully separate actor and
+critic modules and optimizers, discounted reward-to-go critic targets, and
+temporal-difference trace advantages. Our first candidate scorer shared both
+feature encoders between actor and critic. The new
+`reference_separate` update mode removes that coupling while retaining the
+placement environment. See `PPO_REFERENCE_ADAPTER.md` and
+`THIRD_PARTY_NOTICES.md`.
+
 ### Core_Placement_with_Reinforcement_Learning
 
 Repository:
@@ -67,6 +77,12 @@ bookkeeping after placement is exposed as a Gymnasium environment. It does not
 provide the placement state, objective, action design, or candidate
 neighborhood. Its practical value is reliable PPO and parallel independent
 placement chains.
+
+Its policy implementation also exposes `share_features_extractor=False`,
+which supports testing separate policy/value representations. Directly adding
+the library would still require a custom Gymnasium environment and feature
+extractor for variable candidate sets, so it is a comparison reference rather
+than a drop-in replacement here.
 
 ### AlphaChip / circuit_training
 
@@ -161,5 +177,15 @@ and two losses; its paired interval included zero. It was 0.05613% worse than
 ASA and won four of 10 pairs. Final entropy returned to the uniform maximum,
 approximate KL was near zero, and clipping never activated. Insufficient PPO
 epochs are no longer a credible explanation. The current candidate-set scorer
-is closed; a future RL+ASA experiment must change the representation or
-training structure.
+with shared actor/value encoders is closed.
+
+A final source-level audit exposed a distinct implementation confounder rather
+than another hyperparameter: RL-Based-SA's actor and critic own completely
+separate representations and optimizers, whereas the completed local run
+combined both losses through shared encoders. The
+`reference_separate` adapter now mirrors that optimizer boundary and its
+reward-to-go critic target. The controlled runner repeats the same training
+budget and holdout, so any change can be attributed to the PPO implementation
+rather than extra epochs, a different objective, or easier controls. If this
+gate also fails, the next method must change the representation or data
+diversity.
