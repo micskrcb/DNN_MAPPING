@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import statistics
+import sys
 from pathlib import Path
 
 
@@ -108,8 +109,9 @@ def main():
     print(f"Saved {destination}")
 
     if args.require_split_pass and not planted["split"]["pass"]:
-        raise SystemExit(
-            "Split PPO failed the planted-signal gate; real-reward pilot skipped.")
+        print("Split PPO failed the planted-signal gate; real-reward pilot "
+              "skipped.", file=sys.stderr)
+        raise SystemExit(3)
 
 
 if __name__ == "__main__":
