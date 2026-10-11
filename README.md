@@ -798,6 +798,15 @@ of 10 holdout seeds with a positive paired mean, the current candidate-scoring
 architecture is closed. ASA remains the recommended optimizer unless the
 trained policy also beats ASA under the same objective-call budget.
 
+The sufficient-scale run is complete. All mechanics checks passed, but the
+trained policy averaged 23.50258 microseconds versus 23.50722 for uniform and
+23.48939 for ASA. It beat uniform in only three of 10 seeds, tied five, and
+lost two. It beat ASA in four seeds. Final entropy was indistinguishable from
+uniform after 1,250 PPO updates, so additional epochs of this configuration
+are not justified. The candidate-set PPO-ASA path is closed as a documented
+negative result; ASA remains the recommended AlexNet-FC optimizer. See
+`runs/kaggle-ppo-asa-v1250-2026-10-11/STUDY.md`.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

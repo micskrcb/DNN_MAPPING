@@ -70,3 +70,19 @@ checkpoints before publication. If it fails the uniform gate while remaining
 near-uniform, close this candidate-scorer architecture and move to an LSTM or
 vectorized complete-placement policy; do not conclude that all RL+SA hybrids
 are impossible.
+
+## Completed outcome
+
+The run completed all 1.25 million proposals and exactly 1,250 PPO updates in
+6.47 hours. All 10 holdout mechanics checks passed. Trained PPO-ASA averaged
+23.502576 microseconds, compared with 23.507216 for uniform and 23.489392 for
+ASA. It beat uniform in only three seeds, tied five, and lost two; the mean
+advantage was 0.01974% and its paired interval included zero. It beat ASA in
+four seeds and was 0.05613% worse on average.
+
+Final policy entropy was indistinguishable from uniform, approximate KL was
+`8.65e-9`, and clip fraction remained zero. The prespecified policy and
+optimizer gates both fail. This is now sufficient evidence to close the
+current candidate-set PPO proposal scorer rather than add more epochs. It does
+not reject recurrent, constructive, vectorized, or cyclic-initialization
+PPO+SA designs.

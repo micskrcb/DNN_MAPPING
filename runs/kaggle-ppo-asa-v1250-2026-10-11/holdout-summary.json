@@ -1,0 +1,299 @@
+{
+  "verdict": "NO_HOLDOUT_POLICY_SIGNAL",
+  "mechanics_pass": true,
+  "holdout_seeds": [
+    1,
+    10,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "required_pair_wins": 8,
+  "policy_generalization_pass": false,
+  "optimizer_pass_against_asa": false,
+  "trained_policy": {
+    "mean_microseconds": 23.502576,
+    "sample_std_microseconds": 0.041239425365110764,
+    "minimum_microseconds": 23.449279999999998,
+    "maximum_microseconds": 23.582880000000003,
+    "individual_microseconds": [
+      23.582880000000003,
+      23.52432,
+      23.46896,
+      23.5064,
+      23.524639999999998,
+      23.46208,
+      23.540000000000003,
+      23.47488,
+      23.49232,
+      23.449279999999998
+    ]
+  },
+  "uniform_control": {
+    "mean_microseconds": 23.507216,
+    "sample_std_microseconds": 0.03437766303220188,
+    "minimum_microseconds": 23.449279999999998,
+    "maximum_microseconds": 23.556160000000002,
+    "individual_microseconds": [
+      23.556160000000002,
+      23.52432,
+      23.46864,
+      23.5304,
+      23.524639999999998,
+      23.495359999999998,
+      23.540000000000003,
+      23.47488,
+      23.50848,
+      23.449279999999998
+    ]
+  },
+  "ordinary_asa": {
+    "mean_microseconds": 23.489392,
+    "sample_std_microseconds": 0.0625577515935847,
+    "minimum_microseconds": 23.395519999999998,
+    "maximum_microseconds": 23.596000000000004,
+    "individual_microseconds": [
+      23.52528,
+      23.422719999999998,
+      23.498079999999998,
+      23.449279999999998,
+      23.596000000000004,
+      23.457279999999997,
+      23.47264,
+      23.56576,
+      23.51136,
+      23.395519999999998
+    ]
+  },
+  "trained_versus_uniform_control": {
+    "candidate_wins": 3,
+    "ties": 5,
+    "mean_improvement_microseconds": 0.004639999999999844,
+    "mean_improvement_percent": 0.01973861983486196,
+    "exploratory_paired_95_percent_interval_microseconds": [
+      -0.007146225470017111,
+      0.0164262254700168
+    ],
+    "individual_improvements_microseconds": [
+      -0.026720000000000965,
+      0.0,
+      -0.00031999999999854367,
+      0.02400000000000091,
+      0.0,
+      0.033279999999997756,
+      0.0,
+      0.0,
+      0.016159999999999286,
+      0.0
+    ]
+  },
+  "trained_versus_asa": {
+    "candidate_wins": 4,
+    "ties": 0,
+    "mean_improvement_microseconds": -0.01318400000000075,
+    "mean_improvement_percent": -0.056127463835593326,
+    "exploratory_paired_95_percent_interval_microseconds": [
+      -0.05915778776551996,
+      0.03278978776551846
+    ],
+    "individual_improvements_microseconds": [
+      -0.057600000000004314,
+      -0.10160000000000124,
+      0.029119999999998925,
+      -0.05712000000000117,
+      0.07136000000000564,
+      -0.004800000000003024,
+      -0.0673600000000043,
+      0.09088000000000207,
+      0.01904000000000039,
+      -0.053760000000000474
+    ]
+  },
+  "pairs": [
+    {
+      "seed": 1,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.582880000000003,
+      "uniform_control_microseconds": 23.556160000000002,
+      "asa_microseconds": 23.52528,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 1250000
+    },
+    {
+      "seed": 10,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.52432,
+      "uniform_control_microseconds": 23.52432,
+      "asa_microseconds": 23.422719999999998,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 1250000
+    },
+    {
+      "seed": 2,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.46896,
+      "uniform_control_microseconds": 23.46864,
+      "asa_microseconds": 23.498079999999998,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 1250000
+    },
+    {
+      "seed": 3,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.5064,
+      "uniform_control_microseconds": 23.5304,
+      "asa_microseconds": 23.449279999999998,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 1250000
+    },
+    {
+      "seed": 4,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.524639999999998,
+      "uniform_control_microseconds": 23.524639999999998,
+      "asa_microseconds": 23.596000000000004,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 1250000
+    },
+    {
+      "seed": 5,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.46208,
+      "uniform_control_microseconds": 23.495359999999998,
+      "asa_microseconds": 23.457279999999997,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 1250000
+    },
+    {
+      "seed": 6,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.540000000000003,
+      "uniform_control_microseconds": 23.540000000000003,
+      "asa_microseconds": 23.47264,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 1250000
+    },
+    {
+      "seed": 7,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.47488,
+      "uniform_control_microseconds": 23.47488,
+      "asa_microseconds": 23.56576,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 1250000
+    },
+    {
+      "seed": 8,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.49232,
+      "uniform_control_microseconds": 23.50848,
+      "asa_microseconds": 23.51136,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 1250000
+    },
+    {
+      "seed": 9,
+      "mechanics": {
+        "initial_costs_match": true,
+        "matched_objective_evaluations": true,
+        "trained_checkpoint_loaded": true,
+        "uniform_control_initialized_fresh": true,
+        "both_policies_frozen": true,
+        "shared_proposal_focus": true,
+        "single_uninterrupted_chain": true
+      },
+      "mechanics_pass": true,
+      "trained_microseconds": 23.449279999999998,
+      "uniform_control_microseconds": 23.449279999999998,
+      "asa_microseconds": 23.395519999999998,
+      "objective_evaluations": 4101,
+      "source_training_evaluations": 1250000
+    }
+  ]
+}

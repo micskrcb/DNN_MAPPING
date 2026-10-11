@@ -154,3 +154,12 @@ loss, the next controlled run uses 1.25 million proposals, 1,250 update cycles,
 zero entropy bonus, and its published learning rate, weight decay, gamma,
 trace decay, clipping ratio, and PPO epoch count. Ten holdout seeds replace the
 five-seed screening gate. See `PAPER_SCALE_DECISION.md`.
+
+That run completed exactly as specified. The trained checkpoint was only
+0.01974% better than uniform on mean holdout cost, with three wins, five ties,
+and two losses; its paired interval included zero. It was 0.05613% worse than
+ASA and won four of 10 pairs. Final entropy returned to the uniform maximum,
+approximate KL was near zero, and clipping never activated. Insufficient PPO
+epochs are no longer a credible explanation. The current candidate-set scorer
+is closed; a future RL+ASA experiment must change the representation or
+training structure.
