@@ -69,7 +69,7 @@ Current paper targets:
 22. [x] Implement E0 oracle-of-16 candidate headroom, E1 planted-signal shared/split controls, missing logit/gradient/feature diagnostics, and a gated 300-update E2 split pilot.
 23. [x] Run `scripts/run_kaggle_ppo_asa_diagnostic_gate.sh`. Both planted-signal conditions passed, but the real split pilot stayed uniform and produced no holdout policy signal after 300,032 evaluations.
 24. [x] Establish that oracle headroom exists: best-of-16 gained about 0.70% of current cost over uniform on sampled real pools. The existing proxy's 4.5% oracle match rate is below the 6.25% uniform expectation.
-25. [x] Add exact oracle-dataset export and an 80/20 pool-level supervised ranking gate. It reports held-out selected advantage, confidence interval, oracle-headroom capture, and top-1 performance, and emits a PPO-compatible actor checkpoint.
+25. [x] Add exact oracle-dataset export and a trajectory-grouped supervised ranking gate. It collects ten independently restarted chains, holds out complete chains, reports selected advantage, confidence interval, oracle-headroom capture, and top-1 performance, and emits a PPO-compatible actor checkpoint.
 26. Run `scripts/run_kaggle_oracle_supervised_ranker.sh`. It stops before PPO if unseen-pool ranking fails; on a pass it automatically runs frozen supervised and PPO-fine-tuned five-seed holdouts.
 27. Keep guided DDPG and failed candidate-set PPO-ASA variants as negative ablations.
 28. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.

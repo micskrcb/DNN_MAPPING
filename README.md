@@ -859,7 +859,10 @@ with the same weak supervision are therefore not justified.
 
 The next gate tests representation separately from reinforcement learning. It
 evaluates all 16 candidates in 8,000 pools, trains the proposal actor directly
-on exact within-pool gains, and evaluates it on a held-out 20% pool split:
+on exact within-pool gains, and evaluates it on held-out complete annealing
+trajectories. The collection uses ten independently restarted chains; entire
+chains, rather than adjacent pools from the same chain, are assigned to either
+training or validation:
 
 ```bash
 bash scripts/run_kaggle_oracle_supervised_ranker.sh

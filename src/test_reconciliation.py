@@ -178,6 +178,7 @@ class TimingTests(unittest.TestCase):
                 self.assertEqual(dataset["global_states"].shape, (4, 8))
                 self.assertEqual(dataset["candidate_features"].shape, (4, 4, 9))
                 self.assertEqual(dataset["true_gains"].shape, (4, 4))
+                self.assertEqual(dataset["chain_ids"].shape, (4,))
             loaded_cost = rm.run_ppo_asa(
                 environments[1], n_iter=16, candidate_count=4,
                 rollout_steps=8, device="cpu", update_epochs=1,
@@ -227,8 +228,10 @@ class TimingTests(unittest.TestCase):
         features = rng.normal(size=(pools, candidates, 9)).astype(np.float32)
         gains = (features[:, :, 0].astype(np.float64) -
                  0.4 * features[:, :, 3].astype(np.float64))
+        group_ids = np.repeat(np.arange(12), pools // 12)
         result = oracle_ranker.train_ranker(
-            global_states, features, gains, hidden_dim=32, epochs=100,
+            global_states, features, gains, group_ids=group_ids,
+            hidden_dim=32, epochs=100,
             batch_size=64, learning_rate=2e-3, weight_decay=0.0,
             target_temperature=0.4, validation_fraction=0.25,
             patience=20, seed=29, device="cpu")
@@ -239,6 +242,8 @@ class TimingTests(unittest.TestCase):
             validation["top1_oracle_match_fraction_on_informative_pools"],
             validation[
                 "random_expected_oracle_match_fraction_on_informative_pools"])
+        self.assertTrue(set(result["training_groups"]).isdisjoint(
+            set(result["validation_groups"])))
 
     def test_focused_neighbor_always_moves_an_anchor_task(self):
         placement = np.arange(8, dtype=np.int32)

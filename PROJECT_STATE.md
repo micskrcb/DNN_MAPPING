@@ -117,7 +117,7 @@ The planned H100 12 GB slice was unavailable. Kaggle completed the original diag
 10. [Implemented] Record the independent audit and correct its legacy-epoch and KL qualifications. Add direct oracle headroom, feature-informativeness, planted-signal, and policy-gradient diagnostics.
 11. [Complete] The staged diagnostic passed both planted-signal tests but the real split pilot stayed at uniform entropy after 300,032 evaluations. Its five-seed holdout beat uniform twice and tied three times; the mean interval included zero.
 12. [Complete] The exact oracle audit found useful best-of-16 headroom, while the current proxy matched the best candidate only 4.5% of the time versus 6.25% expected from uniform choice.
-13. [Implemented] Export exact-gain candidate pools and train the same split actor with listwise supervised targets on 80% of pools, reserving complete unseen pools for validation.
+13. [Implemented] Export exact-gain candidate pools with trajectory identifiers and train the same split actor with listwise supervised targets. The Kaggle gate collects ten independently restarted chains and reserves complete chains for validation so adjacent annealing states cannot cross the train/validation boundary.
 14. Run `scripts/run_kaggle_oracle_supervised_ranker.sh`. Failed held-out ranking closes the current features; a pass automatically triggers frozen and PPO-fine-tuned five-seed optimizer holdouts.
 15. Do not scale unchanged AlexNet-FC masked PPO; its 3,000-placement run tied the frozen control and lost to ASA.
 16. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.

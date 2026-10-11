@@ -70,7 +70,6 @@ common=(
   --sensitivity_trials 64 --seed 0
   --asa_calibration_trials 32 --asa_adapt_window 100
   --ppo_asa_candidates 16 --ppo_asa_focus_fraction 0.5
-  --ppo_asa_restart_interval 4100
   --ppo_asa_rollout_steps 1000
   --ppo_asa_update_style reference_separate
   --ppo_hidden_dim 128
@@ -80,6 +79,7 @@ echo "Stage S0: collecting exact gains for 8,000 candidate pools."
 CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 \
   python src/run_multi_chip.py --algo ppo_asa "${common[@]}" \
     --iters 8032 --ppo_asa_disable_learning \
+    --ppo_asa_restart_interval 832 \
     --ppo_asa_oracle_pools 8000 --ppo_asa_oracle_stride 1 \
     --ppo_asa_oracle_diagnostics "${output_dir}/oracle-summary.json" \
     --ppo_asa_oracle_dataset "${output_dir}/oracle-dataset.npz" \
@@ -129,6 +129,7 @@ echo "Stage S3: conservative PPO fine-tuning from the supervised actor."
 CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 \
   python src/run_multi_chip.py --algo ppo_asa "${common[@]}" \
     --iters 200032 --load_checkpoint "${output_dir}/oracle-supervised.pt" \
+    --ppo_asa_restart_interval 4100 \
     --ppo_asa_finetune_loaded --ppo_asa_reward_mode proposed_delta \
     --ppo_learning_rate 5e-5 --ppo_asa_weight_decay 1e-4 \
     --ppo_update_epochs 4 --ppo_minibatch_size 1024 \

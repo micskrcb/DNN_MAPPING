@@ -1,10 +1,10 @@
 """Train and evaluate a PPO-ASA candidate scorer from exact oracle costs.
 
-The split is by complete candidate pool, so no candidate from a validation
-state appears in training.  Targets are listwise distributions derived from
-within-pool standardized exact gains.  This stage diagnoses whether the actor
-features can represent useful proposal rankings before another expensive RL
-run is attempted.
+The split is by complete, independently restarted annealing chains.  No pool
+from a validation trajectory appears in training.  Targets are listwise
+distributions derived from within-pool standardized exact gains.  This stage
+diagnoses whether the actor features can represent useful proposal rankings
+before another expensive RL run is attempted.
 """
 
 import argparse
@@ -76,6 +76,7 @@ def ranking_metrics(logits, gains):
 
 
 def train_ranker(global_states, candidate_features, true_gains, *,
+                 group_ids=None,
                  hidden_dim=128, epochs=200, batch_size=256,
                  learning_rate=3e-4, weight_decay=1e-4,
                  target_temperature=0.5, validation_fraction=0.2,
@@ -92,10 +93,24 @@ def train_ranker(global_states, candidate_features, true_gains, *,
     if torch_device.type == "cuda":
         torch.cuda.manual_seed_all(seed)
 
-    permutation = rng.permutation(len(global_states))
-    validation_size = max(1, round(len(permutation) * validation_fraction))
-    validation_indices = permutation[:validation_size]
-    training_indices = permutation[validation_size:]
+    if group_ids is None:
+        group_ids = np.arange(len(global_states), dtype=np.int64)
+    group_ids = np.asarray(group_ids)
+    if group_ids.shape != (len(global_states),):
+        raise ValueError("group_ids must contain one id per candidate pool")
+    unique_groups = np.unique(group_ids)
+    if len(unique_groups) < 2:
+        raise ValueError(
+            "oracle ranking needs at least two independent trajectory groups")
+    group_permutation = rng.permutation(unique_groups)
+    validation_group_count = min(
+        len(unique_groups) - 1,
+        max(1, round(len(unique_groups) * validation_fraction)))
+    validation_groups = group_permutation[:validation_group_count]
+    training_groups = group_permutation[validation_group_count:]
+    validation_indices = np.flatnonzero(
+        np.isin(group_ids, validation_groups))
+    training_indices = np.flatnonzero(np.isin(group_ids, training_groups))
     targets, informative = soft_targets(true_gains, target_temperature)
     informative_training = training_indices[informative[training_indices]]
     if len(informative_training) == 0:
@@ -170,6 +185,8 @@ def train_ranker(global_states, candidate_features, true_gains, *,
         "actor": actor,
         "training_indices": training_indices,
         "validation_indices": validation_indices,
+        "training_groups": training_groups,
+        "validation_groups": validation_groups,
         "training_metrics": ranking_metrics(
             all_logits[training_indices], true_gains[training_indices]),
         "validation_metrics": ranking_metrics(
@@ -204,9 +221,14 @@ def main():
         global_states = dataset["global_states"]
         candidate_features = dataset["candidate_features"]
         true_gains = dataset["true_gains"]
+        if "chain_ids" not in dataset:
+            raise ValueError(
+                "oracle dataset lacks chain_ids; regenerate it with a "
+                "trajectory-safe exporter")
+        chain_ids = dataset["chain_ids"]
         candidate_count = int(dataset["candidate_count"])
     result = train_ranker(
-        global_states, candidate_features, true_gains,
+        global_states, candidate_features, true_gains, group_ids=chain_ids,
         hidden_dim=args.hidden_dim, epochs=args.epochs,
         batch_size=args.batch_size, learning_rate=args.learning_rate,
         weight_decay=args.weight_decay,
@@ -232,6 +254,11 @@ def main():
         "candidate_count": candidate_count,
         "training_pools": int(len(result["training_indices"])),
         "validation_pools": int(len(result["validation_indices"])),
+        "dataset_groups": int(len(np.unique(chain_ids))),
+        "training_groups": [
+            int(value) for value in result["training_groups"]],
+        "validation_groups": [
+            int(value) for value in result["validation_groups"]],
         "informative_training_pools": result["informative_training_pools"],
         "epochs_completed": result["epochs_completed"],
         "best_validation_loss": result["best_validation_loss"],
