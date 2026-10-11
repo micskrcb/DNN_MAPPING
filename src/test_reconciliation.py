@@ -245,6 +245,26 @@ class TimingTests(unittest.TestCase):
         self.assertTrue(set(result["training_groups"]).isdisjoint(
             set(result["validation_groups"])))
 
+    @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
+    def test_chain_metrics_use_trajectories_as_independent_units(self):
+        import train_oracle_candidate_ranker as oracle_ranker
+        groups, pools, candidates = 10, 50, 4
+        raw = np.zeros((groups * pools, candidates), dtype=np.float64)
+        raw[:, 0] = 2.0
+        raw[:, 1] = 1.0
+        logits = raw.copy()
+        group_ids = np.repeat(np.arange(groups), pools)
+        progress = np.tile(np.linspace(0, 1, pools), groups)
+        metrics = oracle_ranker.chain_bootstrap_metrics(
+            logits, raw, np.maximum(raw, 0), group_ids,
+            progress=progress, minimum_progress=0.5,
+            n_bootstrap=200, seed=31)
+        self.assertEqual(metrics["groups"], groups)
+        self.assertEqual(metrics["positive_capture_groups"], groups)
+        self.assertAlmostEqual(metrics["mean_capture_fraction"], 1.0)
+        self.assertGreater(
+            metrics["selected_to_candidate_improvement_ratio"], 1.5)
+
     def test_focused_neighbor_always_moves_an_anchor_task(self):
         placement = np.arange(8, dtype=np.int32)
         free_pool = rm._FreeCorePool(placement, placement)

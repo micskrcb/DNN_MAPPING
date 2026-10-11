@@ -876,6 +876,24 @@ diagnostic data-generation costs and remain separate from optimizer proposal
 budgets. Oracle supervision is a project extension and is not claimed by
 either source paper.
 
+The trajectory-held-out signed-gain gate failed, so its earlier random-split
+signal must not be reported as confirmed. A post-hoc leave-one-chain-out
+analysis found that ranking only positive improvement opportunity
+`max(exact_gain, 0)` may transfer better than ranking signed gains. The fresh,
+prespecified confirmation is:
+
+```bash
+bash scripts/run_kaggle_improvement_ranker_gate.sh
+```
+
+This run collects 20 independent full-length chains, trains on ten, and tests
+on ten unseen chains. It reports both deterministic argmax and sampled-policy
+capture with chain-level bootstrap intervals. Passing this representation gate
+would justify a separate frozen-optimizer holdout; it is not itself evidence
+that RL+ASA improves final placement cost. Exact oracle evaluations are
+diagnostic data-generation work and are counted separately from optimizer
+proposals.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

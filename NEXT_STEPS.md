@@ -79,6 +79,10 @@ Current paper targets:
 32. [x] Close the current supervised candidate scorer. The earlier 0.18% five-seed ASA advantage remains a leakage-prone, statistically uncertain provisional result and is superseded by the failed chain-held-out representation gate.
 33. Run fixed-workload RS, SA, and ASA calibration near the paper's one-million-placement budget and compare normalized ratios, evaluator sensitivity, and wall-clock cost before changing the learning architecture.
 34. If RL+ASA remains the method goal after calibration, redesign what RL controls (for example, selecting among distinct ASA move operators or using a topology-aware representation), and require a chain-held-out supervised or planted-signal gate before any long PPO training.
+35. [x] Reproduce the post-hoc leave-one-chain-out target analysis on the trajectory-safe dataset. Signed gain transferred negatively, while improvement-only utility showed 14.7% mean capture overall and 10.0% late-chain capture; treat this only as a hypothesis because the target was selected after seeing the data.
+36. [x] Add an explicit improvement-only target, complete-chain bootstrap statistics, sampled-policy capture, and a strict gate while preserving the historical signed-gain behavior.
+37. Run `scripts/run_kaggle_improvement_ranker_gate.sh` on fresh data. It collects 20 complete 4,100-proposal chains at stride five, trains on ten chains, and evaluates ten unseen chains against the frozen late-chain thresholds recorded in its manifest.
+38. Only if that fresh gate passes, run a separately seeded frozen-optimizer holdout. Test deterministic argmax or a prespecified sharpened policy as well as sampling, because the exploratory softmax policy captured substantially less headroom than argmax.
 
 ## Gate 4: improvements after reproduction
 

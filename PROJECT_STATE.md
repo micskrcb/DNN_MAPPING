@@ -286,6 +286,29 @@ additional training of the current scorer. The trajectory-safe archive
 SHA-256 is
 `cb70a2b4361ff51f5483e5bccf8912d1d3bb05e32086ccbea3295d15910e60b4`.
 
+An exploratory leave-one-chain-out analysis of that same ten-chain dataset
+identified a narrower hypothesis that the signed-gain target had obscured.
+The signed target transferred negatively overall: mean argmax oracle capture
+was -1.6%, with a chain-bootstrap 95% interval from -5.6% to 2.0%. Training
+the same linear listwise analysis on improvement-only utility
+`max(exact_gain, 0)` instead produced 14.7% mean capture, with an interval
+from 12.0% to 17.2%, and positive capture on all ten held-out chains. In the
+late 40% of each chain it retained 10.0% mean capture, with an interval from
+6.2% to 13.2% and nine of ten chains positive. The selected candidate improved
+11.2% of the time versus a 6.0% candidate base rate.
+
+This is a post-hoc target analysis on the existing data, not an optimizer win
+or a confirmatory learning result. It also exposed a deployment gap: argmax
+selection was useful, while softmax sampling captured only 3.4% of headroom
+overall and 2.7% late. The dataset contained only 832-step chains, so it does
+not establish transfer through a complete 4,100-proposal run. The next
+revision therefore adds an explicit `improvement_only` training target,
+chain-level bootstrap reporting, and a prespecified fresh-data gate using 20
+complete 4,100-proposal chains. In this project, "improvement-only" means the
+clipped utility `max(gain, 0)`; it is not called accepted gain because finite-
+temperature simulated annealing can accept neutral and worsening proposals.
+The historical signed-gain mode remains available for reproducibility.
+
 A second, controlled proposal neighborhood is now available through
 `--ppo_asa_focus_bottleneck`. Every candidate is anchored on a task in the
 current maximum-latency pipeline stage, and the anchor is guaranteed to move.

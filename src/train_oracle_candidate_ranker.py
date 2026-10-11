@@ -75,8 +75,99 @@ def ranking_metrics(logits, gains):
     }
 
 
+def chain_bootstrap_metrics(logits, raw_gains, scored_gains, group_ids, *,
+                            progress=None, minimum_progress=0.0,
+                            n_bootstrap=5000, seed=0):
+    """Measure ranking transfer with complete trajectories as the sample unit."""
+    logits = np.asarray(logits, dtype=np.float64)
+    raw_gains = np.asarray(raw_gains, dtype=np.float64)
+    scored_gains = np.asarray(scored_gains, dtype=np.float64)
+    group_ids = np.asarray(group_ids)
+    if progress is None:
+        progress = np.zeros(len(group_ids), dtype=np.float64)
+    progress = np.asarray(progress, dtype=np.float64)
+    mask = progress >= minimum_progress
+    shifted = logits - logits.max(axis=1, keepdims=True)
+    probabilities = np.exp(shifted)
+    probabilities /= probabilities.sum(axis=1, keepdims=True)
+    rows = []
+    for group in np.unique(group_ids[mask]):
+        selected_rows = mask & (group_ids == group)
+        if selected_rows.sum() < 20:
+            continue
+        scored = scored_gains[selected_rows]
+        raw = raw_gains[selected_rows]
+        group_logits = logits[selected_rows]
+        group_probabilities = probabilities[selected_rows]
+        selected = group_logits.argmax(axis=1)
+        index = np.arange(len(selected))
+        uniform = scored.mean(axis=1)
+        oracle_advantage = scored.max(axis=1) - uniform
+        oracle_total = float(oracle_advantage.sum())
+        if oracle_total <= np.finfo(np.float64).eps:
+            continue
+        selected_advantage = scored[index, selected] - uniform
+        sampled_advantage = (
+            (group_probabilities * scored).sum(axis=1) - uniform)
+        tolerance = np.maximum(
+            np.abs(raw).max(axis=1) * 1e-10,
+            np.finfo(np.float64).eps * 8)
+        rows.append({
+            "group": int(group),
+            "pools": int(len(selected)),
+            "capture_fraction": float(
+                selected_advantage.sum() / oracle_total),
+            "sampled_capture_fraction": float(
+                sampled_advantage.sum() / oracle_total),
+            "mean_selected_advantage_seconds": float(
+                selected_advantage.mean()),
+            "selected_improving_fraction": float(np.mean(
+                raw[index, selected] > tolerance)),
+            "candidate_improving_fraction": float(np.mean(
+                raw > tolerance[:, None])),
+        })
+    if not rows:
+        raise ValueError("no eligible trajectory groups for chain metrics")
+    captures = np.asarray(
+        [row["capture_fraction"] for row in rows], dtype=np.float64)
+    sampled = np.asarray(
+        [row["sampled_capture_fraction"] for row in rows], dtype=np.float64)
+    selected_rates = np.asarray(
+        [row["selected_improving_fraction"] for row in rows],
+        dtype=np.float64)
+    base_rates = np.asarray(
+        [row["candidate_improving_fraction"] for row in rows],
+        dtype=np.float64)
+    rng = np.random.default_rng(seed)
+    choices = rng.integers(
+        0, len(rows), size=(n_bootstrap, len(rows)))
+    bootstrap_capture = captures[choices].mean(axis=1)
+    bootstrap_sampled = sampled[choices].mean(axis=1)
+    mean_base = float(base_rates.mean())
+    return {
+        "minimum_progress": float(minimum_progress),
+        "groups": int(len(rows)),
+        "positive_capture_groups": int(np.sum(captures > 0)),
+        "mean_capture_fraction": float(captures.mean()),
+        "capture_chain_bootstrap_95_percent_interval": [
+            float(value) for value in np.quantile(
+                bootstrap_capture, [0.025, 0.975])],
+        "mean_sampled_capture_fraction": float(sampled.mean()),
+        "sampled_capture_chain_bootstrap_95_percent_interval": [
+            float(value) for value in np.quantile(
+                bootstrap_sampled, [0.025, 0.975])],
+        "mean_selected_improving_fraction": float(selected_rates.mean()),
+        "mean_candidate_improving_fraction": mean_base,
+        "selected_to_candidate_improvement_ratio": (
+            float(selected_rates.mean() / mean_base)
+            if mean_base > 0 else None),
+        "per_group": rows,
+    }
+
+
 def train_ranker(global_states, candidate_features, true_gains, *,
                  group_ids=None,
+                 target_mode="signed_gain",
                  hidden_dim=128, epochs=200, batch_size=256,
                  learning_rate=3e-4, weight_decay=1e-4,
                  target_temperature=0.5, validation_fraction=0.2,
@@ -87,6 +178,8 @@ def train_ranker(global_states, candidate_features, true_gains, *,
         raise ValueError("validation_fraction must be in (0, 1)")
     if min(hidden_dim, epochs, batch_size, patience) <= 0:
         raise ValueError("training sizes must be positive")
+    if target_mode not in {"signed_gain", "improvement_only"}:
+        raise ValueError("unknown oracle ranking target mode")
     torch_device = torch.device(device)
     rng = np.random.default_rng(seed)
     torch.manual_seed(seed)
@@ -111,7 +204,9 @@ def train_ranker(global_states, candidate_features, true_gains, *,
     validation_indices = np.flatnonzero(
         np.isin(group_ids, validation_groups))
     training_indices = np.flatnonzero(np.isin(group_ids, training_groups))
-    targets, informative = soft_targets(true_gains, target_temperature)
+    scored_gains = (true_gains if target_mode == "signed_gain" else
+                    np.maximum(true_gains, 0.0))
+    targets, informative = soft_targets(scored_gains, target_temperature)
     informative_training = training_indices[informative[training_indices]]
     if len(informative_training) == 0:
         raise ValueError("oracle dataset has no informative training pools")
@@ -187,10 +282,13 @@ def train_ranker(global_states, candidate_features, true_gains, *,
         "validation_indices": validation_indices,
         "training_groups": training_groups,
         "validation_groups": validation_groups,
+        "target_mode": target_mode,
+        "all_logits": all_logits,
+        "scored_gains": scored_gains,
         "training_metrics": ranking_metrics(
-            all_logits[training_indices], true_gains[training_indices]),
+            all_logits[training_indices], scored_gains[training_indices]),
         "validation_metrics": ranking_metrics(
-            all_logits[validation_indices], true_gains[validation_indices]),
+            all_logits[validation_indices], scored_gains[validation_indices]),
         "history": history,
         "best_validation_loss": best_validation_loss,
         "epochs_completed": len(history),
@@ -210,12 +308,22 @@ def main():
     parser.add_argument("--learning-rate", type=float, default=3e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--target-temperature", type=float, default=0.5)
+    parser.add_argument(
+        "--target-mode", choices=["signed_gain", "improvement_only"],
+        default="signed_gain",
+        help="Rank signed exact gain or only positive improvement opportunity")
     parser.add_argument("--validation-fraction", type=float, default=0.2)
     parser.add_argument("--patience", type=int, default=40)
+    parser.add_argument(
+        "--strict-chain-gate", action="store_true",
+        help="Require the prespecified full-chain improvement-only gate")
+    parser.add_argument("--bootstrap-samples", type=int, default=5000)
     parser.add_argument("--seed", type=int, default=20261011)
     args = parser.parse_args()
     if args.device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA requested but unavailable")
+    if args.bootstrap_samples <= 0:
+        parser.error("--bootstrap-samples must be positive")
 
     with np.load(args.dataset, allow_pickle=False) as dataset:
         global_states = dataset["global_states"]
@@ -229,6 +337,7 @@ def main():
         candidate_count = int(dataset["candidate_count"])
     result = train_ranker(
         global_states, candidate_features, true_gains, group_ids=chain_ids,
+        target_mode=args.target_mode,
         hidden_dim=args.hidden_dim, epochs=args.epochs,
         batch_size=args.batch_size, learning_rate=args.learning_rate,
         weight_decay=args.weight_decay,
@@ -237,19 +346,61 @@ def main():
         patience=args.patience, seed=args.seed, device=args.device)
     validation = result["validation_metrics"]
     interval = validation["selected_advantage_95_percent_interval_seconds"]
-    passed = bool(
-        interval[0] > 0 and
-        validation["oracle_advantage_capture_fraction"] is not None and
-        validation["oracle_advantage_capture_fraction"] > 0 and
-        validation["top1_oracle_match_fraction_on_informative_pools"] >
-        validation["random_expected_oracle_match_fraction_on_informative_pools"])
+    validation_indices = result["validation_indices"]
+    chain_all = chain_bootstrap_metrics(
+        result["all_logits"][validation_indices],
+        true_gains[validation_indices],
+        result["scored_gains"][validation_indices],
+        chain_ids[validation_indices],
+        progress=global_states[validation_indices, 0],
+        minimum_progress=0.0, n_bootstrap=args.bootstrap_samples,
+        seed=args.seed + 1)
+    chain_late = chain_bootstrap_metrics(
+        result["all_logits"][validation_indices],
+        true_gains[validation_indices],
+        result["scored_gains"][validation_indices],
+        chain_ids[validation_indices],
+        progress=global_states[validation_indices, 0],
+        minimum_progress=0.5, n_bootstrap=args.bootstrap_samples,
+        seed=args.seed + 2)
+    if args.strict_chain_gate:
+        if args.target_mode != "improvement_only":
+            raise ValueError(
+                "the strict chain gate requires --target-mode improvement_only")
+        lower_capture = chain_late[
+            "capture_chain_bootstrap_95_percent_interval"][0]
+        ratio = chain_late["selected_to_candidate_improvement_ratio"]
+        passed = bool(
+            chain_late["groups"] >= 10 and
+            chain_late["mean_capture_fraction"] >= 0.10 and
+            lower_capture >= 0.05 and
+            ratio is not None and ratio >= 1.5 and
+            chain_late["positive_capture_groups"] >= 8 and
+            chain_late["mean_sampled_capture_fraction"] >= 0.05)
+        criterion = (
+            "on at least ten held-out full trajectories, late-half argmax "
+            "capture >=10% with chain-bootstrap lower bound >=5%, selected "
+            "improvement rate >=1.5x the candidate base rate, at least eight "
+            "positive chains, and sampled-policy capture >=5%")
+    else:
+        passed = bool(
+            interval[0] > 0 and
+            validation["oracle_advantage_capture_fraction"] is not None and
+            validation["oracle_advantage_capture_fraction"] > 0 and
+            validation["top1_oracle_match_fraction_on_informative_pools"] >
+            validation[
+                "random_expected_oracle_match_fraction_on_informative_pools"])
+        criterion = (
+            "held-out selected advantage has a positive pool-level 95% "
+            "interval, captures positive oracle headroom, and beats random "
+            "top-1 matching")
     report = {
         "verdict": ("SUPERVISED_RANKING_SIGNAL" if passed
                     else "NO_SUPERVISED_RANKING_SIGNAL"),
         "pass": passed,
-        "criterion": (
-            "held-out selected advantage has a positive 95% interval, captures "
-            "positive oracle headroom, and beats random top-1 matching"),
+        "criterion": criterion,
+        "target_mode": args.target_mode,
+        "strict_chain_gate": args.strict_chain_gate,
         "dataset_pools": int(len(global_states)),
         "candidate_count": candidate_count,
         "training_pools": int(len(result["training_indices"])),
@@ -264,6 +415,10 @@ def main():
         "best_validation_loss": result["best_validation_loss"],
         "training": result["training_metrics"],
         "validation": validation,
+        "validation_chain_metrics": {
+            "all": chain_all,
+            "late_half": chain_late,
+        },
         "history": result["history"],
     }
 
@@ -287,6 +442,7 @@ def main():
         "independent_chains": None,
         "update_style": "reference_separate",
         "reward_mode": "oracle_supervised",
+        "supervised_target_mode": args.target_mode,
         "actor": result["actor"].cpu().state_dict(),
         "critic": critic.state_dict(),
         "supervised_report": report,
