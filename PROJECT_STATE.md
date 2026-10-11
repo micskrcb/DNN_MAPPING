@@ -24,6 +24,7 @@ The maintained development branch is `cpu` in `micskrcb/DNN_MAPPING`; it is a de
 - Experimental masked categorical PPO with exact legal-action masking, clipped policy updates, deterministic diagnostics, checkpoints, and a matched frozen-policy control.
 - Experimental PPO-guided ASA with legal candidate proposals, a permutation-equivariant candidate scorer, PPO updates, fixed Metropolis acceptance, the existing adaptive temperature controller, and an exactly uniform frozen-policy control.
 - A reference-compatible PPO-ASA update with disjoint actor/critic networks and optimizers, reward-to-go critic targets, GAE-style advantages, source attribution, and a matched 10-seed decision runner.
+- A staged PPO-ASA diagnosis with true best-of-16 candidate evaluation, planted-signal trained/control tests, separate proposed/realized rewards, policy-head diagnostics, and a bounded split-policy pilot that must pass before the full run.
 - Explicit placement accounting: DDPG epochs × placements/epoch, separate reward-normalizer trials, and independently configurable RS/SA budgets.
 - Five-seed orchestration, periodic JSONL diagnostics, checkpoints, JSON reports, BS-normalized summaries, hop counts, link-load summaries, and a placement-sensitivity preflight.
 - One command that orchestrates separate CONV and FC paper-mode suites.
@@ -113,12 +114,13 @@ The planned H100 12 GB slice was unavailable. Kaggle completed the original diag
 7. [Complete] The deployment-matched checkpoint received 61 PPO updates and showed no holdout signal: 23.51635 microseconds trained versus 23.51504 uniform and 23.50518 ASA. Its policy remained nearly uniform, so the checkpoint is rejected but training was insufficient to reject the architecture against the closest 1,000-epoch paper.
 8. [Complete] The sufficient-scale protocol ran 1.25 million proposals, exactly 1,250 PPO updates, and 10 frozen holdout seeds. Trained PPO averaged 23.50258 microseconds versus 23.50722 uniform and 23.48939 ASA. It won only three uniform pairs and four ASA pairs; final entropy was effectively uniform.
 9. [Complete] Audit the official RL-Based-SA training source. It uses disjoint actor and critic networks and optimizers; the rejected scorer shared its feature encoders, allowing value gradients to alter the policy representation.
-10. Run the final implementation-isolation gate with `scripts/run_kaggle_ppo_asa_reference_split.sh`: the same 1.25-million-proposal budget and 10-seed holdout, using the cited split implementation and reward-to-go critic targets.
-11. If that gate fails, close candidate-set PPO-ASA and retain ASA for AlexNet-FC. Change state/action representation or environment diversity before any further PPO compute.
-12. Do not scale unchanged AlexNet-FC masked PPO; its 3,000-placement run tied the frozen control and lost to ASA.
-13. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.
-14. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
-15. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
+10. [Implemented] Record the independent audit and correct its legacy-epoch and KL qualifications. Add direct oracle headroom, feature-informativeness, planted-signal, and policy-gradient diagnostics.
+11. Run `scripts/run_kaggle_ppo_asa_diagnostic_gate.sh`. It gates a bounded 300-update real-reward split pilot on a successful planted-signal test.
+12. Run the 1.25-million-proposal split experiment only if the bounded gate shows positive within-pool proposal quality. Otherwise isolate proposed-delta reward or redesign features according to the recorded decision tree.
+13. Do not scale unchanged AlexNet-FC masked PPO; its 3,000-placement run tied the frozen control and lost to ASA.
+14. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.
+15. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
+16. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
 
 The paper-faithful mode remains frozen separately from guided DDPG and future masked-policy experiments.
 

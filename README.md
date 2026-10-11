@@ -827,6 +827,26 @@ The runner archives partial output on failure. The exact source comparison,
 compatibility boundary, and attribution are in `PPO_REFERENCE_ADAPTER.md` and
 `THIRD_PARTY_NOTICES.md`.
 
+An independent audit subsequently identified two cheaper questions that must
+be answered before spending 7--10 hours on that full run: whether the generated
+16-candidate pools contain true best-of-pool headroom, and whether split PPO can
+learn a deliberately planted signal already present in its features. Run the
+staged diagnostic gate first:
+
+```bash
+bash scripts/run_kaggle_ppo_asa_diagnostic_gate.sh
+```
+
+It performs a 5,000-pool oracle audit, 200-update planted-signal trained/control
+tests for both shared and split PPO, and conditionally a 300-update real-reward
+split pilot plus five-seed holdout. The real pilot is automatically skipped if
+split PPO fails the planted-signal mechanics gate. Oracle calls are reported
+separately and do not masquerade as optimization proposals. See
+`CLAUDE_AUDIT_RESPONSE.md` for the accepted findings, corrections, new
+diagnostics, and decision rules. Do not run the full
+`run_kaggle_ppo_asa_reference_split.sh` protocol until this diagnostic gate
+shows a positive within-pool proposal-quality signal.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

@@ -2496,6 +2496,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 value_coefficient: float = 0.5, max_grad_norm: float = 0.5,
                 hidden_dim: int = 128, disable_learning: bool = False,
                 update_style: str = "shared_gae",
+                reward_mode: str = "realized",
                 focus_bottleneck: bool = False,
                 focus_fraction: float = 0.0, restart_interval: int = 0,
                 update_at_chain_end: bool = False,
@@ -2507,7 +2508,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 diagnostics_path: str = None, metadata: dict = None,
                 incremental: bool = True, save_checkpoint: str = None,
                 load_checkpoint: str = None,
-                checkpoint_every: int = 1000) -> float:
+                checkpoint_every: int = 1000,
+                oracle_diagnostics_path: str = None,
+                oracle_pools: int = 0, oracle_stride: int = 1) -> float:
     """PPO-guided adaptive SA with fixed acceptance and temperature logic.
 
     This follows the verified structure of Qiu and Liang's RL-Based-SA: PPO
@@ -2534,6 +2537,13 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("PPO-ASA focus fraction must be in [0, 1]")
     if update_style not in {"shared_gae", "reference_separate"}:
         raise ValueError("unknown PPO-ASA update style")
+    if reward_mode not in {"realized", "proposed_delta", "planted_proxy"}:
+        raise ValueError("unknown PPO-ASA reward mode")
+    if oracle_pools < 0 or oracle_stride <= 0:
+        raise ValueError("invalid PPO-ASA oracle diagnostic budget")
+    if oracle_pools and not oracle_diagnostics_path:
+        raise ValueError(
+            "oracle diagnostics path is required when oracle pools are enabled")
     if restart_interval < 0:
         raise ValueError("PPO-ASA restart interval cannot be negative")
     if focus_bottleneck:
@@ -2589,6 +2599,41 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         if parent:
             os.makedirs(parent, exist_ok=True)
         diagnostics = open(diagnostics_path, "w", encoding="utf-8")
+
+    oracle_feature_names = [
+        "changed_fraction", "is_relocation", "pressure_mean",
+        "pressure_max", "motion", "chip_change",
+        "bottleneck_fraction", "proxy_gain", "affected_volume",
+    ]
+    oracle_feature_rows = []
+    oracle_gain_rows = []
+    oracle_pool_rows = []
+    oracle_candidate_evaluations = 0
+
+    def rank_values(values):
+        """Average ranks for a one-dimensional array, including ties."""
+        values = np.asarray(values, dtype=np.float64)
+        order = np.argsort(values, kind="mergesort")
+        ranks = np.empty(len(values), dtype=np.float64)
+        start = 0
+        while start < len(values):
+            stop = start + 1
+            while (stop < len(values) and
+                   values[order[stop]] == values[order[start]]):
+                stop += 1
+            ranks[order[start:stop]] = 0.5 * (start + stop - 1)
+            start = stop
+        return ranks
+
+    def safe_correlation(left, right, rank=False):
+        left = np.asarray(left, dtype=np.float64)
+        right = np.asarray(right, dtype=np.float64)
+        if rank:
+            left, right = rank_values(left), rank_values(right)
+        if (len(left) < 2 or np.std(left) <= np.finfo(float).eps or
+                np.std(right) <= np.finfo(float).eps):
+            return None
+        return float(np.corrcoef(left, right)[0, 1])
 
     edge_sources, edge_destinations = np.nonzero(env.task_graph)
     edge_sources = edge_sources.astype(np.int64, copy=False)
@@ -2692,6 +2737,26 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         env.place(candidate)
         return (evaluator.candidate_cost(changed) if evaluator is not None
                 else float(env.evaluate()))
+
+    def evaluate_oracle_pool(candidates, changed_sets):
+        """Evaluate every candidate and restore the current placement.
+
+        Pending incremental updates are retained so the selected candidate can
+        reuse its exact cost without an extra objective evaluation.
+        """
+        costs, pending_updates = [], []
+        for candidate, changed in zip(candidates, changed_sets):
+            env.place(candidate)
+            if evaluator is not None:
+                cost = evaluator.candidate_cost(changed)
+                pending_updates.append(dict(evaluator.pending or {}))
+                evaluator.reject()
+            else:
+                cost = float(env.evaluate())
+                pending_updates.append(None)
+            costs.append(cost)
+            env.place(placement)
+        return np.asarray(costs, dtype=np.float64), pending_updates
 
     accepted = improving = reheats = neutral_proposals = evaluations = 0
     chain_count = initialization_evaluations = 1
@@ -2918,17 +2983,40 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                     advantages_tensor[indices]).mean()
                 value_loss = F.mse_loss(new_values, returns_tensor[indices])
                 entropy = distribution.entropy().mean()
+                actor_objective = (
+                    policy_loss - entropy_coefficient * entropy)
+                critic_objective = value_coefficient * value_loss
+                policy_module = (actor if update_style == "reference_separate"
+                                 else model)
+                value_module = (critic if update_style == "reference_separate"
+                                else model)
+                policy_head_gradients = torch.autograd.grad(
+                    actor_objective, tuple(policy_module.score_head.parameters()),
+                    retain_graph=True, allow_unused=True)
+                value_head_gradients = torch.autograd.grad(
+                    critic_objective, tuple(value_module.value_head.parameters()),
+                    retain_graph=True, allow_unused=True)
+
+                def diagnostic_gradient_norm(gradients):
+                    terms = [gradient.detach().pow(2).sum()
+                             for gradient in gradients
+                             if gradient is not None]
+                    if not terms:
+                        return 0.0
+                    return float(torch.sqrt(torch.stack(terms).sum()).cpu())
+
+                policy_head_gradient_norm = diagnostic_gradient_norm(
+                    policy_head_gradients)
+                value_head_gradient_norm = diagnostic_gradient_norm(
+                    value_head_gradients)
                 if update_style == "reference_separate":
-                    actor_loss = (policy_loss -
-                                  entropy_coefficient * entropy)
                     actor_optimizer.zero_grad()
-                    actor_loss.backward()
+                    actor_objective.backward()
                     actor_gradient_norm = torch.nn.utils.clip_grad_norm_(
                         actor.parameters(), max_grad_norm)
                     actor_optimizer.step()
-                    critic_loss = value_coefficient * value_loss
                     critic_optimizer.zero_grad()
-                    critic_loss.backward()
+                    critic_objective.backward()
                     critic_gradient_norm = torch.nn.utils.clip_grad_norm_(
                         critic.parameters(), max_grad_norm)
                     critic_optimizer.step()
@@ -2936,8 +3024,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                         float(actor_gradient_norm),
                         float(critic_gradient_norm))
                 else:
-                    loss = (policy_loss + value_coefficient * value_loss -
-                            entropy_coefficient * entropy)
+                    loss = actor_objective + critic_objective
                     optimizer.zero_grad()
                     loss.backward()
                     gradient_norm = torch.nn.utils.clip_grad_norm_(
@@ -2957,6 +3044,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                     "gradient_norm": float(gradient_norm),
                     "actor_gradient_norm": float(actor_gradient_norm),
                     "critic_gradient_norm": float(critic_gradient_norm),
+                    "policy_head_gradient_norm": policy_head_gradient_norm,
+                    "value_head_gradient_norm": value_head_gradient_norm,
+                    "score_head_weight_norm": float(
+                        policy_module.score_head.weight.detach().norm().cpu()),
                 })
         update_count += 1
         return {key: float(np.mean([entry[key] for entry in metrics]))
@@ -2965,7 +3056,18 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     stagnant = 0
     window_accepted = window_improving = window_evaluations = 0
     window_rewards = []
+    window_proposed_rewards = []
+    window_training_rewards = []
     window_selected_proxy = []
+    window_proxy_advantages = []
+    window_logit_stds = []
+    window_logit_ranges = []
+    window_feature_stds = []
+    window_uniform_action_matches = []
+    window_uniform_l1 = []
+    window_selected_true_gains = []
+    window_uniform_true_gains = []
+    window_oracle_true_gains = []
     last_delta = 0.0
     last_accepted = False
     recent_acceptance = target_acceptance
@@ -2994,19 +3096,64 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             device=torch_device).unsqueeze(0)
         with torch.no_grad():
             if update_style == "reference_separate":
-                action, log_prob, _ = actor.action(
-                    global_tensor, feature_tensor, generator=action_generator)
+                distribution = actor.distribution(
+                    global_tensor, feature_tensor)
                 value = critic(global_tensor, feature_tensor)
             else:
-                action, log_prob, _, value = model.action_and_value(
-                    global_tensor, feature_tensor, generator=action_generator)
+                distribution, value = model.distribution_and_value(
+                    global_tensor, feature_tensor)
+            probabilities = distribution.probs
+            sample = torch.rand(
+                (probabilities.shape[0], 1), device=torch_device,
+                generator=action_generator)
+            action = torch.sum(
+                sample > probabilities.cumsum(dim=-1), dim=-1).clamp(
+                    max=candidate_count - 1)
+            log_prob = distribution.log_prob(action)
+            uniform_action = torch.floor(
+                sample.squeeze(-1) * candidate_count).long().clamp(
+                    max=candidate_count - 1)
+            normalized_logits = distribution.logits
         selected = int(action.item())
         candidate = candidates[selected]
         changed = changed_sets[selected]
         relocation = relocations[selected]
         before_cost = current_cost
         previous_accepted, previous_improving = accepted, improving
-        new_cost = evaluate(candidate, changed)
+        policy_index = evaluations - calibration
+        audit_pool = (
+            len(oracle_pool_rows) < oracle_pools and
+            policy_index % oracle_stride == 0)
+        oracle_costs = oracle_pending = None
+        if audit_pool:
+            oracle_costs, oracle_pending = evaluate_oracle_pool(
+                candidates, changed_sets)
+            oracle_candidate_evaluations += candidate_count
+            true_gains = before_cost - oracle_costs
+            uniform_gain = float(np.mean(true_gains))
+            oracle_gain = float(np.max(true_gains))
+            selected_gain = float(true_gains[selected])
+            oracle_feature_rows.append(np.asarray(features, dtype=np.float64))
+            oracle_gain_rows.append(true_gains)
+            oracle_pool_rows.append({
+                "before_cost": before_cost,
+                "uniform_gain": uniform_gain,
+                "oracle_gain": oracle_gain,
+                "selected_gain": selected_gain,
+                "candidate_neutral_fraction": float(np.mean(true_gains == 0)),
+                "has_improving_candidate": bool(np.any(true_gains > 0)),
+                "proxy_argmax_matches_oracle": bool(
+                    int(np.argmax(features[:, 7])) == int(np.argmax(true_gains))),
+            })
+            env.place(candidate)
+            if evaluator is not None:
+                evaluator.pending = oracle_pending[selected]
+            new_cost = float(oracle_costs[selected])
+            window_selected_true_gains.append(selected_gain)
+            window_uniform_true_gains.append(uniform_gain)
+            window_oracle_true_gains.append(oracle_gain)
+        else:
+            new_cost = evaluate(candidate, changed)
         evaluations += 1
         chain_evaluations += 1
         delta = new_cost - before_cost
@@ -3015,10 +3162,33 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         accept = (delta <= 0 or acceptance_rng.random() <
                   math.exp(-delta / max(temperature, np.finfo(float).eps)))
         finish_proposal(candidate, new_cost, relocation, accept)
+        proposed_reward = float(np.clip(
+            (before_cost - new_cost) / reward_scale, -10.0, 10.0))
         realized_reward = float(np.clip(
             (before_cost - current_cost) / reward_scale, -10.0, 10.0))
+        if reward_mode == "planted_proxy":
+            training_reward = float(features[selected, 7])
+        elif reward_mode == "proposed_delta":
+            training_reward = proposed_reward
+        else:
+            training_reward = realized_reward
         window_rewards.append(realized_reward)
+        window_proposed_rewards.append(proposed_reward)
+        window_training_rewards.append(training_reward)
         window_selected_proxy.append(float(features[selected, 7]))
+        window_proxy_advantages.append(float(
+            features[selected, 7] - np.mean(features[:, 7])))
+        window_logit_stds.append(float(normalized_logits.std(
+            dim=-1, unbiased=False).mean().cpu()))
+        window_logit_ranges.append(float((
+            normalized_logits.max(dim=-1).values -
+            normalized_logits.min(dim=-1).values).mean().cpu()))
+        window_feature_stds.append(np.std(features, axis=0))
+        window_uniform_action_matches.append(
+            float(selected == int(uniform_action.item())))
+        window_uniform_l1.append(float(
+            (0.5 * torch.abs(
+                probabilities - 1.0 / candidate_count).sum(dim=-1).mean()).cpu()))
         window_evaluations += 1
         window_accepted += accepted - previous_accepted
         window_improving += improving - previous_improving
@@ -3087,7 +3257,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "action": selected,
             "log_prob": float(log_prob.item()),
             "value": float(value.item()),
-            "reward": realized_reward,
+            "reward": training_reward,
             "next_value": next_value,
             "done": done,
         })
@@ -3106,15 +3276,41 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 "best_cost": best_cost,
                 "reheats": reheats,
                 "mean_realized_reward": float(np.mean(window_rewards)),
+                "mean_proposed_reward": float(
+                    np.mean(window_proposed_rewards)),
+                "mean_training_reward": float(
+                    np.mean(window_training_rewards)),
                 "mean_selected_proxy_gain": float(
                     np.mean(window_selected_proxy)),
+                "mean_proxy_advantage_over_uniform": float(
+                    np.mean(window_proxy_advantages)),
+                "mean_logit_std": float(np.mean(window_logit_stds)),
+                "mean_logit_range": float(np.mean(window_logit_ranges)),
+                "mean_feature_std": np.mean(
+                    np.asarray(window_feature_stds), axis=0).tolist(),
+                "uniform_action_match_fraction": float(
+                    np.mean(window_uniform_action_matches)),
+                "mean_probability_l1_from_uniform": float(
+                    np.mean(window_uniform_l1)),
+                "mean_selected_true_gain": (
+                    float(np.mean(window_selected_true_gains))
+                    if window_selected_true_gains else None),
+                "mean_uniform_true_gain": (
+                    float(np.mean(window_uniform_true_gains))
+                    if window_uniform_true_gains else None),
+                "mean_oracle_true_gain": (
+                    float(np.mean(window_oracle_true_gains))
+                    if window_oracle_true_gains else None),
                 "learning_enabled": not disable_learning,
                 "update_count": update_count,
                 "chain": chain_count,
             }
             for key in ("policy_loss", "value_loss", "entropy",
                         "approximate_kl", "clip_fraction", "gradient_norm",
-                        "actor_gradient_norm", "critic_gradient_norm"):
+                        "actor_gradient_norm", "critic_gradient_norm",
+                        "policy_head_gradient_norm",
+                        "value_head_gradient_norm",
+                        "score_head_weight_norm"):
                 record[key] = (latest_metrics.get(key)
                                if latest_metrics is not None else None)
             if diagnostics is not None:
@@ -3122,7 +3318,18 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 diagnostics.flush()
             window_accepted = window_improving = window_evaluations = 0
             window_rewards.clear()
+            window_proposed_rewards.clear()
+            window_training_rewards.clear()
             window_selected_proxy.clear()
+            window_proxy_advantages.clear()
+            window_logit_stds.clear()
+            window_logit_ranges.clear()
+            window_feature_stds.clear()
+            window_uniform_action_matches.clear()
+            window_uniform_l1.clear()
+            window_selected_true_gains.clear()
+            window_uniform_true_gains.clear()
+            window_oracle_true_gains.clear()
         if end_chain and evaluations < n_iter:
             placement = np.asarray(
                 proposal_rng.sample(env.allowed_cores.tolist(), n),
@@ -3163,6 +3370,85 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 next_progress += progress_interval
         pool = next_pool
 
+    oracle_summary = None
+    if oracle_pool_rows:
+        features_flat = np.concatenate(oracle_feature_rows, axis=0)
+        gains_flat = np.concatenate(oracle_gain_rows, axis=0)
+        feature_means_by_pool = np.asarray(
+            [row.mean(axis=0) for row in oracle_feature_rows])
+        gain_means_by_pool = np.asarray(
+            [row.mean() for row in oracle_gain_rows])
+        centered_features = np.concatenate([
+            row - mean for row, mean in
+            zip(oracle_feature_rows, feature_means_by_pool)], axis=0)
+        centered_gains = np.concatenate([
+            row - mean for row, mean in
+            zip(oracle_gain_rows, gain_means_by_pool)], axis=0)
+        uniform_gains = np.asarray(
+            [row["uniform_gain"] for row in oracle_pool_rows])
+        oracle_gains = np.asarray(
+            [row["oracle_gain"] for row in oracle_pool_rows])
+        selected_gains = np.asarray(
+            [row["selected_gain"] for row in oracle_pool_rows])
+
+        def paired_interval(values):
+            values = np.asarray(values, dtype=np.float64)
+            mean = float(np.mean(values))
+            half_width = (1.96 * float(np.std(values, ddof=1)) /
+                          math.sqrt(len(values))) if len(values) > 1 else 0.0
+            return [mean - half_width, mean + half_width]
+
+        correlations = {}
+        for index, name in enumerate(oracle_feature_names):
+            correlations[name] = {
+                "pooled_pearson": safe_correlation(
+                    features_flat[:, index], gains_flat),
+                "pooled_spearman": safe_correlation(
+                    features_flat[:, index], gains_flat, rank=True),
+                "within_pool_centered_pearson": safe_correlation(
+                    centered_features[:, index], centered_gains),
+            }
+        oracle_advantage = oracle_gains - uniform_gains
+        selected_advantage = selected_gains - uniform_gains
+        mean_before = float(np.mean([
+            row["before_cost"] for row in oracle_pool_rows]))
+        oracle_summary = {
+            "oracle_pools": len(oracle_pool_rows),
+            "candidate_count": candidate_count,
+            "oracle_candidate_evaluations": oracle_candidate_evaluations,
+            "additional_objective_evaluations": (
+                oracle_candidate_evaluations - len(oracle_pool_rows)),
+            "mean_before_cost_seconds": mean_before,
+            "candidate_neutral_fraction": float(np.mean([
+                row["candidate_neutral_fraction"]
+                for row in oracle_pool_rows])),
+            "pools_with_improving_candidate_fraction": float(np.mean([
+                row["has_improving_candidate"] for row in oracle_pool_rows])),
+            "proxy_argmax_matches_oracle_fraction": float(np.mean([
+                row["proxy_argmax_matches_oracle"]
+                for row in oracle_pool_rows])),
+            "mean_uniform_gain_seconds": float(np.mean(uniform_gains)),
+            "mean_selected_gain_seconds": float(np.mean(selected_gains)),
+            "mean_oracle_gain_seconds": float(np.mean(oracle_gains)),
+            "mean_oracle_advantage_over_uniform_seconds": float(
+                np.mean(oracle_advantage)),
+            "mean_oracle_advantage_over_uniform_percent_of_cost": (
+                float(np.mean(oracle_advantage)) / mean_before * 100),
+            "oracle_advantage_95_percent_interval_seconds": paired_interval(
+                oracle_advantage),
+            "mean_selected_advantage_over_uniform_seconds": float(
+                np.mean(selected_advantage)),
+            "selected_advantage_95_percent_interval_seconds": paired_interval(
+                selected_advantage),
+            "feature_true_gain_correlations": correlations,
+        }
+        parent = os.path.dirname(oracle_diagnostics_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(oracle_diagnostics_path, "w", encoding="utf-8") as stream:
+            json.dump(oracle_summary, stream, indent=2, allow_nan=False)
+            stream.write("\n")
+
     if diagnostics is not None:
         diagnostics.close()
     env.place(best_placement)
@@ -3188,6 +3474,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "update_at_chain_end": update_at_chain_end,
             "independent_chains": chain_count,
             "update_style": update_style,
+            "reward_mode": reward_mode,
         }
         if update_style == "reference_separate":
             checkpoint.update({
@@ -3222,14 +3509,18 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "best_cost": best_cost,
             "candidate_evaluations": evaluations,
             "initial_placement_evaluations": initialization_evaluations,
-            "total_objective_evaluations": (
+            "optimization_objective_evaluations": (
                 evaluations + initialization_evaluations),
+            "total_objective_evaluations": (
+                evaluations + initialization_evaluations +
+                oracle_candidate_evaluations - len(oracle_pool_rows)),
             "independent_chains": chain_count,
             "restart_interval": restart_interval,
             "progress_normalization": (
                 "within_restart_chain" if restart_interval else "within_run"),
             "update_at_chain_end": update_at_chain_end,
             "weight_decay": weight_decay,
+            "reward_mode": reward_mode,
             "update_style": update_style,
             "policy_value_parameter_sharing": (
                 update_style != "reference_separate"),
@@ -3240,8 +3531,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 "6e64bec12b9a7c6db601a4a4ae254b942e4aed79"
                 if update_style == "reference_separate" else None),
             "proposal_candidates_per_step": candidate_count,
-            "unevaluated_proposal_candidates": (
+            "generated_proposal_candidates": (
                 calibration + max(0, n_iter - calibration) * candidate_count),
+            "unevaluated_proposal_candidates": (
+                max(0, policy_steps - len(oracle_pool_rows)) *
+                (candidate_count - 1)),
             "calibration_evaluations": calibration,
             "policy_steps": policy_steps,
             "accepted_moves": accepted,
@@ -3259,6 +3553,12 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "diagnostics_path": diagnostics_path,
             "checkpoint_path": save_checkpoint,
             "checkpoint_resumable": False,
+            "oracle_diagnostics_path": oracle_diagnostics_path,
+            "oracle_pools": len(oracle_pool_rows),
+            "oracle_candidate_evaluations": oracle_candidate_evaluations,
+            "oracle_additional_objective_evaluations": (
+                oracle_candidate_evaluations - len(oracle_pool_rows)),
+            "oracle_summary": oracle_summary,
         })
         if loaded_checkpoint is not None:
             metadata.update({
@@ -3944,6 +4244,21 @@ def main():
         choices=["shared_gae", "reference_separate"], default="shared_gae",
         help="PPO update implementation: historical shared actor/critic or "
              "RL-Based-SA-compatible separate actor and critic")
+    parser.add_argument(
+        "--ppo_asa_reward_mode",
+        choices=["realized", "proposed_delta", "planted_proxy"],
+        default="realized",
+        help="PPO-ASA training reward: post-acceptance realized improvement, "
+             "pre-acceptance proposed improvement, or a planted proxy signal")
+    parser.add_argument(
+        "--ppo_asa_oracle_diagnostics", default=None,
+        help="Write best-of-candidate headroom and feature correlations to JSON")
+    parser.add_argument(
+        "--ppo_asa_oracle_pools", type=int, default=0,
+        help="Number of candidate pools in which to evaluate every candidate")
+    parser.add_argument(
+        "--ppo_asa_oracle_stride", type=int, default=1,
+        help="Policy-step spacing between oracle-audited candidate pools")
     parser.add_argument("--ppo_asa_disable_learning", action="store_true",
                         help="Keep PPO-ASA proposal scores exactly uniform for a matched control")
     parser.add_argument("--ppo_asa_focus_bottleneck", action="store_true",
@@ -4392,6 +4707,7 @@ def main():
             hidden_dim=args.ppo_hidden_dim,
             disable_learning=args.ppo_asa_disable_learning,
             update_style=args.ppo_asa_update_style,
+            reward_mode=args.ppo_asa_reward_mode,
             focus_bottleneck=args.ppo_asa_focus_bottleneck,
             focus_fraction=args.ppo_asa_focus_fraction,
             restart_interval=args.ppo_asa_restart_interval,
@@ -4409,7 +4725,10 @@ def main():
             incremental=not args.asa_full_evaluation,
             save_checkpoint=args.save_checkpoint,
             load_checkpoint=args.load_checkpoint,
-            checkpoint_every=args.checkpoint_every)
+            checkpoint_every=args.checkpoint_every,
+            oracle_diagnostics_path=args.ppo_asa_oracle_diagnostics,
+            oracle_pools=args.ppo_asa_oracle_pools,
+            oracle_stride=args.ppo_asa_oracle_stride)
     elif args.algo == "ddpg_asa":
         algorithm_metadata = {}
         print(f">> Hybrid budget: {complete_placements} DDPG placements + "

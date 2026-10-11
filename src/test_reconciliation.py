@@ -1,6 +1,7 @@
 """Run with python -m unittest discover -s src -p test_reconciliation.py."""
 import contextlib
 import io
+import json
 import random
 import tempfile
 import unittest
@@ -163,8 +164,13 @@ class TimingTests(unittest.TestCase):
                 minibatch_size=8, hidden_dim=16, calibration_trials=4,
                 adapt_window=8, checkpoint_every=20, seed=13,
                 update_style="reference_separate",
+                reward_mode="planted_proxy",
                 diagnostics_path=f"{directory}/reference.jsonl",
+                oracle_diagnostics_path=f"{directory}/oracle.json",
+                oracle_pools=4, oracle_stride=2,
                 save_checkpoint=checkpoint, metadata=trained)
+            with open(f"{directory}/oracle.json") as stream:
+                oracle = json.load(stream)
             saved = torch.load(
                 checkpoint, map_location="cpu", weights_only=False)
             loaded_cost = rm.run_ppo_asa(
@@ -181,11 +187,17 @@ class TimingTests(unittest.TestCase):
         self.assertIn("actor", saved)
         self.assertIn("critic", saved)
         self.assertEqual(trained["update_style"], "reference_separate")
+        self.assertEqual(trained["reward_mode"], "planted_proxy")
         self.assertFalse(trained["policy_value_parameter_sharing"])
         self.assertEqual(
             trained["reference_implementation_commit"],
             "6e64bec12b9a7c6db601a4a4ae254b942e4aed79")
         self.assertGreater(trained["update_count"], 0)
+        self.assertEqual(oracle["oracle_pools"], 4)
+        self.assertEqual(oracle["oracle_candidate_evaluations"], 16)
+        self.assertEqual(trained["oracle_additional_objective_evaluations"], 12)
+        self.assertEqual(trained["optimization_objective_evaluations"], 41)
+        self.assertEqual(trained["total_objective_evaluations"], 53)
         self.assertEqual(loaded["model_initialization"], "loaded_checkpoint")
 
     def test_focused_neighbor_always_moves_an_anchor_task(self):

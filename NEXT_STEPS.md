@@ -65,12 +65,14 @@ Current paper targets:
 18. [x] Run the paper-informed sufficient-scale protocol with 1.25 million proposals, exactly 1,250 PPO updates, no entropy bonus, and 10 frozen holdout seeds. The run completed in 6.47 hours with all mechanics checks passing.
 19. [x] Close the current candidate-scoring architecture. It beat uniform in only three of 10 seeds, tied five, and failed both prespecified gates while converging to uniform entropy. Do not add more epochs to this configuration.
 20. [x] Audit the closest official RL-Based-SA PPO source. It uses disjoint actor and critic modules/optimizers and reward-to-go critic targets; the rejected local scorer shared its encoders. Add a cited `reference_separate` adapter without changing the placement objective, legal neighborhood, or controls.
-21. Run `scripts/run_kaggle_ppo_asa_reference_split.sh`. This repeats the 1.25-million-proposal, 1,250-update protocol and the 10-seed frozen holdout, isolating PPO implementation from budget and environment changes.
-22. If the split adapter fails the uniform gate, change the representation and data diversity: recurrent full-rollout proposals, vectorized complete-placement PPO, or cyclic learned initialization. Do not spend more epochs on either candidate encoder.
-23. Keep guided DDPG and failed candidate-set PPO-ASA variants as negative ablations.
-24. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
-25. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
-26. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
+21. [x] Record the independent Claude audit, including its accepted reward/signal findings and corrections to its legacy-epoch conversion and unquantified KL claim.
+22. [x] Implement E0 oracle-of-16 candidate headroom, E1 planted-signal shared/split controls, missing logit/gradient/feature diagnostics, and a gated 300-update E2 split pilot.
+23. Run `scripts/run_kaggle_ppo_asa_diagnostic_gate.sh`. Do not start the 1.25-million-proposal split run unless E1 passes and E2 shows positive within-pool proposal quality.
+24. If oracle headroom exists but the real pilot fails, compare `realized` with `proposed_delta` reward while holding the pools, split model, and budgets fixed. If features cannot predict true gain, redesign them before more training.
+25. Keep guided DDPG and failed candidate-set PPO-ASA variants as negative ablations.
+26. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
+27. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
+28. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
 
 ## Gate 4: improvements after reproduction
 
