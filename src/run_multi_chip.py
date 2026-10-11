@@ -2510,7 +2510,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 load_checkpoint: str = None,
                 checkpoint_every: int = 1000,
                 oracle_diagnostics_path: str = None,
-                oracle_pools: int = 0, oracle_stride: int = 1) -> float:
+                oracle_pools: int = 0, oracle_stride: int = 1,
+                oracle_dataset_path: str = None,
+                allow_finetune_loaded: bool = False) -> float:
     """PPO-guided adaptive SA with fixed acceptance and temperature logic.
 
     This follows the verified structure of Qiu and Liang's RL-Based-SA: PPO
@@ -2544,6 +2546,13 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     if oracle_pools and not oracle_diagnostics_path:
         raise ValueError(
             "oracle diagnostics path is required when oracle pools are enabled")
+    if oracle_dataset_path and not oracle_pools:
+        raise ValueError(
+            "oracle dataset export requires a positive oracle pool budget")
+    if load_checkpoint and not disable_learning and not allow_finetune_loaded:
+        raise ValueError(
+            "learning from a loaded PPO-ASA checkpoint requires explicit "
+            "allow_finetune_loaded=True")
     if restart_interval < 0:
         raise ValueError("PPO-ASA restart interval cannot be negative")
     if focus_bottleneck:
@@ -2606,6 +2615,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         "bottleneck_fraction", "proxy_gain", "affected_volume",
     ]
     oracle_feature_rows = []
+    oracle_global_rows = []
     oracle_gain_rows = []
     oracle_pool_rows = []
     oracle_candidate_evaluations = 0
@@ -3134,6 +3144,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             oracle_gain = float(np.max(true_gains))
             selected_gain = float(true_gains[selected])
             oracle_feature_rows.append(np.asarray(features, dtype=np.float64))
+            oracle_global_rows.append(np.asarray(global_state, dtype=np.float64))
             oracle_gain_rows.append(true_gains)
             oracle_pool_rows.append({
                 "before_cost": before_cost,
@@ -3448,6 +3459,20 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         with open(oracle_diagnostics_path, "w", encoding="utf-8") as stream:
             json.dump(oracle_summary, stream, indent=2, allow_nan=False)
             stream.write("\n")
+        if oracle_dataset_path:
+            parent = os.path.dirname(oracle_dataset_path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            np.savez_compressed(
+                oracle_dataset_path,
+                global_states=np.asarray(oracle_global_rows, dtype=np.float32),
+                candidate_features=np.asarray(
+                    oracle_feature_rows, dtype=np.float32),
+                true_gains=np.asarray(oracle_gain_rows, dtype=np.float64),
+                feature_names=np.asarray(oracle_feature_names),
+                candidate_count=np.asarray(candidate_count, dtype=np.int64),
+                seed=np.asarray(seed_value, dtype=np.int64),
+            )
 
     if diagnostics is not None:
         diagnostics.close()
@@ -3554,6 +3579,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "checkpoint_path": save_checkpoint,
             "checkpoint_resumable": False,
             "oracle_diagnostics_path": oracle_diagnostics_path,
+            "oracle_dataset_path": oracle_dataset_path,
             "oracle_pools": len(oracle_pool_rows),
             "oracle_candidate_evaluations": oracle_candidate_evaluations,
             "oracle_additional_objective_evaluations": (
@@ -4259,6 +4285,13 @@ def main():
     parser.add_argument(
         "--ppo_asa_oracle_stride", type=int, default=1,
         help="Policy-step spacing between oracle-audited candidate pools")
+    parser.add_argument(
+        "--ppo_asa_oracle_dataset", default=None,
+        help="Write oracle global states, candidate features, and exact gains "
+             "to a compressed NPZ dataset")
+    parser.add_argument(
+        "--ppo_asa_finetune_loaded", action="store_true",
+        help="Explicitly allow PPO updates from a loaded proposal checkpoint")
     parser.add_argument("--ppo_asa_disable_learning", action="store_true",
                         help="Keep PPO-ASA proposal scores exactly uniform for a matched control")
     parser.add_argument("--ppo_asa_focus_bottleneck", action="store_true",
@@ -4406,10 +4439,12 @@ def main():
             args.ppo_value_coef < 0 or args.ppo_max_grad_norm <= 0):
         parser.error("invalid masked PPO hyperparameters")
     if (args.algo == "ppo_asa" and args.load_checkpoint and
-            not args.ppo_asa_disable_learning):
+            not args.ppo_asa_disable_learning and
+            not args.ppo_asa_finetune_loaded):
         parser.error(
-            "PPO-ASA checkpoints are supported only for frozen-policy "
-            "evaluation; add --ppo_asa_disable_learning")
+            "PPO-ASA checkpoint learning requires explicit "
+            "--ppo_asa_finetune_loaded; use --ppo_asa_disable_learning for "
+            "frozen evaluation")
     if args.conv_blocks <= 0:
         parser.error("--conv_blocks must be positive")
     if args.timing_model == "paper_pipeline":
@@ -4728,7 +4763,9 @@ def main():
             checkpoint_every=args.checkpoint_every,
             oracle_diagnostics_path=args.ppo_asa_oracle_diagnostics,
             oracle_pools=args.ppo_asa_oracle_pools,
-            oracle_stride=args.ppo_asa_oracle_stride)
+            oracle_stride=args.ppo_asa_oracle_stride,
+            oracle_dataset_path=args.ppo_asa_oracle_dataset,
+            allow_finetune_loaded=args.ppo_asa_finetune_loaded)
     elif args.algo == "ddpg_asa":
         algorithm_metadata = {}
         print(f">> Hybrid budget: {complete_placements} DDPG placements + "

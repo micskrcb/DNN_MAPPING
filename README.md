@@ -847,6 +847,32 @@ diagnostics, and decision rules. Do not run the full
 `run_kaggle_ppo_asa_reference_split.sh` protocol until this diagnostic gate
 shows a positive within-pool proposal-quality signal.
 
+That diagnostic completed at revision `6122827`. Both shared and split PPO
+learned the planted signal, so the optimizer and actor gradients can change a
+proposal policy. The 300-update real-reward pilot nevertheless finished at
+uniform entropy (`2.772589`) after 300,032 training evaluations. Its five-seed
+frozen holdout beat uniform in only two pairs and tied three; its 0.0335% mean
+advantage had a confidence interval crossing zero. The oracle audit found real
+best-of-16 headroom, but the handcrafted proxy selected the true best candidate
+only 4.5% of the time, below the 6.25% uniform expectation. More PPO epochs
+with the same weak supervision are therefore not justified.
+
+The next gate tests representation separately from reinforcement learning. It
+evaluates all 16 candidates in 8,000 pools, trains the proposal actor directly
+on exact within-pool gains, and evaluates it on a held-out 20% pool split:
+
+```bash
+bash scripts/run_kaggle_oracle_supervised_ranker.sh
+```
+
+If held-out selected gain does not have a positive 95% interval over uniform,
+the runner stops and archives the negative result. If it passes, the runner
+automatically performs a five-seed frozen holdout, conservatively fine-tunes
+the supervised actor with PPO, and repeats the holdout. Exact oracle calls are
+diagnostic data-generation costs and remain separate from optimizer proposal
+budgets. Oracle supervision is a project extension and is not claimed by
+either source paper.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

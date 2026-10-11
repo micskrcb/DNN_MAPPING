@@ -153,9 +153,9 @@ class TimingTests(unittest.TestCase):
         environments = [
             MultiChipEnvironment(
                 1, 1, 2, 3, task_graph=graph, num_tasks=4)
-            for _ in range(2)
+            for _ in range(3)
         ]
-        trained, loaded = {}, {}
+        trained, loaded, fine_tuned = {}, {}, {}
         with tempfile.TemporaryDirectory() as directory:
             checkpoint = f"{directory}/reference.pt"
             trained_cost = rm.run_ppo_asa(
@@ -167,12 +167,17 @@ class TimingTests(unittest.TestCase):
                 reward_mode="planted_proxy",
                 diagnostics_path=f"{directory}/reference.jsonl",
                 oracle_diagnostics_path=f"{directory}/oracle.json",
+                oracle_dataset_path=f"{directory}/oracle.npz",
                 oracle_pools=4, oracle_stride=2,
                 save_checkpoint=checkpoint, metadata=trained)
             with open(f"{directory}/oracle.json") as stream:
                 oracle = json.load(stream)
             saved = torch.load(
                 checkpoint, map_location="cpu", weights_only=False)
+            with np.load(f"{directory}/oracle.npz", allow_pickle=False) as dataset:
+                self.assertEqual(dataset["global_states"].shape, (4, 8))
+                self.assertEqual(dataset["candidate_features"].shape, (4, 4, 9))
+                self.assertEqual(dataset["true_gains"].shape, (4, 4))
             loaded_cost = rm.run_ppo_asa(
                 environments[1], n_iter=16, candidate_count=4,
                 rollout_steps=8, device="cpu", update_epochs=1,
@@ -180,8 +185,17 @@ class TimingTests(unittest.TestCase):
                 adapt_window=8, checkpoint_every=20, seed=17,
                 update_style="reference_separate", disable_learning=True,
                 load_checkpoint=checkpoint, metadata=loaded)
+            fine_tuned_cost = rm.run_ppo_asa(
+                environments[2], n_iter=16, candidate_count=4,
+                rollout_steps=8, device="cpu", update_epochs=1,
+                minibatch_size=8, hidden_dim=16, calibration_trials=4,
+                adapt_window=8, checkpoint_every=20, seed=19,
+                update_style="reference_separate",
+                load_checkpoint=checkpoint, allow_finetune_loaded=True,
+                metadata=fine_tuned)
         self.assertTrue(np.isfinite(trained_cost))
         self.assertTrue(np.isfinite(loaded_cost))
+        self.assertTrue(np.isfinite(fine_tuned_cost))
         self.assertEqual(saved["algorithm"],
                          "ppo_asa_reference_separate_v2")
         self.assertIn("actor", saved)
@@ -199,6 +213,32 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(trained["optimization_objective_evaluations"], 41)
         self.assertEqual(trained["total_objective_evaluations"], 53)
         self.assertEqual(loaded["model_initialization"], "loaded_checkpoint")
+        self.assertEqual(fine_tuned["model_initialization"], "loaded_checkpoint")
+        self.assertGreater(fine_tuned["update_count"], 0)
+
+    @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
+    def test_oracle_supervised_ranker_generalizes_planted_ordering(self):
+        import torch
+        import train_oracle_candidate_ranker as oracle_ranker
+        torch.set_num_threads(2)
+        rng = np.random.default_rng(23)
+        pools, candidates = 240, 6
+        global_states = rng.normal(size=(pools, 8)).astype(np.float32)
+        features = rng.normal(size=(pools, candidates, 9)).astype(np.float32)
+        gains = (features[:, :, 0].astype(np.float64) -
+                 0.4 * features[:, :, 3].astype(np.float64))
+        result = oracle_ranker.train_ranker(
+            global_states, features, gains, hidden_dim=32, epochs=100,
+            batch_size=64, learning_rate=2e-3, weight_decay=0.0,
+            target_temperature=0.4, validation_fraction=0.25,
+            patience=20, seed=29, device="cpu")
+        validation = result["validation_metrics"]
+        self.assertGreater(
+            validation["selected_advantage_95_percent_interval_seconds"][0], 0)
+        self.assertGreater(
+            validation["top1_oracle_match_fraction_on_informative_pools"],
+            validation[
+                "random_expected_oracle_match_fraction_on_informative_pools"])
 
     def test_focused_neighbor_always_moves_an_anchor_task(self):
         placement = np.arange(8, dtype=np.int32)

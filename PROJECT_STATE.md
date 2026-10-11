@@ -115,12 +115,14 @@ The planned H100 12 GB slice was unavailable. Kaggle completed the original diag
 8. [Complete] The sufficient-scale protocol ran 1.25 million proposals, exactly 1,250 PPO updates, and 10 frozen holdout seeds. Trained PPO averaged 23.50258 microseconds versus 23.50722 uniform and 23.48939 ASA. It won only three uniform pairs and four ASA pairs; final entropy was effectively uniform.
 9. [Complete] Audit the official RL-Based-SA training source. It uses disjoint actor and critic networks and optimizers; the rejected scorer shared its feature encoders, allowing value gradients to alter the policy representation.
 10. [Implemented] Record the independent audit and correct its legacy-epoch and KL qualifications. Add direct oracle headroom, feature-informativeness, planted-signal, and policy-gradient diagnostics.
-11. Run `scripts/run_kaggle_ppo_asa_diagnostic_gate.sh`. It gates a bounded 300-update real-reward split pilot on a successful planted-signal test.
-12. Run the 1.25-million-proposal split experiment only if the bounded gate shows positive within-pool proposal quality. Otherwise isolate proposed-delta reward or redesign features according to the recorded decision tree.
-13. Do not scale unchanged AlexNet-FC masked PPO; its 3,000-placement run tied the frozen control and lost to ASA.
-14. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.
-15. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
-16. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
+11. [Complete] The staged diagnostic passed both planted-signal tests but the real split pilot stayed at uniform entropy after 300,032 evaluations. Its five-seed holdout beat uniform twice and tied three times; the mean interval included zero.
+12. [Complete] The exact oracle audit found useful best-of-16 headroom, while the current proxy matched the best candidate only 4.5% of the time versus 6.25% expected from uniform choice.
+13. [Implemented] Export exact-gain candidate pools and train the same split actor with listwise supervised targets on 80% of pools, reserving complete unseen pools for validation.
+14. Run `scripts/run_kaggle_oracle_supervised_ranker.sh`. Failed held-out ranking closes the current features; a pass automatically triggers frozen and PPO-fine-tuned five-seed optimizer holdouts.
+15. Do not scale unchanged AlexNet-FC masked PPO; its 3,000-placement run tied the frozen control and lost to ASA.
+16. Produce a matched-budget table for BS, RS, SA, ASA, paper DDPG, masked PPO, and the hybrid only after the hybrid gate passes.
+17. Add activation-buffer/streaming behavior and router timing when defensible evidence is available.
+18. Implement and validate true large-batch throughput before reproducing that panel of Figure 10.
 
 The paper-faithful mode remains frozen separately from guided DDPG and future masked-policy experiments.
 
@@ -240,6 +242,15 @@ training-scale data rather than another neighborhood or hyperparameter tweak.
 Completed five AlexNet-CONV seeds with 12 training placements and six retained deterministic evaluations per seed. DDPG also used 64 baseline samples (82 selectable candidates total). RS used 82 samples; SA/ASA used 82 proposals plus initialization. Mean best latency: trained DDPG 38.24062 µs, untrained control 38.46750 µs, RS 41.13328 µs, fixed SA 42.99555 µs, ASA 42.32438 µs, sequential 42.12586 µs. Training beat its untrained control in two seeds, tied two, and lost one. Its mean benefit was only 0.22687 µs (about 0.59%); the exploratory paired 95% interval [-0.33818, 0.79193] µs includes zero. The initial policy and collision repair already yield strong layouts, so gains over RS/SA do not establish learning. Short annealing budgets and temperature calibration limit that comparison. See `runs/local-cpu-5seed-2026-09-30/STUDY.md` and raw reports. Next priority: improve and validate learning against the untrained control before scaling the training budget.
 
 ## Target-network BatchNorm repair (2026-09-30)
+
+The later seed-4 extension to 100 placements did not improve the retained
+37.635625-microsecond layout. Its deterministic policy ended at 48.081328125
+microseconds with only three intended cores and 181 collision repairs. The
+archived normalization, compact-state, and untrained-control runs are therefore
+negative exploratory ablations rather than validated repairs. Their settings,
+reports, and small reproducibility runners are preserved under
+`runs/NORMALIZATION_EXPERIMENTS.md`; generated model checkpoints remain
+excluded because each is hundreds of megabytes.
 
 The CNN target actor and critic previously calculated Bellman targets in training mode, so BatchNorm made target values depend on the composition of each replay minibatch. Target buffers also were not synchronized after the soft parameter update, and the critic accumulated unnecessary gradients while optimizing the actor. The code now evaluates targets in inference mode, copies BatchNorm buffers from the online networks, and freezes the critic for the actor-only step. A regression test checks fixed target outputs across minibatch companions, buffer synchronization, a single critic statistics update, and restored critic gradients.
 

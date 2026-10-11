@@ -67,12 +67,14 @@ Current paper targets:
 20. [x] Audit the closest official RL-Based-SA PPO source. It uses disjoint actor and critic modules/optimizers and reward-to-go critic targets; the rejected local scorer shared its encoders. Add a cited `reference_separate` adapter without changing the placement objective, legal neighborhood, or controls.
 21. [x] Record the independent Claude audit, including its accepted reward/signal findings and corrections to its legacy-epoch conversion and unquantified KL claim.
 22. [x] Implement E0 oracle-of-16 candidate headroom, E1 planted-signal shared/split controls, missing logit/gradient/feature diagnostics, and a gated 300-update E2 split pilot.
-23. Run `scripts/run_kaggle_ppo_asa_diagnostic_gate.sh`. Do not start the 1.25-million-proposal split run unless E1 passes and E2 shows positive within-pool proposal quality.
-24. If oracle headroom exists but the real pilot fails, compare `realized` with `proposed_delta` reward while holding the pools, split model, and budgets fixed. If features cannot predict true gain, redesign them before more training.
-25. Keep guided DDPG and failed candidate-set PPO-ASA variants as negative ablations.
-26. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
-27. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
-28. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
+23. [x] Run `scripts/run_kaggle_ppo_asa_diagnostic_gate.sh`. Both planted-signal conditions passed, but the real split pilot stayed uniform and produced no holdout policy signal after 300,032 evaluations.
+24. [x] Establish that oracle headroom exists: best-of-16 gained about 0.70% of current cost over uniform on sampled real pools. The existing proxy's 4.5% oracle match rate is below the 6.25% uniform expectation.
+25. [x] Add exact oracle-dataset export and an 80/20 pool-level supervised ranking gate. It reports held-out selected advantage, confidence interval, oracle-headroom capture, and top-1 performance, and emits a PPO-compatible actor checkpoint.
+26. Run `scripts/run_kaggle_oracle_supervised_ranker.sh`. It stops before PPO if unseen-pool ranking fails; on a pass it automatically runs frozen supervised and PPO-fine-tuned five-seed holdouts.
+27. Keep guided DDPG and failed candidate-set PPO-ASA variants as negative ablations.
+28. Proceed to VGG16 and ResNet50 after the evaluator and learning behavior are credible.
+29. Add a validated large-batch fill/steady-state/drain model before presenting paper-style throughput.
+30. Record Git commit, clean/dirty state, complete configuration, Torch/CUDA versions, visible GPU, memory, evaluation counts, checkpoint paths, and wall time.
 
 ## Gate 4: improvements after reproduction
 
