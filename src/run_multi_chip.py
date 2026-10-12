@@ -79,6 +79,12 @@ def configure_cpu_threads(cpu_threads=None, interop_threads=1):
     return threads
 
 
+def valid_ppo_gamma(algorithm, gamma):
+    """PPO-ASA may use gamma=0 for immediate proposal-ranking rewards."""
+    return (0 <= gamma <= 1 if algorithm == "ppo_asa"
+            else 0 < gamma <= 1)
+
+
 def reorder_extracted_tasks(task_graph, task_labels, operations, kinds,
                             logic_task_order):
     """Apply an explicit, reproducible logical-core numbering convention.
@@ -4677,10 +4683,11 @@ def main():
     if args.ppo_asa_restart_interval < 0:
         parser.error("--ppo_asa_restart_interval cannot be negative")
     if (not math.isfinite(args.ppo_learning_rate) or args.ppo_learning_rate <= 0 or
-            not 0 < args.ppo_gamma <= 1 or not 0 <= args.ppo_gae_lambda <= 1 or
+            not valid_ppo_gamma(args.algo, args.ppo_gamma) or
+            not 0 <= args.ppo_gae_lambda <= 1 or
             not 0 < args.ppo_clip_ratio < 1 or args.ppo_entropy_coef < 0 or
             args.ppo_value_coef < 0 or args.ppo_max_grad_norm <= 0):
-        parser.error("invalid masked PPO hyperparameters")
+        parser.error("invalid PPO hyperparameters")
     if (args.algo == "ppo_asa" and args.load_checkpoint and
             not args.ppo_asa_disable_learning and
             not args.ppo_asa_finetune_loaded):

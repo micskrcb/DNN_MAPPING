@@ -15,6 +15,13 @@ import run_multi_chip as rm
 
 
 class TimingTests(unittest.TestCase):
+    def test_zero_discount_is_only_valid_for_proposal_ranking(self):
+        self.assertTrue(rm.valid_ppo_gamma("ppo_asa", 0.0))
+        self.assertTrue(rm.valid_ppo_gamma("ppo_asa", 1.0))
+        self.assertFalse(rm.valid_ppo_gamma("ppo_masked", 0.0))
+        self.assertFalse(rm.valid_ppo_gamma("ppo_asa", -0.01))
+        self.assertFalse(rm.valid_ppo_gamma("ppo_asa", 1.01))
+
     def test_masked_mapper_exposes_only_unused_allowed_cores(self):
         graph = np.zeros((3, 3), dtype=np.float32)
         graph[0, 1] = graph[1, 2] = 1.0

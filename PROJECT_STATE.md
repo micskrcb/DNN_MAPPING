@@ -505,6 +505,15 @@ proposals for seed zero. A positive finite-update result advances to
 focuses development on RL-guided annealing without requiring ASA's reheating
 controller to work first.
 
+The first short-gate launch at revision `50c41ad` stopped during command-line
+validation before either optimizer evaluated a proposal (archive SHA-256
+`7fcd62da2f302e0db3c1429584242a1a502af2097fc3d0ed02e54d73db2b0d27`).
+The function accepted the intended contextual-bandit value `gamma=0`, but a
+shared CLI check still required `gamma>0` for every PPO mode. That check now
+allows zero only for PPO-ASA and retains the stricter masked-PPO rule. The
+failed archive contains no optimization result and must not enter result
+tables.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate
