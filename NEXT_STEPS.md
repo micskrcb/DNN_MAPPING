@@ -84,7 +84,9 @@ Current paper targets:
 37. [x] Run `scripts/run_kaggle_improvement_ranker_gate.sh` on fresh data. Late argmax capture was 7.03% [4.28%, 9.81%], sampled capture was 0.73%, the improvement-rate ratio was 1.76x, and nine of ten chains were positive. It failed three of five frozen criteria.
 38. [x] Stop before the frozen-optimizer holdout because the fresh gate failed. Preserve deterministic argmax ranking as a weak representation result, not an RL+ASA optimizer result.
 39. [x] Repair fixed SA's objective-unit mismatch. The paper publishes cooldown 0.99 but not absolute temperatures; fixed SA now measures its initial temperature from budgeted uphill deltas and then follows a frozen geometric schedule. Historical absolute temperatures remain opt-in.
-40. Run `scripts/run_kaggle_paper_baseline_calibration.sh` at one million proposals per search method. It runs RS, corrected fixed SA, and ASA concurrently and reports exact initial/proposal totals and BS-normalized costs.
+40. [x] Run `scripts/run_kaggle_paper_baseline_calibration.sh` at one million proposals per search method. Fixed SA beat RS, but RS/BS was 0.9606 and SA/BS was 0.9111, far above the paper figure's approximate 0.59 and 0.50. The reconstructed compute-only floor is already 0.8989 of BS, so this evaluator cannot reproduce the published reduction regardless of optimizer quality.
+41. Run the exploratory `scripts/run_kaggle_evaluator_vva_sensitivity.sh` sweep. VVA throughput is unpublished and currently defaults to one addition/cycle; sweep 1, 8, 16, 32, 64, and 128 additions/cycle with matched short RS/SA searches to measure whether this assumption explains the missing placement headroom.
+42. If a physically plausible VVA setting restores adequate headroom, freeze it before seeing new optimizer results, rerun the one-million-proposal calibration, and validate the choice on a held-out network or region. Do not restart RL until the non-learning baselines are credibly calibrated.
 
 ## Gate 4: improvements after reproduction
 

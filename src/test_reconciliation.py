@@ -418,6 +418,8 @@ class TimingTests(unittest.TestCase):
                 metadata=metadata)
         self.assertEqual(obj.calls, 251)  # warm-start value plus candidates
         self.assertEqual(metadata["candidate_evaluations"], 250)
+        self.assertEqual(metadata["initial_placement_evaluations"], 1)
+        self.assertEqual(metadata["total_objective_evaluations"], 251)
         self.assertEqual(metadata["initialization"], "supplied")
         self.assertLessEqual(result, metadata["initial_cost"])
         self.assertEqual(result, 0)

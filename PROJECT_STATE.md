@@ -1,6 +1,6 @@
 # Project state: paper-faithful DNN core placement
 
-Updated 2026-10-11.
+Updated 2026-10-12.
 
 ## Goal and branch
 
@@ -339,6 +339,32 @@ T0 from budgeted uphill deltas in the current objective units, freezes a
 geometric 0.99 schedule down to a prespecified ratio, and reports the measured
 temperatures and exact evaluation counts. The old behavior remains available
 only through `--sa_legacy_absolute_temperature` for historical reproduction.
+
+The paper-scale AlexNet-FC baseline calibration then completed at revision
+`80aec4f` with one million proposals per search method. BS was 24.92032
+microseconds. Random search reached 23.93728 microseconds (0.96055 of BS),
+corrected fixed SA reached 22.70400 microseconds (0.91106 of BS), and ASA
+reached 23.09328 microseconds (0.92668 of BS). Fixed SA beat random search by
+5.15%, so the corrected annealing mechanics and optimizer ordering are
+credible. ASA was 1.71% worse than fixed SA and remains a project extension.
+
+The calibration nevertheless rejects the current evaluator as a quantitative
+reproduction of Figure 10. The published plot visually places AlexNet-FC
+random search near 0.59 of BS and fixed SA near 0.50, whereas the reconstructed
+ratios are 0.961 and 0.911. More decisively, the reconstructed compute-only
+floor is 22.4 microseconds, already 0.89886 of BS. No placement algorithm can
+reach the paper's approximate SA or DDPG ratio under this objective. The run
+therefore diagnoses simulator headroom rather than an optimizer failure. It
+took about 6.76 hours for RS and 5.51 hours for fixed SA; archive SHA-256 is
+`455656bc06b78f3cb163f276060c54bbd6cd6d32dd03ac9d772951a560963977`.
+
+The leading explicit assumption is VVA throughput. The paper publishes 128
+MACs per VMM core but no VVA additions/cycle; the reconstruction currently
+uses one. In AlexNet FC this makes the first layer's accumulation take 8,960
+cycles, exactly the 22.4-microsecond compute floor. The next experiment is an
+exploratory matched sweep over plausible VVA rates. It must precede more RL,
+and any selected setting must be frozen and validated on fresh workloads
+before it is treated as calibration rather than fitting to Figure 10.
 
 A second, controlled proposal neighborhood is now available through
 `--ppo_asa_focus_bottleneck`. Every candidate is anchored on a task in the

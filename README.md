@@ -23,7 +23,8 @@ The `cpu` branch is the CPU-oriented continuation of the reconciled paper implem
 | XY routing and link contention | Reconstructed and implemented |
 | 64 KB weight-buffer constraint | Enforced during paper partition reconstruction |
 | 64 KB activation-buffer stalls and exact GRS | Not published in enough detail; not implemented |
-| Full paper-scale results | Not run yet |
+| Paper-scale baseline calibration | Completed for AlexNet FC; evaluator failed quantitative calibration |
+| Full paper-scale RL results | Deferred until evaluator calibration |
 
 Paper-mode reports include routed mean hop counts and on/off-chip link-load summaries. Multi-seed summaries report the objective normalized to BS and its inverse ratio. The inverse ratio is useful for comparison, but it is not labeled as measured accelerator throughput.
 
@@ -52,6 +53,8 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
 - `scripts/run_kaggle_ppo_asa_gate.sh` compares learned proposals, an exactly
   uniform frozen proposal control, and ordinary ASA under the same objective
   evaluation budget.
+- `scripts/run_kaggle_evaluator_vva_sensitivity.sh` diagnoses the unpublished
+  VVA-throughput assumption with matched BS, RS, and fixed-SA comparisons.
 - `prev version readmes/` preserves earlier README snapshots.
 
 The older single-chip PPO/GCN programs and `run_multi_chip_fast.py` are not part of the validated paper reproduction path.
@@ -896,8 +899,8 @@ proposals.
 
 That fresh gate failed: late deterministic capture was 7.03% with a 4.28% to
 9.81% chain-bootstrap interval, and sampled capture was only 0.73%. The
-checkpoint must not proceed to an optimizer holdout. The next required run is
-the paper-scale baseline calibration:
+checkpoint must not proceed to an optimizer holdout. The paper-scale baseline
+calibration is available as:
 
 ```bash
 bash scripts/run_kaggle_paper_baseline_calibration.sh
@@ -911,6 +914,21 @@ are application-specific. The corrected fixed SA measures its initial
 temperature in the active objective units and then keeps the schedule fixed;
 `--sa_legacy_absolute_temperature` reproduces the former `100` to `0.1`
 seconds-unit behavior only for historical comparisons.
+
+That calibration completed at revision `80aec4f`. Fixed SA beat random search,
+but the normalized AlexNet-FC costs were 0.911 and 0.961 of BS, respectively;
+the paper figure is approximately 0.50 and 0.59. The reconstructed compute
+floor is already 0.899 of BS, so longer RL training cannot close this gap.
+The next run isolates the unpublished VVA-throughput assumption:
+
+```bash
+bash scripts/run_kaggle_evaluator_vva_sensitivity.sh
+```
+
+This exploratory sweep compares BS, short matched RS, and corrected fixed SA
+at 1, 8, 16, 32, 64, and 128 VVA additions/cycle. A promising setting is only
+a hypothesis; freeze it and repeat the full calibration on fresh workloads
+before making a paper-comparability claim.
 
 ## Interpreting results
 
