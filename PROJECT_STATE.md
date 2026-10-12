@@ -408,6 +408,24 @@ the logical graph is reconstructed once under a declared rate while execution
 timing is swept independently. The historical coupled behavior remains the
 default for reproducibility.
 
+The fixed-grid sweep completed at revision `0341745`. With every condition
+using the rate-one AlexNet-FC grids, RS/BS was 0.966, 0.842, 0.801, 0.904,
+1.015, and 1.080 at execution rates 1, 8, 16, 32, 64, and 128; fixed SA/BS
+was 0.928, 0.661, 0.612, 0.671, 0.726, and 0.790. At rates 32 and above the
+sampled objective span was identical (74.90%) and the best sampled cost was
+2.976 microseconds, showing that the relevant sampled bottleneck had saturated
+in a communication-dominated regime. Rate one is compute-dominated, rate eight
+is transitional, and rates 16-32 expose large communication-sensitive
+headroom. The archive SHA-256 is
+`9b8d4075d75f9e6bce75652b1249deec643144e5b76b07e939493820a8feea1b`.
+
+The next run is a conditional full-budget baseline calibration at execution
+rate 16 with the rate-one grids held fixed. Rate 16 is prespecified because it
+is the first swept rate whose compute floor permits the approximate Figure-10
+SA ratio and it precedes the measured saturation point. This does not make 16
+the real hardware rate; it tests whether the reconstructed evaluator can match
+the paper under one explicitly declared sensitivity condition.
+
 A second, controlled proposal neighborhood is now available through
 `--ppo_asa_focus_bottleneck`. Every candidate is anchored on a task in the
 current maximum-latency pipeline stage, and the anchor is guaranteed to move.

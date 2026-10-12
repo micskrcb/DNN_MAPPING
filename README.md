@@ -959,6 +959,20 @@ The final argument fixes grid reconstruction at one addition/cycle while the
 runner sweeps execution rates. Use `coupled` instead to reproduce the first
 sweep.
 
+The fixed-grid sweep completed at revision `0341745`. Fixed SA normalized to
+BS reached 0.928, 0.661, 0.612, 0.671, 0.726, and 0.790 across rates 1 through
+128. Rates 32 and above shared the same sampled objective span and best sampled
+cost, indicating communication-dominated saturation. These are conditional
+sensitivity results; they do not identify the unpublished hardware rate.
+
+The paper-scale runner accepts optional execution and partition VVA rates. The
+conditional rate-16 calibration with fixed rate-one grids is:
+
+```bash
+bash scripts/run_kaggle_paper_baseline_calibration.sh \
+  runs/kaggle-paper-calibration-vva16-fixed-grid 1000000 16 1
+```
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

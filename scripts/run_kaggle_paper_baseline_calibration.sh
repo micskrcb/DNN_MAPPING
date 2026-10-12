@@ -3,6 +3,8 @@ set -euo pipefail
 
 output_dir="${1:-runs/kaggle-paper-baseline-calibration}"
 budget="${2:-1000000}"
+vva_rate="${3:-1}"
+partition_vva_rate="${4:-${vva_rate}}"
 archive="${output_dir%/}.zip"
 mkdir -p "${output_dir}"
 
@@ -10,6 +12,14 @@ if (( budget < 1000000 )); then
   echo "The confirmatory calibration requires at least 1,000,000 proposals." >&2
   exit 2
 fi
+python - "${vva_rate}" "${partition_vva_rate}" <<'PY'
+import math
+import sys
+for label, raw in zip(("execution", "partition"), sys.argv[1:]):
+    value = float(raw)
+    if not math.isfinite(value) or value <= 0:
+        raise SystemExit(f"{label} VVA rate must be finite and positive")
+PY
 
 archive_results() {
   [[ -d "${output_dir}" ]] || return 0
@@ -34,12 +44,14 @@ trap archive_results EXIT
 echo "Running reconciliation tests."
 PYTHONPATH=src python -m unittest src.test_reconciliation
 
-python - "${output_dir}/experiment-manifest.json" "${budget}" <<'PY'
+python - "${output_dir}/experiment-manifest.json" "${budget}" \
+  "${vva_rate}" "${partition_vva_rate}" <<'PY'
 import json
 import subprocess
 import sys
 
 destination, budget = sys.argv[1], int(sys.argv[2])
+vva_rate, partition_vva_rate = map(float, sys.argv[3:5])
 manifest = {
     "experiment": "AlexNet-FC paper-scale baseline calibration",
     "repository_commit": subprocess.check_output(
@@ -65,6 +77,8 @@ manifest = {
         "timing_model": "paper_pipeline",
         "routing_model": "paper_xy",
         "seed": 0,
+        "vva_additions_per_cycle": vva_rate,
+        "partition_vva_additions_per_cycle": partition_vva_rate,
     },
     "decision": (
         "Use normalized-to-BS costs and RS/SA ordering to assess simulator "
@@ -82,6 +96,8 @@ common=(
   --timing_model paper_pipeline --routing_model paper_xy
   --chips_x 4 --chips_y 4 --rows 16 --cols 16
   --sensitivity_trials 64 --seed 0
+  --vva_ops_per_cycle "${vva_rate}"
+  --partition_vva_ops_per_cycle "${partition_vva_rate}"
 )
 
 echo "Computing the sequential baseline."
@@ -161,6 +177,9 @@ for method, report in reports.items():
 summary = {
     "protocol": "AlexNet-FC, seed 0, paper-scale baseline calibration",
     "proposal_budget_per_search_method": budget,
+    "vva_additions_per_cycle": reports["bs"]["config"]["vva_ops_per_cycle"],
+    "partition_vva_additions_per_cycle":
+        reports["bs"]["config"]["partition_vva_ops_per_cycle"],
     "budget_note": (
         "RS samples exactly the declared number of complete placements. "
         "SA and ASA evaluate one initialization plus the declared proposals; "
