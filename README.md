@@ -993,6 +993,14 @@ fixed. The archive contains per-order BS, random-search, fixed-SA reports and
 routing diagnostics. Neither order can be designated the paper's true one
 because it was not published.
 
+The ablation confirmed strong baseline sensitivity. Changing only logical task
+numbering increased BS from 3.92032 to 9.92 microseconds, while random search
+stayed near 3.1--3.2 microseconds and fixed SA stayed near 2.4 microseconds.
+SA/BS consequently changed from 0.6122 to 0.2413 without improving the search
+result. Do not use the better-looking normalized number as evidence of paper
+reproduction. Report absolute latency and compare learned and frozen methods
+under the same declared ordering.
+
 ### RL inside the working fixed-SA search
 
 The current method-development path keeps fixed SA's measured temperature,

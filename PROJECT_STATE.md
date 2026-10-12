@@ -449,6 +449,24 @@ remains descriptive because no numerical pass tolerance was frozen before
 launch. Logic-index ordering must be ablated before treating BS-normalized
 ratios as calibrated.
 
+That ablation completed at revision `7ee8bc2` with 20,000 proposals per search
+method (archive SHA-256
+`116b43ec90f1e60c0e86f6dada8dbfec4b8a8d529aaeecfcbd197a6b3efed214`).
+Changing only logical numbering from output-group-interleaved to
+all-VMM-then-VVA increased BS from 3.92032 to 9.92 microseconds. In contrast,
+RS changed only from 3.14032 to 3.21536 microseconds and fixed SA from 2.40000
+to 2.39328 microseconds. The normalized ratios therefore changed from 0.8010
+to 0.3241 for RS and from 0.6122 to 0.2413 for fixed SA. BS traffic-weighted
+mean hops also rose from 9.68 to 27.40, while the search methods' hop metrics
+were similar across orderings.
+
+This confirms that BS normalization is dominated by an unpublished logical
+index convention in the reconstruction. It cannot identify which convention
+the authors used. Method-development experiments therefore keep one declared
+ordering fixed and make their causal learning comparison against a paired
+frozen policy under that same ordering. Absolute objective values, evaluation
+budgets, and routing diagnostics must accompany BS-normalized values.
+
 The review also corrected two scope points. Myung et al.'s communication-only
 proxy and unavailable routing simulator do not inform Wu's VVA compute rate.
 Conversely, Wu's Equation 4 explicitly fixes the objective as the maximum
