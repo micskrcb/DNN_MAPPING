@@ -1036,6 +1036,13 @@ uses improvement-only positive delta, a `3e-4` learning rate, and lower entropy
 regularization. This is a new short gate, not a reinterpretation of the
 negative first result.
 
+The revised short gate produced a positive one-seed signal: learned RL+SA
+reached 2.43328 microseconds versus 2.44864 for its frozen control, a 0.6273%
+improvement at equal budgets. It beat ASA by 1.298% but remained 1.387% behind
+plain fixed SA. Because the learned distribution remained close to uniform and
+this is one chain, run the three-seed extended gate before making a learning
+claim.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

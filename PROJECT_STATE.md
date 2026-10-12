@@ -534,6 +534,23 @@ improvement-only positive delta, increases learning rate from `1e-4` to
 `3e-4`, and reduces entropy regularization from `0.02` to `0.001`. Fixed-SA
 cooling and acceptance remain frozen.
 
+The improvement-only short gate completed at revision `168add0` (archive
+SHA-256
+`3abb540207ada402b7394013f47fca16e1641bec71279192daf8548410c85148`).
+Learned fixed-SA reached 2.43328 microseconds versus 2.44864 for the frozen
+control, a 0.6273% improvement with identical 20,001-evaluation budgets and
+annealing schedules. It also beat ASA's 2.46528 microseconds by 1.298% and the
+matched-configuration 20,000-sample random-search result by 22.51%, while
+plain fixed SA remained better at 2.40000 microseconds by 1.387%.
+
+This advances to the prespecified extended gate but is not yet evidence across
+seeds. PPO made 78 finite updates, but late probability L1 distance from
+uniform was only 0.00765 and learned proposals produced 1,142 improving moves
+versus 1,218 for control. The better minimum may therefore be a useful policy
+effect or a favorable single-chain path. The three-seed gate requires positive
+mean improvement and wins in at least two seeds before supporting a learning
+claim.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate
