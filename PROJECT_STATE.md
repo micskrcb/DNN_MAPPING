@@ -386,6 +386,18 @@ architectures cited by Wu et al., followed by a frozen full-budget run and
 held-out workload validation. Archive SHA-256 is
 `36fdd96e087703ad3641f455a269ff9a01f6e3fbf1e236a462928bdf590c7c21`.
 
+The first external literature report did not resolve the missing parameter.
+It acknowledged that no primary source states the simulator's VVA rate, then
+recommended eight additions/cycle using assumed SRAM port widths and a
+cross-architecture analogy to Simba. Those assumptions are not accepted as
+calibration evidence. The report's claim that Wu et al. used Noxim could not
+be found in the paper, and its recommendation to fully overlap VVA with NoC
+traffic conflicts with the paper's statement that time-phase latency adds
+computation and communication. It also incorrectly attributed partition-grid
+changes to RL although the sweep contained only BS, RS, and SA. Rate eight
+therefore remains a clean and useful sensitivity result, not a recovered
+hardware fact.
+
 A second, controlled proposal neighborhood is now available through
 `--ppo_asa_focus_bottleneck`. Every candidate is anchored on a task in the
 current maximum-latency pipeline stage, and the anchor is guaranteed to move.

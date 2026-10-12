@@ -472,6 +472,32 @@ Until those experiments exist, the correct statement is that the implementation
 is internally consistent and ready for learning validation—not that it has
 already reproduced the paper's reported improvements.
 
+## VVA literature-audit status (12 October 2026)
+
+An external research report reviewed Tianjic and Simba after the VVA
+sensitivity sweep. Its usable conclusion is narrow: none of the cited primary
+sources was shown to publish the VVA additions/cycle used by Wu et al.'s
+simulator. The report did not provide the requested page-level evidence for a
+rate of eight and therefore does not authorize freezing that value.
+
+Several stronger assertions in that report are excluded from the project
+evidence. Wu et al. do not mention Noxim in the paper, and Section 4.1 states
+that each time phase is measured by adding computation and communication
+latency; this does not support a fully hidden VVA cost. The report also
+described RL as changing partition grids even though the VVA sweep ran only
+BS, RS, and SA and this implementation reconstructs grids before placement
+search. Its SRAM-bandwidth calculation assumes port widths, operand residence,
+and read/write traffic that were not sourced. Simba's eight-wide vector MAC is
+evidence about Simba, not direct evidence that the hybrid evaluator gives a
+VVA core eight additions/cycle.
+
+The rate-eight result remains an important sensitivity point because its
+AlexNet-FC grids match the rate-one grids, so that comparison isolates the
+execution-rate change. It is not a recovered hardware parameter. A follow-up
+source audit must quote exact pages or explicitly conclude that the parameter
+is unavailable. If it remains unavailable, report VVA throughput as a
+sensitivity range and keep claims conditional on the assumed rate.
+
 The detailed source-code comparison with maintained public DDPG
 implementations and the remaining algorithmic differences are recorded in
 [`DDPG_REFERENCE_AUDIT.md`](DDPG_REFERENCE_AUDIT.md).
