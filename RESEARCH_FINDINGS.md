@@ -508,6 +508,25 @@ sensitivity parameter. The next baseline sweep fixes the rate used for grid
 reconstruction while changing only the execution rate, preventing the two
 effects from being conflated.
 
+An independent review of the fixed-grid result identified logic-core indexing
+as the next high-impact reconstruction assumption. The paper defines BS as
+placing logic cores sequentially by physical chip index and then physical core
+index, but it does not publish how VMM and VVA logic cores are numbered. This
+implementation numbers each output group's VMM tasks followed by its VVA task,
+which may give BS unusually strong locality once communication dominates.
+Alternative logic-index orders are therefore a baseline-sensitivity ablation,
+not a change to the optimizer.
+
+The same review confirmed that Myung et al. do not resolve VVA timing: their
+learning objective is a communication-cost proxy and their separate C++
+cycle-level routing simulator is unavailable. Their large reported headroom
+cannot calibrate Wu's computation-plus-communication objective. Wu's Equation
+4 does explicitly define overall latency as the maximum stage latency, so the
+max-versus-sum aggregation is known; the contents and timing of reconstructed
+stages remain assumptions. Wu also reports 4.5x mean-hop reduction for
+AlexNet-FC from BS to DDPG, which can serve as a later structural diagnostic
+but is not a target for RS or SA.
+
 The detailed source-code comparison with maintained public DDPG
 implementations and the remaining algorithmic differences are recorded in
 [`DDPG_REFERENCE_AUDIT.md`](DDPG_REFERENCE_AUDIT.md).

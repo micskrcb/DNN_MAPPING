@@ -426,6 +426,22 @@ SA ratio and it precedes the measured saturation point. This does not make 16
 the real hardware rate; it tests whether the reconstructed evaluator can match
 the paper under one explicitly declared sensitivity condition.
 
+An independent review identified a second baseline sensitivity: Wu defines BS
+as sequential physical chip/core placement but does not publish the numbering
+of VMM and VVA logic cores. The reconstruction currently numbers each output
+group's VMM cores immediately before its VVA core, potentially giving BS
+strong locality in communication-dominated regimes. The running rate-16
+million-proposal job remains descriptive because no numerical pass tolerance
+was frozen before launch. After it finishes, logic-index ordering must be
+ablated before treating BS-normalized ratios as calibrated.
+
+The review also corrected two scope points. Myung et al.'s communication-only
+proxy and unavailable routing simulator do not inform Wu's VVA compute rate.
+Conversely, Wu's Equation 4 explicitly fixes the objective as the maximum
+pipeline-stage latency; max versus sum is not an unresolved parameter. Figure
+11 reports a 4.5x AlexNet-FC mean-hop reduction for DDPG versus BS, useful as a
+structural diagnostic but not as an RS/SA acceptance threshold.
+
 A second, controlled proposal neighborhood is now available through
 `--ppo_asa_focus_bottleneck`. Every candidate is anchored on a task in the
 current maximum-latency pipeline stage, and the anchor is guaranteed to move.
