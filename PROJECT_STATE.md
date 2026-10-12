@@ -463,6 +463,30 @@ Both trained and frozen conditions use the same focused pools; candidate
 ranking, Metropolis acceptance, temperature adaptation, and true-objective
 accounting otherwise remain unchanged.
 
+## Fixed-SA + RL development direction
+
+The primary method-development path now places learning inside the strongest
+working search mechanics. `--algo ppo_asa --ppo_asa_annealing fixed` retains
+fixed SA's measured initial temperature, 0.99 cooldown, constant 1% task
+perturbation, Metropolis acceptance, and exact incremental objective. PPO only
+ranks a set of legal unevaluated neighbors, and exactly one selected neighbor
+consumes the optimization objective evaluation for that step.
+
+The training target is the selected proposal's immediate pre-acceptance cost
+improvement. With `--ppo_gamma 0 --ppo_gae_lambda 0`, this is a contextual
+proposal-selection problem rather than a long-horizon return-estimation
+problem. The causal control uses the same code, seed, candidate pools,
+annealing schedule, and budget with `--ppo_asa_disable_learning`; its zero
+score head remains uniform. Plain fixed SA and ASA remain context baselines,
+but failure to beat fixed SA does not by itself reject learning. The first
+gate asks whether learned proposals beat their matched frozen control.
+
+The short gate is `scripts/run_kaggle_rl_fixed_sa_gate.sh short` at 20,000
+proposals for seed zero. A positive finite-update result advances to
+`extended`, which uses 100,000 proposals for seeds zero, one, and two. This
+focuses development on RL-guided annealing without requiring ASA's reheating
+controller to work first.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate

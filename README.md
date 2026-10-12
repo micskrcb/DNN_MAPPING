@@ -993,6 +993,33 @@ fixed. The archive contains per-order BS, random-search, fixed-SA reports and
 routing diagnostics. Neither order can be designated the paper's true one
 because it was not published.
 
+### RL inside the working fixed-SA search
+
+The current method-development path keeps fixed SA's measured temperature,
+0.99 cooldown, 1% neighborhood, incremental objective, and Metropolis
+acceptance. PPO ranks legal neighbor candidates; it does not control acceptance
+or cooling. This isolates the research question: can a learned proposal policy
+improve the same annealing search?
+
+Run the one-seed short gate on Kaggle:
+
+```bash
+bash scripts/run_kaggle_rl_fixed_sa_gate.sh short \
+  runs/kaggle-rl-fixed-sa-short
+```
+
+The learned and frozen-control jobs have identical fixed annealing mechanics,
+seeds, candidate-pool construction, and objective-evaluation budgets. The
+policy receives immediate proposed cost improvement with zero discount, which
+treats neighbor ranking as a contextual decision. Fixed SA and ASA are also
+reported for context. The learning result is the paired learned-versus-frozen
+comparison; the short run is only a signal for the three-seed extended gate:
+
+```bash
+bash scripts/run_kaggle_rl_fixed_sa_gate.sh extended \
+  runs/kaggle-rl-fixed-sa-extended
+```
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

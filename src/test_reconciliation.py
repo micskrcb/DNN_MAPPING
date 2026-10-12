@@ -84,9 +84,9 @@ class TimingTests(unittest.TestCase):
         graph[0, 1] = graph[1, 2] = graph[2, 3] = 1.0
         environments = [
             MultiChipEnvironment(1, 1, 2, 3, task_graph=graph, num_tasks=4)
-            for _ in range(3)
+            for _ in range(4)
         ]
-        trained, control, loaded = {}, {}, {}
+        trained, control, loaded, fixed = {}, {}, {}, {}
         with tempfile.TemporaryDirectory() as directory:
             trained_cost = rm.run_ppo_asa(
                 environments[0], n_iter=40, candidate_count=4,
@@ -111,9 +111,19 @@ class TimingTests(unittest.TestCase):
                 adapt_window=8, checkpoint_every=20, seed=9,
                 focus_fraction=0.5, disable_learning=True,
                 load_checkpoint=f"{directory}/trained.pt", metadata=loaded)
+            fixed_cost = rm.run_ppo_asa(
+                environments[3], n_iter=16, candidate_count=4,
+                rollout_steps=4, device="cpu", update_epochs=1,
+                minibatch_size=4, hidden_dim=16, calibration_trials=4,
+                adapt_window=4, checkpoint_every=16, seed=23,
+                gamma=0.0, gae_lambda=0.0,
+                reward_mode="proposed_delta", annealing_schedule="fixed",
+                fixed_cooldown=0.99, fixed_perturb_fraction=0.01,
+                final_temperature_ratio=1e-6, metadata=fixed)
         self.assertTrue(np.isfinite(trained_cost))
         self.assertTrue(np.isfinite(control_cost))
         self.assertTrue(np.isfinite(loaded_cost))
+        self.assertTrue(np.isfinite(fixed_cost))
         self.assertEqual(trained["initial_cost"], control["initial_cost"])
         self.assertEqual(trained["candidate_evaluations"], 40)
         self.assertEqual(trained["initial_placement_evaluations"], 4)
@@ -131,6 +141,15 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(loaded["model_initialization"], "loaded_checkpoint")
         self.assertEqual(loaded["source_training_evaluations"], 40)
         self.assertEqual(loaded["source_training_updates"], 7)
+        self.assertEqual(fixed["method"],
+                         "ppo_guided_fixed_simulated_annealing")
+        self.assertEqual(fixed["annealing_schedule"], "fixed")
+        self.assertEqual(fixed["temperature_controller"],
+                         "paper_style_fixed_schedule")
+        self.assertEqual(fixed["fixed_cooldown"], 0.99)
+        self.assertEqual(fixed["final_perturb_fraction"], 0.01)
+        self.assertEqual(fixed["reheats"], 0)
+        self.assertGreater(fixed["update_count"], 0)
 
     @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
     def test_reference_ppo_asa_separates_actor_and_critic(self):

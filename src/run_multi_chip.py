@@ -2549,6 +2549,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 min_perturb_frac: float = 0.005,
                 max_perturb_frac: float = 0.05,
                 stall_windows: int = 3, calibration_trials: int = 32,
+                annealing_schedule: str = "adaptive",
+                fixed_cooldown: float = 0.99,
+                fixed_perturb_fraction: float = 0.01,
+                final_temperature_ratio: float = 1e-6,
                 diagnostics_path: str = None, metadata: dict = None,
                 incremental: bool = True, save_checkpoint: str = None,
                 load_checkpoint: str = None,
@@ -2557,7 +2561,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 oracle_pools: int = 0, oracle_stride: int = 1,
                 oracle_dataset_path: str = None,
                 allow_finetune_loaded: bool = False) -> float:
-    """PPO-guided adaptive SA with fixed acceptance and temperature logic.
+    """PPO-guided SA with either adaptive or paper-style fixed annealing.
 
     This follows the verified structure of Qiu and Liang's RL-Based-SA: PPO
     learns the neighbor proposal distribution, while simulated annealing keeps
@@ -2585,6 +2589,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("unknown PPO-ASA update style")
     if reward_mode not in {"realized", "proposed_delta", "planted_proxy"}:
         raise ValueError("unknown PPO-ASA reward mode")
+    if annealing_schedule not in {"adaptive", "fixed"}:
+        raise ValueError("unknown PPO-ASA annealing schedule")
     if oracle_pools < 0 or oracle_stride <= 0:
         raise ValueError("invalid PPO-ASA oracle diagnostic budget")
     if oracle_pools and not oracle_diagnostics_path:
@@ -2599,9 +2605,12 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "allow_finetune_loaded=True")
     if restart_interval < 0:
         raise ValueError("PPO-ASA restart interval cannot be negative")
+    if annealing_schedule == "fixed" and restart_interval:
+        raise ValueError(
+            "fixed PPO-SA currently requires one continuous annealing chain")
     if focus_bottleneck:
         focus_fraction = 1.0
-    if (not 0 < gamma <= 1 or not 0 <= gae_lambda <= 1 or
+    if (not 0 <= gamma <= 1 or not 0 <= gae_lambda <= 1 or
             not 0 < clip_ratio < 1 or learning_rate <= 0 or
             weight_decay < 0 or
             entropy_coefficient < 0 or value_coefficient < 0 or
@@ -2611,6 +2620,12 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("ASA acceptance targets must be in (0, 1)")
     if not (0 < min_perturb_frac <= max_perturb_frac <= 1):
         raise ValueError("ASA perturbation fractions must satisfy 0 < min <= max <= 1")
+    if not (0 < fixed_cooldown < 1):
+        raise ValueError("fixed PPO-SA cooldown must be in (0, 1)")
+    if not (0 < fixed_perturb_fraction <= 1):
+        raise ValueError("fixed PPO-SA perturbation fraction must be in (0, 1]")
+    if not (0 < final_temperature_ratio < 1):
+        raise ValueError("fixed PPO-SA final temperature ratio must be in (0, 1)")
     if device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA requested but torch.cuda.is_available() is false")
 
@@ -2816,7 +2831,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     accepted = improving = reheats = neutral_proposals = evaluations = 0
     chain_count = initialization_evaluations = 1
     positive_deltas = []
-    perturb_fraction = min_perturb_frac
+    perturb_fraction = (fixed_perturb_fraction
+                        if annealing_schedule == "fixed"
+                        else min_perturb_frac)
 
     def finish_proposal(candidate, new_cost, relocation, accept):
         nonlocal placement, current_cost, best_cost, best_placement
@@ -2866,6 +2883,12 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     temperature = initial_temperature
     min_temperature = initial_temperature * 1e-6
     max_temperature = initial_temperature * 10.0
+    fixed_temperature_steps = max(
+        1, math.ceil(
+            math.log(final_temperature_ratio) / math.log(fixed_cooldown)))
+    fixed_iterations_per_temperature = max(
+        1, math.ceil(max(0, n_iter - calibration) /
+                     fixed_temperature_steps))
     reward_scale = max(abs(initial_cost) * 1e-3, np.finfo(float).eps)
 
     global_dim, candidate_dim = 8, 9
@@ -2894,6 +2917,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         if loaded_checkpoint.get("candidate_count") != candidate_count:
             raise ValueError(
                 "checkpoint candidate count does not match this run")
+        if loaded_checkpoint.get("annealing_schedule", "adaptive") != \
+                annealing_schedule:
+            raise ValueError(
+                "checkpoint annealing schedule does not match this run")
         if not math.isclose(
                 float(loaded_checkpoint.get("focus_fraction", 0.0)),
                 focus_fraction, rel_tol=0.0, abs_tol=0.0):
@@ -3257,29 +3284,41 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         end_window = (window_evaluations >= adapt_window or
                       evaluations == n_iter or end_chain)
         write_record = False
+        if annealing_schedule == "fixed":
+            completed_policy_steps = evaluations - calibration
+            completed_temperature_steps = min(
+                fixed_temperature_steps,
+                completed_policy_steps // fixed_iterations_per_temperature)
+            temperature = max(
+                initial_temperature * final_temperature_ratio,
+                initial_temperature *
+                (fixed_cooldown ** completed_temperature_steps))
+
         if end_window:
             recent_acceptance = window_accepted / window_evaluations
-            if recent_acceptance < target_acceptance * 0.5:
-                temperature *= 1.5
-            elif recent_acceptance > min(0.95, target_acceptance * 1.5):
-                temperature *= 0.75
-            else:
-                temperature *= 0.95
-            if window_improving == 0:
-                stagnant += 1
-            else:
-                stagnant = 0
-                perturb_fraction = max(
-                    min_perturb_frac, perturb_fraction * 0.9)
-            if stagnant >= stall_windows:
-                temperature = max(temperature, initial_temperature * 0.5)
-                perturb_fraction = min(
-                    max_perturb_frac,
-                    max(min_perturb_frac, perturb_fraction * 1.5))
-                reheats += 1
-                stagnant = 0
-            temperature = min(
-                max_temperature, max(min_temperature, temperature))
+            if annealing_schedule == "adaptive":
+                if recent_acceptance < target_acceptance * 0.5:
+                    temperature *= 1.5
+                elif recent_acceptance > min(0.95, target_acceptance * 1.5):
+                    temperature *= 0.75
+                else:
+                    temperature *= 0.95
+                if window_improving == 0:
+                    stagnant += 1
+                else:
+                    stagnant = 0
+                    perturb_fraction = max(
+                        min_perturb_frac, perturb_fraction * 0.9)
+                if stagnant >= stall_windows:
+                    temperature = max(
+                        temperature, initial_temperature * 0.5)
+                    perturb_fraction = min(
+                        max_perturb_frac,
+                        max(min_perturb_frac, perturb_fraction * 1.5))
+                    reheats += 1
+                    stagnant = 0
+                temperature = min(
+                    max_temperature, max(min_temperature, temperature))
             write_record = True
 
         overall_done = evaluations == n_iter
@@ -3547,6 +3586,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "independent_chains": chain_count,
             "update_style": update_style,
             "reward_mode": reward_mode,
+            "annealing_schedule": annealing_schedule,
         }
         if update_style == "reference_separate":
             checkpoint.update({
@@ -3563,14 +3603,31 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         torch.save(checkpoint, save_checkpoint)
     if metadata is not None:
         metadata.update({
-            "method": "ppo_guided_adaptive_simulated_annealing",
+            "method": ("ppo_guided_fixed_simulated_annealing"
+                       if annealing_schedule == "fixed"
+                       else "ppo_guided_adaptive_simulated_annealing"),
             "proposal_policy": "candidate_set_ppo",
             "proposal_focus": (
                 "current_bottleneck_stage" if focus_fraction == 1.0
                 else f"mixed_bottleneck_{focus_fraction:.3f}"
                 if focus_fraction > 0 else "uniform_tasks"),
             "acceptance_rule": "fixed_metropolis",
-            "temperature_controller": "existing_adaptive_sa",
+            "temperature_controller": (
+                "paper_style_fixed_schedule"
+                if annealing_schedule == "fixed"
+                else "existing_adaptive_sa"),
+            "annealing_schedule": annealing_schedule,
+            "fixed_cooldown": (fixed_cooldown
+                               if annealing_schedule == "fixed" else None),
+            "fixed_temperature_steps": (
+                fixed_temperature_steps
+                if annealing_schedule == "fixed" else None),
+            "fixed_iterations_per_temperature": (
+                fixed_iterations_per_temperature
+                if annealing_schedule == "fixed" else None),
+            "ending_temperature": (
+                initial_temperature * final_temperature_ratio
+                if annealing_schedule == "fixed" else min_temperature),
             "learning_enabled": not disable_learning,
             "model_initialization": (
                 "loaded_checkpoint" if loaded_checkpoint is not None
@@ -4430,6 +4487,12 @@ def main():
         help="PPO-ASA training reward: post-acceptance realized improvement, "
              "pre-acceptance proposed improvement, or a planted proxy signal")
     parser.add_argument(
+        "--ppo_asa_annealing", choices=["adaptive", "fixed"],
+        default="adaptive",
+        help=("Annealing mechanics beneath the learned proposal policy. "
+              "fixed reuses measured temperature, 0.99 cooldown, and the "
+              "constant 1%% fixed-SA neighborhood."))
+    parser.add_argument(
         "--ppo_asa_oracle_diagnostics", default=None,
         help="Write best-of-candidate headroom and feature correlations to JSON")
     parser.add_argument(
@@ -4946,6 +5009,10 @@ def main():
             max_perturb_frac=args.asa_max_perturb_frac,
             stall_windows=args.asa_stall_windows,
             calibration_trials=args.asa_calibration_trials,
+            annealing_schedule=args.ppo_asa_annealing,
+            fixed_cooldown=0.99,
+            fixed_perturb_fraction=0.01,
+            final_temperature_ratio=args.sa_final_temperature_ratio,
             diagnostics_path=(args.asa_diagnostics or args.diagnostics),
             metadata=algorithm_metadata,
             incremental=not args.asa_full_evaluation,
