@@ -305,6 +305,22 @@ class TimingTests(unittest.TestCase):
         self.assertNotEqual(grids[1], (1, 61))
         self.assertGreater(grids[1][0], 1)
 
+    def test_logic_task_order_reindexes_graph_and_work_together(self):
+        graph = np.arange(16, dtype=np.float64).reshape(4, 4)
+        labels = ["layer_VMM_m0_n0", "layer_VVA_m0",
+                  "layer_VMM_m1_n0", "layer_VVA_m1"]
+        operations = np.array([10, 20, 30, 40], dtype=np.float64)
+        kinds = ["vmm", "vva", "vmm", "vva"]
+        remapped = rm.reorder_extracted_tasks(
+            graph, labels, operations, kinds, "all_vmm_then_vva")
+        remapped_graph, remapped_labels, remapped_operations, remapped_kinds = remapped
+        expected = np.array([0, 2, 1, 3], dtype=np.int64)
+        np.testing.assert_array_equal(remapped_graph, graph[np.ix_(expected, expected)])
+        self.assertEqual(remapped_labels,
+                         [labels[index] for index in expected])
+        np.testing.assert_array_equal(remapped_operations, operations[expected])
+        self.assertEqual(remapped_kinds, [kinds[index] for index in expected])
+
     def test_seconds_and_bytes(self):
         times = compute_seconds([128, 2], ["vmm", "vva"], vva_ops_per_cycle=1)
         np.testing.assert_allclose(times, [2.5e-9, 5e-9])

@@ -419,21 +419,35 @@ is transitional, and rates 16-32 expose large communication-sensitive
 headroom. The archive SHA-256 is
 `9b8d4075d75f9e6bce75652b1249deec643144e5b76b07e939493820a8feea1b`.
 
-The next run is a conditional full-budget baseline calibration at execution
-rate 16 with the rate-one grids held fixed. Rate 16 is prespecified because it
-is the first swept rate whose compute floor permits the approximate Figure-10
-SA ratio and it precedes the measured saturation point. This does not make 16
-the real hardware rate; it tests whether the reconstructed evaluator can match
-the paper under one explicitly declared sensitivity condition.
+The conditional full-budget baseline calibration completed at execution rate 16
+with rate-one grids held fixed (archive SHA-256
+`f584151963f1e1a438c413ac427cf9835b624d292981d1ef0c85ff4312b0b294`). At
+seed zero and one million proposals per search method, BS was 3.92032
+microseconds, RS was 3.07200 microseconds (0.7836 of BS), fixed SA was
+2.05125 microseconds (0.5232 of BS), and ASA was 2.39488 microseconds
+(0.6109 of BS). Fixed SA beat RS by 33.23% and is close to the approximate
+Figure-10 SA ratio of 0.50, while the approximate Figure-10 RS ratio of 0.59
+is still materially lower than 0.7836. Fixed SA accepted 336,113 moves and
+made 37,105 improving moves; ASA was 16.75% worse than fixed SA under the
+matched budget. This is an exploratory, one-seed, assumed-rate result, not a
+recovery of an unpublished hardware value or a confirmatory reproduction.
+
+The routing diagnostics show why latency ratios alone cannot validate the
+reconstruction. Weighted mean hops were 9.68 for BS, 24.41 for RS, and 19.09
+for fixed SA, yet fixed SA had the lowest latency. It lowered the maximum
+serialization/link bottleneck enough to outweigh its longer routes. Wu's
+Figure 11 reports a 4.5x *reduction* in AlexNet-FC mean hops for DDPG versus
+BS, so this direction mismatch is a structural diagnostic, not support for a
+paper-equivalent result.
 
 An independent review identified a second baseline sensitivity: Wu defines BS
 as sequential physical chip/core placement but does not publish the numbering
 of VMM and VVA logic cores. The reconstruction currently numbers each output
 group's VMM cores immediately before its VVA core, potentially giving BS
-strong locality in communication-dominated regimes. The running rate-16
-million-proposal job remains descriptive because no numerical pass tolerance
-was frozen before launch. After it finishes, logic-index ordering must be
-ablated before treating BS-normalized ratios as calibrated.
+strong locality in communication-dominated regimes. The rate-16 calibration
+remains descriptive because no numerical pass tolerance was frozen before
+launch. Logic-index ordering must be ablated before treating BS-normalized
+ratios as calibrated.
 
 The review also corrected two scope points. Myung et al.'s communication-only
 proxy and unavailable routing simulator do not inform Wu's VVA compute rate.

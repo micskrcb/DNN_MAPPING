@@ -973,6 +973,26 @@ bash scripts/run_kaggle_paper_baseline_calibration.sh \
   runs/kaggle-paper-calibration-vva16-fixed-grid 1000000 16 1
 ```
 
+That run completed at one seed: RS/BS was 0.7836, fixed-SA/BS was 0.5232, and
+ASA/BS was 0.6109. Fixed SA is near the approximate Figure-10 SA ratio (0.50),
+but RS remains above the paper's approximate 0.59 ratio. These results are
+conditional on an unverified VVA rate and are not a claim of paper
+reproduction. The next diagnostic isolates another unpublished choice: the
+numbering of VMM and VVA logic tasks used by the sequential baseline.
+
+Run the matched logical-index ablation before interpreting the baseline ratios:
+
+```bash
+bash scripts/run_kaggle_logic_order_ablation.sh \
+  runs/kaggle-logic-order-ablation 20000 16 1
+```
+
+It compares historical output-group-interleaved task numbering with an
+all-VMM-then-VVA order, holding the task graph, timing model, seed, and budget
+fixed. The archive contains per-order BS, random-search, fixed-SA reports and
+routing diagnostics. Neither order can be designated the paper's true one
+because it was not published.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

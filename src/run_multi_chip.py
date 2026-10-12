@@ -79,6 +79,36 @@ def configure_cpu_threads(cpu_threads=None, interop_threads=1):
     return threads
 
 
+def reorder_extracted_tasks(task_graph, task_labels, operations, kinds,
+                            logic_task_order):
+    """Apply an explicit, reproducible logical-core numbering convention.
+
+    The paper specifies physical BS ordering but does not publish the logical
+    VMM/VVA index order. Reindexing preserves the graph, work, and objective;
+    it only changes which logical tasks sequential placement encounters first.
+    """
+    if logic_task_order == "output_group_interleaved":
+        return task_graph, task_labels, operations, kinds
+    if logic_task_order != "all_vmm_then_vva":
+        raise ValueError(f"unknown logic task order: {logic_task_order}")
+
+    vmm = [index for index, label in enumerate(task_labels)
+           if "_VMM_" in label]
+    vva = [index for index, label in enumerate(task_labels)
+           if "_VVA_" in label]
+    other = [index for index, label in enumerate(task_labels)
+             if "_VMM_" not in label and "_VVA_" not in label]
+    order = np.asarray(vmm + vva + other, dtype=np.int64)
+    if len(order) != len(task_labels):
+        raise ValueError("logic task order did not cover every extracted task")
+    remapped_graph = task_graph[np.ix_(order, order)]
+    remapped_labels = [task_labels[index] for index in order]
+    remapped_operations = (operations[order] if operations is not None else None)
+    remapped_kinds = ([kinds[index] for index in order]
+                      if kinds is not None else None)
+    return remapped_graph, remapped_labels, remapped_operations, remapped_kinds
+
+
 # ---------------------------------------------------------------------------
 # REAL WORKLOAD EXTRACTOR (CNN)
 # ---------------------------------------------------------------------------
@@ -4516,6 +4546,12 @@ def main():
     parser.add_argument("--partition_balance_weight", type=float, default=1.0,
                         help="Weight given to per-core VMM/VVA cycle balance when "
                              "reconstructing unpublished paper-target layer grids")
+    parser.add_argument("--logic_task_order",
+                        choices=["output_group_interleaved", "all_vmm_then_vva"],
+                        default="output_group_interleaved",
+                        help="Logical-core numbering for sequential BS. The paper publishes "
+                             "physical ordering but not VMM/VVA indexing; the default keeps "
+                             "the historical output-group interleaving.")
     parser.add_argument("--workload_region", choices=["all", "conv", "fc"], default="all",
                         help="Optimize the whole extracted graph or, with paper_targets, "
                              "a separately masked CONV/FC region as in Section 3.1.2")
@@ -4659,6 +4695,11 @@ def main():
                 operations = operations[selected]
                 kinds = [kinds[index] for index in selected]
             num_tasks = len(selected)
+        (real_task_graph, task_labels, operations, kinds) = reorder_extracted_tasks(
+            real_task_graph, task_labels, operations, kinds, args.logic_task_order)
+        if args.logic_task_order != "output_group_interleaved":
+            print(f">> Logical-core order: {args.logic_task_order} "
+                  "(baseline-sensitivity reconstruction assumption)")
         if args.partition_mode == "paper_targets":
             target = PAPER_LOGIC_CORE_TARGETS[args.model.lower()]
             print(f">> Paper-target partitioning: CONV={target['conv']}, FC={target['linear']} "
@@ -4975,6 +5016,8 @@ def main():
             limitations.append("logic-core allocation does not match Figure-6 aggregate counts")
         else:
             limitations.append("per-layer M/N grids are reconstructed because Figure 6 publishes only aggregate counts")
+        if args.logic_task_order != "output_group_interleaved":
+            limitations.append("logical VMM/VVA index order is reconstructed for BS sensitivity")
         if args.workload_region == "all":
             limitations.append("CONV and FC placements are not optimized in separate masked regions")
         else:
