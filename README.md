@@ -930,6 +930,15 @@ at 1, 8, 16, 32, 64, and 128 VVA additions/cycle. A promising setting is only
 a hypothesis; freeze it and repeat the full calibration on fresh workloads
 before making a paper-comparability claim.
 
+The sweep completed at revision `d6493b5`. Eight additions/cycle preserved the
+original AlexNet-FC partition grids, lowered the compute floor from 0.899 to
+0.526 of BS, and improved the 20,000-proposal RS/BS and SA/BS ratios to 0.842
+and 0.661. VVA throughput therefore explains much of the missing headroom, but
+the result is still short of Figure 10 and does not establish that eight is
+the real hardware rate. Higher rates also changed the reconstructed grids,
+conflating two assumptions. The rate must be constrained from the cited
+accelerator literature before a full-budget confirmation is run.
+
 ## Interpreting results
 
 A successful run proves that the program executed; it does not prove that DDPG learned. Use the JSONL diagnostics to compare noisy and deterministic policy costs, actor/critic losses, unique intended cores, and collision repair counts. Judge convergence across at least five seeds and compare all methods under the declared complete-placement budgets. Diagnostic policy rollouts are additional objective evaluations; use `total_candidate_evaluations` whenever deterministic retention is enabled.

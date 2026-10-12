@@ -366,6 +366,26 @@ exploratory matched sweep over plausible VVA rates. It must precede more RL,
 and any selected setting must be frozen and validated on fresh workloads
 before it is treated as calibration rather than fitting to Figure 10.
 
+That exploratory sweep completed at revision `d6493b5` with 20,000 matched RS
+samples and fixed-SA proposals at 1, 8, 16, 32, 64, and 128 VVA
+additions/cycle. At one addition/cycle, RS/BS was 0.966 and SA/BS was 0.928.
+At eight additions/cycle, the original AlexNet-FC grids remained unchanged,
+the compute floor fell from 0.899 to 0.526 of BS, RS/BS reached 0.842, and
+SA/BS reached 0.661. This is strong evidence that the assumed VVA rate causes
+much of the missing optimizer headroom, but it remains short of Figure 10's
+approximate 0.59 RS and 0.50 SA ratios.
+
+Rates 16 and above changed the reconstructed per-layer grids as well as the
+execution rate. Their results are consequently non-monotonic and cannot be
+interpreted as a pure throughput sweep: SA/BS was 0.781, 0.819, 0.892, and
+0.763 at 16, 32, 64, and 128 additions/cycle. Eight additions/cycle is the
+cleanest candidate because it changes the FC compute rate without changing
+the FC grids, but selecting it from favorable AlexNet results would be
+post-hoc calibration. The next gate is a literature audit of the accelerator
+architectures cited by Wu et al., followed by a frozen full-budget run and
+held-out workload validation. Archive SHA-256 is
+`36fdd96e087703ad3641f455a269ff9a01f6e3fbf1e236a462928bdf590c7c21`.
+
 A second, controlled proposal neighborhood is now available through
 `--ppo_asa_focus_bottleneck`. Every candidate is anchored on a task in the
 current maximum-latency pipeline stage, and the anchor is guaranteed to move.
