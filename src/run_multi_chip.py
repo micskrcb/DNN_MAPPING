@@ -4477,6 +4477,11 @@ def main():
                         help="Continue despite a failed placement-sensitivity gate")
     parser.add_argument("--vva_ops_per_cycle", type=float, default=1.0,
                          help="Assumed VVA additions/cycle, not specified by paper (default 1)")
+    parser.add_argument(
+        "--partition_vva_ops_per_cycle", type=float, default=None,
+        help=("VVA rate used only when reconstructing unpublished paper-target "
+              "M/N grids. Defaults to --vva_ops_per_cycle. Set it explicitly "
+              "to hold the logical graph fixed during execution-rate sensitivity tests."))
     parser.add_argument("--on_bandwidth_gbs", type=float, default=64.0)
     parser.add_argument("--off_bandwidth_gbs", type=float, default=100.0)
     parser.add_argument("--mac_utilization", type=float, default=1.0,
@@ -4595,6 +4600,10 @@ def main():
     if (not 0 < args.mac_utilization <= 1 or
             not math.isfinite(args.vva_ops_per_cycle) or args.vva_ops_per_cycle <= 0):
         parser.error("utilization must be in (0,1] and VVA rate finite and positive")
+    if (args.partition_vva_ops_per_cycle is not None and
+            (not math.isfinite(args.partition_vva_ops_per_cycle) or
+             args.partition_vva_ops_per_cycle <= 0)):
+        parser.error("--partition_vva_ops_per_cycle must be finite and positive")
     if not math.isfinite(args.partition_balance_weight) or args.partition_balance_weight < 0:
         parser.error("--partition_balance_weight must be finite and nonnegative")
     if any(not math.isfinite(v) or v <= 0 for v in (args.on_bandwidth_gbs, args.off_bandwidth_gbs)):
@@ -4602,6 +4611,8 @@ def main():
 
     if args.reward_scale is None:
         args.reward_scale = 400e6 if args.timing_model != "proxy" else 1.0
+    if args.partition_vva_ops_per_cycle is None:
+        args.partition_vva_ops_per_cycle = args.vva_ops_per_cycle
 
     if args.device == "cpu":
         configured = configure_cpu_threads(args.cpu_threads, args.cpu_interop_threads)
@@ -4633,7 +4644,7 @@ def main():
             custom_model_path=args.custom_model, return_work=args.timing_model != "proxy",
             partition_mode=args.partition_mode,
             partition_balance_weight=args.partition_balance_weight,
-            vva_ops_per_cycle=args.vva_ops_per_cycle,
+            vva_ops_per_cycle=args.partition_vva_ops_per_cycle,
         )
         real_task_graph, num_tasks, task_labels = extracted[:3]
         operations = extracted[3] if args.timing_model != "proxy" else None

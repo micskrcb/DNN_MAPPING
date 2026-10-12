@@ -398,6 +398,16 @@ changes to RL although the sweep contained only BS, RS, and SA. Rate eight
 therefore remains a clean and useful sensitivity result, not a recovered
 hardware fact.
 
+The corrected external audit explicitly retracted the unsupported Noxim,
+full-overlap, multiplier-bypass, eight-wide reduction, SRAM-interface, and
+exact Figure-10 claims. Its defensible conclusion is that the published
+evidence is insufficient to select a single VVA additions/cycle value. The
+implementation now exposes `--partition_vva_ops_per_cycle` separately from
+`--vva_ops_per_cycle`. This permits a fixed-grid sensitivity study in which
+the logical graph is reconstructed once under a declared rate while execution
+timing is swept independently. The historical coupled behavior remains the
+default for reproducibility.
+
 A second, controlled proposal neighborhood is now available through
 `--ppo_asa_focus_bottleneck`. Every candidate is anchored on a task in the
 current maximum-latency pipeline stage, and the anchor is guaranteed to move.

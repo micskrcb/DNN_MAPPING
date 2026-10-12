@@ -498,6 +498,16 @@ source audit must quote exact pages or explicitly conclude that the parameter
 is unavailable. If it remains unavailable, report VVA throughput as a
 sensitivity range and keep claims conditional on the assumed rate.
 
+The adversarial follow-up made the required correction. It retracted the
+Noxim, hidden/overlapped VVA, multiplier-bypass, 128-addition, eight-wide
+post-processing, assumed SRAM-interface, fabricated reduction-equation, RL
+partitioning, and exact Figure-10 assertions. Its surviving conclusion is:
+the published evidence is insufficient to select a single VVA
+additions-per-cycle value. The project therefore treats throughput as a
+sensitivity parameter. The next baseline sweep fixes the rate used for grid
+reconstruction while changing only the execution rate, preventing the two
+effects from being conflated.
+
 The detailed source-code comparison with maintained public DDPG
 implementations and the remaining algorithmic differences are recorded in
 [`DDPG_REFERENCE_AUDIT.md`](DDPG_REFERENCE_AUDIT.md).

@@ -936,8 +936,28 @@ original AlexNet-FC partition grids, lowered the compute floor from 0.899 to
 and 0.661. VVA throughput therefore explains much of the missing headroom, but
 the result is still short of Figure 10 and does not establish that eight is
 the real hardware rate. Higher rates also changed the reconstructed grids,
-conflating two assumptions. The rate must be constrained from the cited
-accelerator literature before a full-budget confirmation is run.
+conflating two assumptions. A corrected source audit concluded that published
+evidence cannot determine one real rate, so results must remain conditional on
+this parameter.
+
+The follow-up source audit found that the published evidence is insufficient
+to recover a single VVA rate. Sensitivity experiments can therefore separate
+graph reconstruction from execution timing. For example,
+`--partition_vva_ops_per_cycle 1 --vva_ops_per_cycle 32` preserves the grids
+chosen under the one-addition/cycle reconstruction while evaluating VVA work
+at 32 additions/cycle. Reports record both values. Omitting the partition-only
+option preserves the historical coupled behavior.
+
+The fixed-grid Kaggle sensitivity command is:
+
+```bash
+bash scripts/run_kaggle_evaluator_vva_sensitivity.sh \
+  runs/kaggle-vva-fixed-grid 20000 1
+```
+
+The final argument fixes grid reconstruction at one addition/cycle while the
+runner sweeps execution rates. Use `coupled` instead to reproduce the first
+sweep.
 
 ## Interpreting results
 

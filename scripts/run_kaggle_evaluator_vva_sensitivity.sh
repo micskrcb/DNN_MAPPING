@@ -3,12 +3,22 @@ set -euo pipefail
 
 output_dir="${1:-runs/kaggle-evaluator-vva-sensitivity}"
 budget="${2:-20000}"
+partition_rate="${3:-coupled}"
 archive="${output_dir%/}.zip"
 rates=(1 8 16 32 64 128)
 
 if (( budget < 1000 )); then
   echo "Use at least 1,000 proposals for this exploratory sweep." >&2
   exit 2
+fi
+if [[ "${partition_rate}" != "coupled" ]]; then
+  python - "${partition_rate}" <<'PY'
+import math
+import sys
+value = float(sys.argv[1])
+if not math.isfinite(value) or value <= 0:
+    raise SystemExit("partition VVA rate must be finite and positive")
+PY
 fi
 mkdir -p "${output_dir}"
 
@@ -35,14 +45,15 @@ trap archive_results EXIT
 echo "Running reconciliation tests."
 PYTHONPATH=src python -m unittest src.test_reconciliation
 
-python - "${output_dir}/experiment-manifest.json" "${budget}" "${rates[@]}" <<'PY'
+python - "${output_dir}/experiment-manifest.json" "${budget}" "${partition_rate}" "${rates[@]}" <<'PY'
 import json
 import subprocess
 import sys
 
 destination = sys.argv[1]
 budget = int(sys.argv[2])
-rates = [float(value) for value in sys.argv[3:]]
+partition_rate = sys.argv[3]
+rates = [float(value) for value in sys.argv[4:]]
 manifest = {
     "experiment": "AlexNet-FC VVA-throughput sensitivity",
     "repository_commit": subprocess.check_output(
@@ -57,6 +68,9 @@ manifest = {
         "routing_model": "paper_xy",
         "seed": 0,
         "vva_additions_per_cycle": rates,
+        "partition_vva_additions_per_cycle": (
+            "coupled_to_execution_rate" if partition_rate == "coupled"
+            else float(partition_rate)),
         "random_search_samples_per_rate": budget,
         "fixed_sa_proposals_per_rate": budget,
     },
@@ -66,10 +80,10 @@ manifest = {
         "warning": "Approximate readings from Figure 10, not tabulated values.",
     },
     "decision_rule": (
-        "Use the sweep to identify whether the unpublished VVA rate controls "
-        "the missing objective headroom. Do not claim calibration or select an "
-        "RL result from this exploratory data. Any candidate setting must be "
-        "frozen and checked at full budget and on a fresh workload."
+        "Use the sweep to report sensitivity to an unpublished parameter. "
+        "When a fixed partition rate is supplied, execution-rate effects are "
+        "separated from reconstructed-grid effects. Do not select a rate merely "
+        "because it resembles Figure 10."
     ),
 }
 with open(destination, "w") as stream:
@@ -84,6 +98,9 @@ common=(
   --chips_x 4 --chips_y 4 --rows 16 --cols 16
   --sensitivity_trials 256 --seed 0
 )
+if [[ "${partition_rate}" != "coupled" ]]; then
+  common+=(--partition_vva_ops_per_cycle "${partition_rate}")
+fi
 
 for rate in "${rates[@]}"; do
   rate_dir="${output_dir}/vva-${rate}"
@@ -142,6 +159,8 @@ for rate in rates:
     sa_cost = reports["sa"]["best_cost"]
     rows.append({
         "vva_additions_per_cycle": float(rate),
+        "partition_vva_additions_per_cycle":
+            reports["bs"]["config"]["partition_vva_ops_per_cycle"],
         "bs_microseconds": bs * 1e6,
         "random_microseconds": random_cost * 1e6,
         "fixed_sa_microseconds": sa_cost * 1e6,
