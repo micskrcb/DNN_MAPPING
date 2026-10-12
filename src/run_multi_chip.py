@@ -85,6 +85,20 @@ def valid_ppo_gamma(algorithm, gamma):
             else 0 < gamma <= 1)
 
 
+def proposal_training_reward(mode, proposed_reward, realized_reward,
+                             planted_proxy):
+    """Return the declared local reward for learned SA proposal selection."""
+    if mode == "planted_proxy":
+        return float(planted_proxy)
+    if mode == "proposed_delta":
+        return float(proposed_reward)
+    if mode == "positive_delta":
+        return float(max(proposed_reward, 0.0))
+    if mode == "realized":
+        return float(realized_reward)
+    raise ValueError(f"unknown PPO-ASA reward mode: {mode}")
+
+
 def reorder_extracted_tasks(task_graph, task_labels, operations, kinds,
                             logic_task_order):
     """Apply an explicit, reproducible logical-core numbering convention.
@@ -2593,7 +2607,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("PPO-ASA focus fraction must be in [0, 1]")
     if update_style not in {"shared_gae", "reference_separate"}:
         raise ValueError("unknown PPO-ASA update style")
-    if reward_mode not in {"realized", "proposed_delta", "planted_proxy"}:
+    if reward_mode not in {
+            "realized", "proposed_delta", "positive_delta",
+            "planted_proxy"}:
         raise ValueError("unknown PPO-ASA reward mode")
     if annealing_schedule not in {"adaptive", "fixed"}:
         raise ValueError("unknown PPO-ASA annealing schedule")
@@ -3256,12 +3272,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             (before_cost - new_cost) / reward_scale, -10.0, 10.0))
         realized_reward = float(np.clip(
             (before_cost - current_cost) / reward_scale, -10.0, 10.0))
-        if reward_mode == "planted_proxy":
-            training_reward = float(features[selected, 7])
-        elif reward_mode == "proposed_delta":
-            training_reward = proposed_reward
-        else:
-            training_reward = realized_reward
+        training_reward = proposal_training_reward(
+            reward_mode, proposed_reward, realized_reward,
+            features[selected, 7])
         window_rewards.append(realized_reward)
         window_proposed_rewards.append(proposed_reward)
         window_training_rewards.append(training_reward)
@@ -4488,10 +4501,12 @@ def main():
              "RL-Based-SA-compatible separate actor and critic")
     parser.add_argument(
         "--ppo_asa_reward_mode",
-        choices=["realized", "proposed_delta", "planted_proxy"],
+        choices=["realized", "proposed_delta", "positive_delta",
+                 "planted_proxy"],
         default="realized",
         help="PPO-ASA training reward: post-acceptance realized improvement, "
-             "pre-acceptance proposed improvement, or a planted proxy signal")
+             "signed proposed improvement, improvement-only positive delta, "
+             "or a planted proxy signal")
     parser.add_argument(
         "--ppo_asa_annealing", choices=["adaptive", "fixed"],
         default="adaptive",

@@ -1018,7 +1018,7 @@ bash scripts/run_kaggle_rl_fixed_sa_gate.sh short \
 
 The learned and frozen-control jobs have identical fixed annealing mechanics,
 seeds, candidate-pool construction, and objective-evaluation budgets. The
-policy receives immediate proposed cost improvement with zero discount, which
+policy receives immediate improvement-only positive cost reduction with zero discount, which
 treats neighbor ranking as a contextual decision. Fixed SA and ASA are also
 reported for context. The learning result is the paired learned-versus-frozen
 comparison; the short run is only a signal for the three-seed extended gate:
@@ -1027,6 +1027,14 @@ comparison; the short run is only a signal for the three-seed extended gate:
 bash scripts/run_kaggle_rl_fixed_sa_gate.sh extended \
   runs/kaggle-rl-fixed-sa-extended
 ```
+
+The first short gate used signed proposal delta. PPO updated and moved away
+from uniform, but finished 0.0719% worse than its frozen control. Diagnostics
+showed that large rejected uphill moves dominated the signed reward while the
+learned chain still made more improving moves. The current runner therefore
+uses improvement-only positive delta, a `3e-4` learning rate, and lower entropy
+regularization. This is a new short gate, not a reinterpretation of the
+negative first result.
 
 ## Interpreting results
 

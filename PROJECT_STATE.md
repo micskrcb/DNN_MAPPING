@@ -514,6 +514,26 @@ allows zero only for PPO-ASA and retains the stricter masked-PPO rule. The
 failed archive contains no optimization result and must not enter result
 tables.
 
+The corrected signed-delta short gate then completed at revision `7f371fa`
+(archive SHA-256
+`1ce71f4631b5befe571acff6943c3f9df66d4bf67ab0f4433379ce702e62cfa2`).
+At seed zero and 20,000 proposals, learned fixed-SA reached 2.45040
+microseconds and the matched frozen control reached 2.44864 microseconds, so
+learning was 0.0719% worse. Both used 20,001 total objective evaluations,
+started at 3.81840 microseconds, and used identical measured temperature,
+cooling, perturbation fraction, and candidate count. Plain fixed SA reached
+2.40000 microseconds and ASA reached 2.46528 microseconds as context baselines.
+
+This was not a frozen-policy failure. PPO performed 78 finite updates; score
+head weight norm grew from 0.0028 to 0.348, late logit standard deviation was
+0.102, and late probability L1 distance from uniform was 0.047. The learned
+chain made 1,307 improving moves versus the control's 1,218, but did not find
+a better minimum. Its signed proposed-delta reward was dominated by uphill
+proposals (mean -4.77 normalized units). The next gate therefore uses
+improvement-only positive delta, increases learning rate from `1e-4` to
+`3e-4`, and reduces entropy regularization from `0.02` to `0.001`. Fixed-SA
+cooling and acceptance remain frozen.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate

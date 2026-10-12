@@ -22,6 +22,17 @@ class TimingTests(unittest.TestCase):
         self.assertFalse(rm.valid_ppo_gamma("ppo_asa", -0.01))
         self.assertFalse(rm.valid_ppo_gamma("ppo_asa", 1.01))
 
+    def test_improvement_only_proposal_reward(self):
+        self.assertEqual(
+            rm.proposal_training_reward("positive_delta", 2.5, -1.0, 9.0),
+            2.5)
+        self.assertEqual(
+            rm.proposal_training_reward("positive_delta", -2.5, 1.0, 9.0),
+            0.0)
+        self.assertEqual(
+            rm.proposal_training_reward("proposed_delta", -2.5, 1.0, 9.0),
+            -2.5)
+
     def test_masked_mapper_exposes_only_unused_allowed_cores(self):
         graph = np.zeros((3, 3), dtype=np.float32)
         graph[0, 1] = graph[1, 2] = 1.0

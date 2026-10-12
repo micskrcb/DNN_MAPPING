@@ -81,7 +81,7 @@ manifest = {
         "annealing_schedule": "fixed",
         "cooldown": 0.99,
         "perturb_fraction": 0.01,
-        "reward": "immediate proposed objective delta",
+        "reward": "immediate improvement-only positive objective delta",
         "ppo_gamma": 0.0,
         "candidate_pool": 16,
     },
@@ -107,12 +107,12 @@ ppo_common=(
   --algo ppo_asa --ppo_asa_annealing fixed
   --ppo_asa_candidates 16 --ppo_asa_focus_fraction 0.5
   --ppo_asa_update_style reference_separate
-  --ppo_asa_reward_mode proposed_delta
+  --ppo_asa_reward_mode positive_delta
   --ppo_asa_rollout_steps 256 --ppo_update_epochs 4
   --ppo_minibatch_size 256 --ppo_hidden_dim 128
-  --ppo_learning_rate 1e-4 --ppo_asa_weight_decay 1e-4
+  --ppo_learning_rate 3e-4 --ppo_asa_weight_decay 1e-4
   --ppo_gamma 0 --ppo_gae_lambda 0
-  --ppo_entropy_coef 0.02
+  --ppo_entropy_coef 0.001
 )
 
 for seed in "${seeds[@]}"; do
