@@ -551,6 +551,31 @@ effect or a favorable single-chain path. The three-seed gate requires positive
 mean improvement and wins in at least two seeds before supporting a learning
 claim.
 
+The 100,000-proposal, three-seed extended gate completed at revision `8e7c7e9`
+(archive SHA-256
+`71a95ba004476beeb4a4a13cc0ad7a918a5c869327f203a05d1369bc98d740c8`).
+Learned RL+SA beat its frozen control in two of three seeds. Per-seed relative
+improvements were -0.896%, +1.125%, and +0.086%, giving a mean of +0.105% and
+passing the prespecified directional rule. Mean costs were 2.23989
+microseconds learned, 2.24213 control, 2.20576 plain fixed SA, and 2.41760 ASA.
+Thus learned fixed-SA proposals beat ASA by 7.35% on mean cost but remained
+1.55% worse than plain fixed SA.
+
+The effect is not statistically resolved. The mean paired absolute benefit was
+0.00224 microseconds with a sample standard deviation of 0.02272; the paired
+three-seed 95% t interval was [-0.05420, +0.05868] microseconds. Expressed as
+relative improvement, the interval was approximately [-2.41%, +2.62%]. Every
+learned run made 391 finite updates and every learned/control pair used 100,001
+objective evaluations. This is therefore a weak positive pilot with correct
+mechanics, not a publication-level learning claim.
+
+The next method experiment follows the project goal directly: keep the same
+improvement-only proposal policy and put it back inside adaptive SA. The runner
+now supports `adaptive-short` and `adaptive-extended`. These preserve matched
+learned/frozen schedules within each seed while allowing ASA's temperature
+feedback, reheating, and neighborhood adaptation. The adaptive short gate must
+beat its frozen adaptive control before any extended run.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate

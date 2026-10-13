@@ -9,13 +9,25 @@ case "${mode}" in
   short)
     budget=20000
     seeds=(0)
+    annealing="fixed"
     ;;
   extended)
     budget=100000
     seeds=(0 1 2)
+    annealing="fixed"
+    ;;
+  adaptive-short)
+    budget=20000
+    seeds=(0)
+    annealing="adaptive"
+    ;;
+  adaptive-extended)
+    budget=100000
+    seeds=(0 1 2)
+    annealing="adaptive"
     ;;
   *)
-    echo "Usage: $0 [short|extended] [output-directory]" >&2
+    echo "Usage: $0 [short|extended|adaptive-short|adaptive-extended] [output-directory]" >&2
     exit 2
     ;;
 esac
@@ -59,28 +71,26 @@ if (( gpu_count < 1 )); then
 fi
 
 python - "${output_dir}/experiment-manifest.json" "${mode}" \
-  "${budget}" "${seeds[*]}" <<'PY'
+  "${annealing}" "${budget}" "${seeds[*]}" <<'PY'
 import json
 import subprocess
 import sys
 
-destination, mode, budget, seeds = sys.argv[1:]
+destination, mode, annealing, budget, seeds = sys.argv[1:]
 manifest = {
-    "experiment": "PPO learned proposals inside corrected fixed SA",
+    "experiment": f"PPO learned proposals inside {annealing} SA",
     "repository_commit": subprocess.check_output(
         ["git", "rev-parse", "HEAD"], text=True).strip(),
     "mode": mode,
     "budget_per_method_per_seed": int(budget),
     "seeds": [int(value) for value in seeds.split()],
-    "primary_comparison": "learned fixed-SA proposals versus frozen uniform fixed-SA proposals",
+    "primary_comparison": f"learned versus frozen proposals inside matched {annealing} SA",
     "configuration": {
         "model": "alexnet",
         "region": "fc",
         "vva_additions_per_cycle": 16,
         "partition_vva_additions_per_cycle": 1,
-        "annealing_schedule": "fixed",
-        "cooldown": 0.99,
-        "perturb_fraction": 0.01,
+        "annealing_schedule": annealing,
         "reward": "immediate improvement-only positive objective delta",
         "ppo_gamma": 0.0,
         "candidate_pool": 16,
@@ -104,7 +114,7 @@ common=(
 )
 
 ppo_common=(
-  --algo ppo_asa --ppo_asa_annealing fixed
+  --algo ppo_asa --ppo_asa_annealing "${annealing}"
   --ppo_asa_candidates 16 --ppo_asa_focus_fraction 0.5
   --ppo_asa_update_style reference_separate
   --ppo_asa_reward_mode positive_delta
@@ -123,7 +133,7 @@ for seed in "${seeds[@]}"; do
     control_gpu=1
   fi
 
-  echo "===== Seed ${seed}: learned versus frozen fixed-SA proposals ====="
+  echo "===== Seed ${seed}: learned versus frozen ${annealing}-SA proposals ====="
   CUDA_VISIBLE_DEVICES=0 PYTHONUNBUFFERED=1 python src/run_multi_chip.py \
     "${common[@]}" "${ppo_common[@]}" --device cuda \
     --seed "${seed}" --iters "${budget}" \
@@ -200,8 +210,9 @@ for seed_dir in sorted(out.glob("seed-*")):
 
 improvements = [
     row["learned_improvement_over_control_percent"] for row in rows]
+schedule = rows[0]["learned_schedule"] if rows else "unknown"
 summary = {
-    "protocol": "PPO proposal learning inside matched fixed SA",
+    "protocol": f"PPO proposal learning inside matched {schedule} SA",
     "seeds": len(rows),
     "learned_win_count": sum(row["learned_wins"] for row in rows),
     "mean_learned_improvement_over_control_percent": statistics.mean(improvements),
