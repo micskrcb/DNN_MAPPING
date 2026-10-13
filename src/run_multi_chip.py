@@ -1575,7 +1575,7 @@ if HAS_TORCH:
 
 
     class ProposalBanditRegressor(nn.Module):
-        """Predict the immediate positive gain of each legal SA proposal.
+        """Predict the signed immediate gain of each legal SA proposal.
 
         The zero-initialized head gives every candidate the same score before
         observations arrive.  This makes the frozen model an exact uniform
@@ -2593,8 +2593,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 proposal_learner: str = "ppo",
                 bandit_replay_capacity: int = 50000,
                 bandit_warmup: int = 512,
-                bandit_epsilon_final: float = 0.10,
-                bandit_epsilon_decay_fraction: float = 0.50,
+                bandit_epsilon_final: float = 0.50,
+                bandit_epsilon_decay_fraction: float = 1.00,
                 update_style: str = "shared_gae",
                 reward_mode: str = "realized",
                 focus_bottleneck: bool = False,
@@ -2621,7 +2621,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
 
     The PPO option follows the verified structure of Qiu and Liang's
     RL-Based-SA.  The contextual-bandit option instead regresses immediate
-    improvement-only move gain and explores with an epsilon-greedy policy.
+    signed move gain and explores with an epsilon-greedy policy.
     In both cases, simulated annealing owns Metropolis acceptance and cooling,
     and only the selected legal swap/relocation candidate calls the true
     placement objective.  A disabled-learning run stays exactly uniform.
@@ -3075,19 +3075,12 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         positive_indices = [
             index for index, row in enumerate(bandit_replay)
             if row[2] > 0.0]
-        other_indices = [
-            index for index, row in enumerate(bandit_replay)
-            if row[2] <= 0.0]
         for _ in range(update_epochs):
             batch_size = min(minibatch_size, len(bandit_replay))
-            positive_count = min(len(positive_indices), batch_size // 2)
-            chosen = (bandit_rng.sample(positive_indices, positive_count)
-                      if positive_count else [])
-            remaining = batch_size - len(chosen)
-            source = other_indices if len(other_indices) >= remaining else list(
-                range(len(bandit_replay)))
-            chosen.extend(bandit_rng.sample(source, remaining))
-            bandit_rng.shuffle(chosen)
+            # Uniform replay preserves the observed outcome distribution.
+            # Oversampling improving moves made the first bandit severely
+            # overpredict gains and exploit harmful proposals.
+            chosen = bandit_rng.sample(range(len(bandit_replay)), batch_size)
             global_states = torch.as_tensor(
                 np.asarray([bandit_replay[i][0] for i in chosen]),
                 dtype=torch.float32, device=torch_device)
@@ -3411,7 +3404,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         if proposal_learner == "bandit":
             bandit_replay.append((
                 global_state.copy(), features[selected].copy(),
-                max(0.0, proposed_reward)))
+                proposed_reward))
             if len(bandit_replay) > bandit_replay_capacity:
                 del bandit_replay[:len(bandit_replay) -
                                   bandit_replay_capacity]
@@ -4671,10 +4664,10 @@ def main():
     parser.add_argument("--ppo_asa_bandit_warmup", type=int, default=512,
                         help="Uniform proposals collected before bandit exploitation")
     parser.add_argument("--ppo_asa_bandit_epsilon_final", type=float,
-                        default=0.10,
+                        default=0.50,
                         help="Final random-proposal probability for the bandit")
     parser.add_argument("--ppo_asa_bandit_epsilon_decay", type=float,
-                        default=0.50,
+                        default=1.00,
                         help="Fraction of the run used to decay bandit exploration")
     parser.add_argument("--ppo_asa_rollout_steps", type=int, default=256,
                         help="Accepted/rejected proposal transitions per PPO-ASA update")

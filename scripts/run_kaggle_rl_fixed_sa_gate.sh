@@ -105,7 +105,12 @@ manifest = {
         "partition_vva_additions_per_cycle": 1,
         "annealing_schedule": annealing,
         "proposal_learner": learner,
-        "reward": "immediate improvement-only positive objective delta",
+        "reward": (
+            "signed immediate objective gain with uniform replay"
+            if learner == "bandit" else
+            "immediate improvement-only positive objective delta"),
+        "bandit_final_epsilon": 0.5 if learner == "bandit" else None,
+        "bandit_epsilon_decay_fraction": 1.0 if learner == "bandit" else None,
         "ppo_gamma": 0.0 if learner == "ppo" else None,
         "candidate_pool": 16,
     },

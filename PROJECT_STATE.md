@@ -599,14 +599,22 @@ control is competitive. Adding PPO to an already weaker controller does not
 isolate a useful learning contribution.
 
 The next fixed-SA learning gate now uses a contextual bandit rather than PPO.
-The bandit predicts immediate improvement-only gain from the same global state
+The bandit predicts signed immediate gain from the same global state
 and legal candidate features, learns only from the selected move's budgeted
 objective evaluation, and uses decaying epsilon-greedy exploration. This is a
 one-step RL formulation aligned with the observed reward; it removes PPO's
 unnecessary value estimation and trajectory credit assignment while leaving
 candidate generation, fixed cooling, Metropolis acceptance, and evaluation
 count unchanged. Its frozen control stays uniform. This implementation is
-ready for the prespecified `bandit-short` gate but has no result yet.
+The first `bandit-short` run at revision `6a4c2fb` was negative (archive
+SHA-256 `46808a06a40a5595a85145f066317ded0741096db891a96f8d063d9eeb22af0e`).
+Learned cost was 2.64544 microseconds versus 2.44864 for the frozen control,
+an 8.04% loss. It made 77 finite updates, but late policy distance from uniform
+reached 0.84375 and its mean predicted gain was positive while selected moves
+had mean clipped signed reward near -9.81. Positive-only targets, balanced
+positive replay, and rapid decay to 10% exploration produced severe
+overprediction and harmful exploitation. The corrected gate uses signed
+targets, uniform replay, 50% final exploration, and decay over the full run.
 
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained

@@ -1049,9 +1049,9 @@ mean improvement over frozen control was 0.105%, with an approximate paired
 95% t interval of [-2.41%, +2.62%]. Treat this as a weak positive pilot.
 
 A more direct contextual-bandit learner is also available under the identical
-fixed-SA search. It predicts the immediate positive gain of each candidate,
+fixed-SA search. It predicts the signed immediate gain of each candidate,
 learns from the one selected candidate that consumes an objective evaluation,
-and uses decaying epsilon-greedy exploration. This removes PPO's trajectory
+and uses gradual epsilon-greedy exploration. This removes PPO's trajectory
 and value-function estimation from a one-step proposal-ranking problem. Run
 its paired one-seed gate first:
 
@@ -1060,9 +1060,13 @@ bash scripts/run_kaggle_rl_fixed_sa_gate.sh bandit-short \
   runs/kaggle-bandit-fixed-sa-short
 ```
 
-If and only if the learned bandit beats its uniform frozen control, run the
-three-seed 100,000-evaluation gate with `bandit-extended`. This method is
-experimental and does not yet have a result.
+The first positive-only target was negative: 2.64544 microseconds learned
+versus 2.44864 for the frozen control, an 8.04% loss. Diagnostics showed a
+nearly deterministic policy predicting gains while selecting strongly harmful
+moves. The current gate therefore uses signed targets, uniform replay, a 50%
+final exploration rate, and exploration decay across the full run. If and only
+if this corrected short gate beats its frozen control, run the three-seed
+100,000-evaluation gate with `bandit-extended`.
 
 The next short gate tests the intended RL+ASA combination while keeping a
 matched frozen adaptive control:
