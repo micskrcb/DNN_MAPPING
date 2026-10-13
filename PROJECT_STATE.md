@@ -616,6 +616,19 @@ positive replay, and rapid decay to 10% exploration produced severe
 overprediction and harmful exploitation. The corrected gate uses signed
 targets, uniform replay, 50% final exploration, and decay over the full run.
 
+The corrected signed-target `bandit-short` gate at revision `a52c073`
+completed successfully (archive SHA-256
+`e84ce397dd46399c88a75336a3599b94a5911fd957f8affb2236ae03d3e182f8`).
+Learned bandit+fixed-SA reached 2.44560 microseconds versus 2.44864 for its
+frozen control, a 0.1242% improvement at identical 20,001-evaluation budgets.
+It beat ASA at 2.46528 microseconds by 0.7983%, but plain fixed SA remained
+1.90% better at 2.40000 microseconds. The learner made 77 finite updates. Late
+mean prediction was -3.95 versus a sampled signed target of -4.50, final
+exploration was 0.513, and probability distance from uniform was 0.456. This
+fixes the first run's severe positive overprediction and passes the
+prespecified short directional gate, but the 0.124% one-seed effect is too
+small for a claim. Proceed to the unchanged three-seed `bandit-extended` gate.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate

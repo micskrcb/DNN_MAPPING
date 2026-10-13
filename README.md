@@ -1068,6 +1068,14 @@ final exploration rate, and exploration decay across the full run. If and only
 if this corrected short gate beats its frozen control, run the three-seed
 100,000-evaluation gate with `bandit-extended`.
 
+The corrected short gate passed narrowly: learned bandit+fixed-SA reached
+2.44560 microseconds versus 2.44864 for its frozen control, a 0.1242%
+improvement. It beat ASA by 0.7983% but remained 1.90% worse than fixed SA.
+The learner made 77 finite updates and its signed predictions tracked the
+direction of observed targets without collapsing exploration. This is enough
+to run `bandit-extended`, but it is a one-seed pilot with a very small effect,
+not evidence of a reliable learning advantage.
+
 The next short gate tests the intended RL+ASA combination while keeping a
 matched frozen adaptive control:
 

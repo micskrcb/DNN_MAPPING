@@ -100,6 +100,7 @@ Current paper targets:
 53. Retain RL+fixed SA as the primary learned-annealing implementation. For a future RL+ASA method, first redesign the adaptive controller around the working geometric schedule (for example, bounded reheating or learned move-scale selection) and establish that its frozen adaptive control is competitive with fixed SA. Do not combine another weak ASA controller with PPO and attribute the resulting gap to proposal learning.
 54. [x] Add a contextual-bandit proposal learner under the same fixed-SA mechanics. It predicts immediate gain from the selected move and preserves the exact uniform frozen-policy control and objective budget. The initial positive-target design is superseded by item 55.
 55. [x] Diagnose the first bandit short gate. It lost to its frozen control by 8.04% despite 77 finite updates; positive-balanced replay overpredicted gains and 10% final exploration caused harmful exploitation. Change only the identified learning failure: signed gain targets, uniform replay, 50% final epsilon, and full-run decay. Repeat the one-seed short gate before any extended run.
+56. [x] Complete the corrected signed-target short gate. Learned bandit+fixed-SA beat its frozen control by 0.1242% and ASA by 0.7983%, while remaining 1.90% worse than fixed SA. Prediction calibration and exploration diagnostics no longer show the first run's collapse. The directional gate passes, so run `bandit-extended`; require positive mean improvement and wins in at least two of three paired seeds.
 
 ## Gate 4: improvements after reproduction
 
