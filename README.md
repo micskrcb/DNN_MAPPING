@@ -1123,6 +1123,14 @@ proposals had a small mean best-so-far trajectory advantage, but its interval
 crossed zero. Treat AlexNet-CONV as a valid final-cost tie, not a positive
 learning result.
 
+The frozen VGG16-FC short transfer gate also passed at seed zero. At 20,001
+objective evaluations, learned RL+SA reached 4.59088 microseconds versus
+4.67664 for its frozen control, 4.66032 for fixed SA, and 4.72016 for ASA.
+Those differences are 1.834%, 1.490%, and 2.739%, respectively. The learner
+made 77 finite updates and used the unchanged AlexNet-FC configuration. This
+is a one-seed screening result; the required next experiment is a three-seed
+100,000-evaluation VGG16-FC gate.
+
 The next short gate tests the intended RL+ASA combination while keeping a
 matched frozen adaptive control:
 

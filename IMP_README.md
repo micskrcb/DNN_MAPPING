@@ -134,6 +134,11 @@ Do not describe the method as proven across all workloads yet. The supported
 claim is that the frozen learned proposal policy showed a positive held-out
 benefit on AlexNet-FC. AlexNet-CONV currently shows no final-cost advantage.
 
+The frozen VGG16-FC short test is also positive: learned RL+SA beat its frozen
+control by 1.834%, fixed SA by 1.490%, and ASA by 2.739% at seed zero. It made
+77 finite updates. Treat this as a passed screening test, not a final result;
+the unchanged three-seed 100,000-evaluation VGG16-FC test is still required.
+
 ## Main theory references
 
 1. *Core Placement Optimization for Multi-chip Many-core Neural Network

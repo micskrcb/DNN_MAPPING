@@ -719,6 +719,18 @@ showing that candidate-pool proposal mechanics accelerate this workload, while
 the extra contribution from learning is not resolved. Do not claim improved
 final CONV quality or statistically supported sample efficiency.
 
+The next frozen cross-workload short gate completed on VGG16-FC at revision
+`40f60e9` (archive SHA-256
+`9d29cbafcd59b3cb362cbe653129a3935b96f45de5e1fc06737be6d8001a3969`).
+At seed zero and 20,001 objective evaluations, learned bandit+SA reached
+4.59088 microseconds versus 4.67664 for its frozen control, 4.66032 for fixed
+SA, and 4.72016 for ASA. It improved over control by 1.834%, fixed SA by
+1.490%, and ASA by 2.739%. The learner made 77 finite updates and reached
+epsilon 0.5128. No learner or search hyperparameter changed from the frozen
+AlexNet-FC method. This passes the one-seed short gate, but it is not yet
+multi-seed evidence. Run the unchanged three-seed, 100,000-evaluation
+VGG16-FC extension before making a transfer claim.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate
