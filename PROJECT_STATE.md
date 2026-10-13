@@ -576,6 +576,28 @@ learned/frozen schedules within each seed while allowing ASA's temperature
 feedback, reheating, and neighborhood adaptation. The adaptive short gate must
 beat its frozen adaptive control before any extended run.
 
+The adaptive short gate completed at revision `d4d9e38` (archive SHA-256
+`8d9db7e72154480f5b14dd291d56deb5cc52c769af5d351064b5f5e62ed0e349`).
+Learned RL+ASA reached 2.64784 microseconds versus 2.63840 for its frozen
+adaptive control, a 0.3578% loss with identical 20,001-evaluation budgets.
+Plain ASA reached 2.46528 microseconds and fixed SA reached 2.40000
+microseconds. The learned adaptive hybrid was therefore 7.40% worse than plain
+ASA and 10.33% worse than fixed SA.
+
+PPO mechanics were active: the learned run made 78 finite updates, its score
+head norm reached 0.152, and late probability L1 distance from uniform reached
+0.0144. It made 855 improving moves versus the frozen control's 824, but did
+not find a better minimum. Both learned and frozen adaptive hybrids reheated
+four times and ended with the same 0.5% perturbation fraction. This is a valid
+negative result for the current adaptive controller, so `adaptive-extended`
+is stopped.
+
+The primary learned method remains RL+fixed SA, which at least passed the
+three-seed directional gate. A future RL+ASA attempt should redesign adaptation
+around the working geometric schedule and first show that its frozen adaptive
+control is competitive. Adding PPO to an already weaker controller does not
+isolate a useful learning contribution.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate
