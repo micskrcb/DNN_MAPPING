@@ -1574,6 +1574,37 @@ if HAS_TORCH:
                 torch.tanh(global_embedding + pooled)).squeeze(-1)
 
 
+    class ProposalBanditRegressor(nn.Module):
+        """Predict the immediate positive gain of each legal SA proposal.
+
+        The zero-initialized head gives every candidate the same score before
+        observations arrive.  This makes the frozen model an exact uniform
+        proposal control and lets epsilon-greedy exploration collect labels
+        without spending extra objective evaluations.
+        """
+
+        def __init__(self, global_dim: int, candidate_dim: int,
+                     hidden_dim: int = 128):
+            super().__init__()
+            self.global_encoder = nn.Sequential(
+                nn.Linear(global_dim, hidden_dim), nn.Tanh())
+            self.candidate_encoder = nn.Sequential(
+                nn.Linear(candidate_dim, hidden_dim), nn.Tanh())
+            self.score_head = nn.Linear(hidden_dim, 1)
+            for module in (self.global_encoder[0], self.candidate_encoder[0]):
+                nn.init.orthogonal_(module.weight, gain=math.sqrt(2.0))
+                nn.init.zeros_(module.bias)
+            nn.init.zeros_(self.score_head.weight)
+            nn.init.zeros_(self.score_head.bias)
+
+        def forward(self, global_states, candidate_features):
+            global_embedding = self.global_encoder(global_states)
+            candidate_embedding = self.candidate_encoder(candidate_features)
+            joint = torch.tanh(
+                candidate_embedding + global_embedding[:, None, :])
+            return self.score_head(joint).squeeze(-1)
+
+
 def run_masked_ppo(env: MultiChipEnvironment, n_episodes: int = 500,
                    baseline_trials: int = 1000, device: str = None,
                    learning_rate: float = 3e-4, rollout_episodes: int = 10,
@@ -2559,6 +2590,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 clip_ratio: float = 0.2, entropy_coefficient: float = 0.01,
                 value_coefficient: float = 0.5, max_grad_norm: float = 0.5,
                 hidden_dim: int = 128, disable_learning: bool = False,
+                proposal_learner: str = "ppo",
+                bandit_replay_capacity: int = 50000,
+                bandit_warmup: int = 512,
+                bandit_epsilon_final: float = 0.10,
+                bandit_epsilon_decay_fraction: float = 0.50,
                 update_style: str = "shared_gae",
                 reward_mode: str = "realized",
                 focus_bottleneck: bool = False,
@@ -2581,18 +2617,15 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 oracle_pools: int = 0, oracle_stride: int = 1,
                 oracle_dataset_path: str = None,
                 allow_finetune_loaded: bool = False) -> float:
-    """PPO-guided SA with either adaptive or paper-style fixed annealing.
+    """Learned-proposal SA with either adaptive or paper-style fixed annealing.
 
-    This follows the verified structure of Qiu and Liang's RL-Based-SA: PPO
-    learns the neighbor proposal distribution, while simulated annealing keeps
-    ownership of Metropolis acceptance and cooling.  The policy ranks a small
-    set of legal, unevaluated swap/relocation candidates.  Only the selected
-    candidate calls the true placement objective, so ``n_iter`` has the same
-    meaning as ordinary ASA.  A disabled-learning run stays exactly uniform
-    because the proposal score head is initialized to zero. Independent-chain
-    training follows their multi-instance training principle, with an original
-    adapter for this project's placement state, action, and objective. No
-    external implementation code is copied. Reference:
+    The PPO option follows the verified structure of Qiu and Liang's
+    RL-Based-SA.  The contextual-bandit option instead regresses immediate
+    improvement-only move gain and explores with an epsilon-greedy policy.
+    In both cases, simulated annealing owns Metropolis acceptance and cooling,
+    and only the selected legal swap/relocation candidate calls the true
+    placement objective.  A disabled-learning run stays exactly uniform.
+    No external implementation code is copied. Reference:
     https://github.com/nathanqiu07/RL-Based-SA-Public
     """
     if not HAS_TORCH:
@@ -2603,6 +2636,16 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("PPO-ASA budgets and sizes must be positive")
     if candidate_count < 2:
         raise ValueError("PPO-ASA requires at least two proposal candidates")
+    if proposal_learner not in {"ppo", "bandit"}:
+        raise ValueError("unknown proposal learner")
+    if min(bandit_replay_capacity, bandit_warmup) <= 0:
+        raise ValueError("bandit replay capacity and warmup must be positive")
+    if bandit_warmup > bandit_replay_capacity:
+        raise ValueError("bandit warmup cannot exceed replay capacity")
+    if not 0.0 <= bandit_epsilon_final <= 1.0:
+        raise ValueError("bandit final epsilon must be in [0, 1]")
+    if not 0.0 < bandit_epsilon_decay_fraction <= 1.0:
+        raise ValueError("bandit epsilon decay fraction must be in (0, 1]")
     if not 0.0 <= focus_fraction <= 1.0:
         raise ValueError("PPO-ASA focus fraction must be in [0, 1]")
     if update_style not in {"shared_gae", "reference_separate"}:
@@ -2662,6 +2705,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     action_generator.manual_seed(seed_value + 3_000_003)
     update_generator = torch.Generator(device=torch_device)
     update_generator.manual_seed(seed_value + 4_000_003)
+    bandit_rng = random.Random(seed_value + 5_000_003)
 
     n = env.num_tasks
     placement = np.asarray(
@@ -2914,8 +2958,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     reward_scale = max(abs(initial_cost) * 1e-3, np.finfo(float).eps)
 
     global_dim, candidate_dim = 8, 9
-    model = actor = critic = None
-    if update_style == "reference_separate":
+    model = actor = critic = bandit = None
+    if proposal_learner == "bandit":
+        bandit = ProposalBanditRegressor(
+            global_dim, candidate_dim, hidden_dim=hidden_dim).to(torch_device)
+    elif update_style == "reference_separate":
         actor = ProposalPPOActor(
             global_dim, candidate_dim, hidden_dim=hidden_dim).to(torch_device)
         critic = ProposalPPOCritic(
@@ -2931,9 +2978,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         loaded_checkpoint = torch.load(
             load_checkpoint, map_location=torch_device, weights_only=False)
         expected_algorithm = (
+            "bandit_sa_proposal_v1" if proposal_learner == "bandit" else
             "ppo_asa_reference_separate_v2"
-            if update_style == "reference_separate"
-            else "ppo_asa_proposal_v1")
+            if update_style == "reference_separate" else
+            "ppo_asa_proposal_v1")
         if loaded_checkpoint.get("algorithm") != expected_algorithm:
             raise ValueError("checkpoint is not a PPO-ASA proposal model")
         if loaded_checkpoint.get("candidate_count") != candidate_count:
@@ -2948,13 +2996,19 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 focus_fraction, rel_tol=0.0, abs_tol=0.0):
             raise ValueError(
                 "checkpoint proposal focus does not match this run")
-        if update_style == "reference_separate":
+        if proposal_learner == "bandit":
+            bandit.load_state_dict(loaded_checkpoint["bandit"])
+        elif update_style == "reference_separate":
             actor.load_state_dict(loaded_checkpoint["actor"])
             critic.load_state_dict(loaded_checkpoint["critic"])
         else:
             model.load_state_dict(loaded_checkpoint["model"])
-    optimizer = actor_optimizer = critic_optimizer = None
-    if update_style == "reference_separate":
+    optimizer = actor_optimizer = critic_optimizer = bandit_optimizer = None
+    if proposal_learner == "bandit":
+        bandit_optimizer = optim.Adam(
+            bandit.parameters(), lr=learning_rate, eps=1e-5,
+            weight_decay=weight_decay)
+    elif update_style == "reference_separate":
         actor_optimizer = optim.Adam(
             actor.parameters(), lr=learning_rate, eps=1e-5,
             weight_decay=weight_decay)
@@ -3009,6 +3063,61 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
 
     latest_metrics = None
     pending = []
+    bandit_replay = []
+    bandit_steps_since_update = 0
+
+    def update_bandit():
+        nonlocal update_count, bandit_steps_since_update
+        if (disable_learning or len(bandit_replay) < bandit_warmup or
+                bandit_steps_since_update < rollout_steps):
+            return None
+        metrics = []
+        positive_indices = [
+            index for index, row in enumerate(bandit_replay)
+            if row[2] > 0.0]
+        other_indices = [
+            index for index, row in enumerate(bandit_replay)
+            if row[2] <= 0.0]
+        for _ in range(update_epochs):
+            batch_size = min(minibatch_size, len(bandit_replay))
+            positive_count = min(len(positive_indices), batch_size // 2)
+            chosen = (bandit_rng.sample(positive_indices, positive_count)
+                      if positive_count else [])
+            remaining = batch_size - len(chosen)
+            source = other_indices if len(other_indices) >= remaining else list(
+                range(len(bandit_replay)))
+            chosen.extend(bandit_rng.sample(source, remaining))
+            bandit_rng.shuffle(chosen)
+            global_states = torch.as_tensor(
+                np.asarray([bandit_replay[i][0] for i in chosen]),
+                dtype=torch.float32, device=torch_device)
+            candidate_rows = torch.as_tensor(
+                np.asarray([bandit_replay[i][1] for i in chosen]),
+                dtype=torch.float32, device=torch_device).unsqueeze(1)
+            targets = torch.as_tensor(
+                [bandit_replay[i][2] for i in chosen],
+                dtype=torch.float32, device=torch_device)
+            predictions = bandit(global_states, candidate_rows).squeeze(1)
+            loss = F.smooth_l1_loss(predictions, targets)
+            bandit_optimizer.zero_grad()
+            loss.backward()
+            gradient_norm = torch.nn.utils.clip_grad_norm_(
+                bandit.parameters(), max_grad_norm)
+            bandit_optimizer.step()
+            metrics.append({
+                "bandit_loss": float(loss.detach().cpu()),
+                "gradient_norm": float(gradient_norm),
+                "score_head_weight_norm": float(
+                    bandit.score_head.weight.detach().norm().cpu()),
+                "mean_prediction": float(predictions.detach().mean().cpu()),
+                "mean_target": float(targets.detach().mean().cpu()),
+                "positive_replay_fraction": (
+                    len(positive_indices) / len(bandit_replay)),
+            })
+        bandit_steps_since_update = 0
+        update_count += 1
+        return {key: float(np.mean([entry[key] for entry in metrics]))
+                for key in metrics[0]}
 
     def update_policy(transitions):
         nonlocal update_count
@@ -3199,25 +3308,49 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             features, dtype=torch.float32,
             device=torch_device).unsqueeze(0)
         with torch.no_grad():
-            if update_style == "reference_separate":
+            if proposal_learner == "bandit":
+                normalized_logits = bandit(global_tensor, feature_tensor)
+                if disable_learning or len(bandit_replay) < bandit_warmup:
+                    epsilon = 1.0
+                else:
+                    decay_steps = max(
+                        1, round(policy_steps * bandit_epsilon_decay_fraction))
+                    learned_steps = max(0, len(bandit_replay) - bandit_warmup)
+                    decay_progress = min(1.0, learned_steps / decay_steps)
+                    epsilon = (1.0 - decay_progress *
+                               (1.0 - bandit_epsilon_final))
+                probabilities = torch.full_like(
+                    normalized_logits, epsilon / candidate_count)
+                greedy = normalized_logits.argmax(dim=-1, keepdim=True)
+                probabilities.scatter_add_(
+                    1, greedy,
+                    torch.full_like(greedy, 1.0 - epsilon,
+                                    dtype=probabilities.dtype))
+                value = torch.zeros(1, device=torch_device)
+            elif update_style == "reference_separate":
                 distribution = actor.distribution(
                     global_tensor, feature_tensor)
                 value = critic(global_tensor, feature_tensor)
+                probabilities = distribution.probs
+                normalized_logits = distribution.logits
             else:
                 distribution, value = model.distribution_and_value(
                     global_tensor, feature_tensor)
-            probabilities = distribution.probs
+                probabilities = distribution.probs
+                normalized_logits = distribution.logits
             sample = torch.rand(
                 (probabilities.shape[0], 1), device=torch_device,
                 generator=action_generator)
             action = torch.sum(
                 sample > probabilities.cumsum(dim=-1), dim=-1).clamp(
                     max=candidate_count - 1)
-            log_prob = distribution.log_prob(action)
+            log_prob = (torch.log(probabilities.gather(
+                1, action.unsqueeze(-1)).squeeze(-1).clamp_min(1e-12))
+                        if proposal_learner == "bandit" else
+                        distribution.log_prob(action))
             uniform_action = torch.floor(
                 sample.squeeze(-1) * candidate_count).long().clamp(
                     max=candidate_count - 1)
-            normalized_logits = distribution.logits
         selected = int(action.item())
         candidate = candidates[selected]
         changed = changed_sets[selected]
@@ -3275,6 +3408,17 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         training_reward = proposal_training_reward(
             reward_mode, proposed_reward, realized_reward,
             features[selected, 7])
+        if proposal_learner == "bandit":
+            bandit_replay.append((
+                global_state.copy(), features[selected].copy(),
+                max(0.0, proposed_reward)))
+            if len(bandit_replay) > bandit_replay_capacity:
+                del bandit_replay[:len(bandit_replay) -
+                                  bandit_replay_capacity]
+            bandit_steps_since_update += 1
+            bandit_metrics = update_bandit()
+            if bandit_metrics is not None:
+                latest_metrics = bandit_metrics
         window_rewards.append(realized_reward)
         window_proposed_rewards.append(proposed_reward)
         window_training_rewards.append(training_reward)
@@ -3358,7 +3502,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 next_feature_tensor = torch.as_tensor(
                     next_pool[3], dtype=torch.float32,
                     device=torch_device).unsqueeze(0)
-                if update_style == "reference_separate":
+                if proposal_learner == "bandit":
+                    next_value_tensor = torch.zeros(
+                        1, device=torch_device)
+                elif update_style == "reference_separate":
                     next_value_tensor = critic(
                         next_global_tensor, next_feature_tensor)
                 else:
@@ -3366,20 +3513,21 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                         next_global_tensor, next_feature_tensor)
             next_value = float(next_value_tensor.item())
 
-        pending.append({
-            "global_state": global_state,
-            "candidate_features": features,
-            "action": selected,
-            "log_prob": float(log_prob.item()),
-            "value": float(value.item()),
-            "reward": training_reward,
-            "next_value": next_value,
-            "done": done,
-        })
-        if (len(pending) >= rollout_steps or overall_done or
-                (end_chain and update_at_chain_end)):
-            latest_metrics = update_policy(pending)
-            pending.clear()
+        if proposal_learner == "ppo":
+            pending.append({
+                "global_state": global_state,
+                "candidate_features": features,
+                "action": selected,
+                "log_prob": float(log_prob.item()),
+                "value": float(value.item()),
+                "reward": training_reward,
+                "next_value": next_value,
+                "done": done,
+            })
+            if (len(pending) >= rollout_steps or overall_done or
+                    (end_chain and update_at_chain_end)):
+                latest_metrics = update_policy(pending)
+                pending.clear()
 
         if write_record:
             record = {
@@ -3417,6 +3565,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                     float(np.mean(window_oracle_true_gains))
                     if window_oracle_true_gains else None),
                 "learning_enabled": not disable_learning,
+                "exploration_epsilon": (
+                    epsilon if proposal_learner == "bandit" else None),
                 "update_count": update_count,
                 "chain": chain_count,
             }
@@ -3425,7 +3575,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                         "actor_gradient_norm", "critic_gradient_norm",
                         "policy_head_gradient_norm",
                         "value_head_gradient_norm",
-                        "score_head_weight_norm"):
+                        "score_head_weight_norm", "bandit_loss",
+                        "mean_prediction", "mean_target",
+                        "positive_replay_fraction"):
                 record[key] = (latest_metrics.get(key)
                                if latest_metrics is not None else None)
             if diagnostics is not None:
@@ -3587,9 +3739,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         if parent:
             os.makedirs(parent, exist_ok=True)
         checkpoint = {
-            "algorithm": ("ppo_asa_reference_separate_v2"
-                          if update_style == "reference_separate"
-                          else "ppo_asa_proposal_v1"),
+            "algorithm": (
+                "bandit_sa_proposal_v1" if proposal_learner == "bandit" else
+                "ppo_asa_reference_separate_v2"
+                if update_style == "reference_separate" else
+                "ppo_asa_proposal_v1"),
             "resumable": False,
             "evaluations": evaluations,
             "best_cost": best_cost,
@@ -3604,10 +3758,16 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "update_at_chain_end": update_at_chain_end,
             "independent_chains": chain_count,
             "update_style": update_style,
+            "proposal_learner": proposal_learner,
             "reward_mode": reward_mode,
             "annealing_schedule": annealing_schedule,
         }
-        if update_style == "reference_separate":
+        if proposal_learner == "bandit":
+            checkpoint.update({
+                "bandit": bandit.state_dict(),
+                "bandit_optimizer": bandit_optimizer.state_dict(),
+            })
+        elif update_style == "reference_separate":
             checkpoint.update({
                 "actor": actor.state_dict(),
                 "critic": critic.state_dict(),
@@ -3622,10 +3782,13 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         torch.save(checkpoint, save_checkpoint)
     if metadata is not None:
         metadata.update({
-            "method": ("ppo_guided_fixed_simulated_annealing"
-                       if annealing_schedule == "fixed"
-                       else "ppo_guided_adaptive_simulated_annealing"),
-            "proposal_policy": "candidate_set_ppo",
+            "method": (
+                f"{proposal_learner}_guided_fixed_simulated_annealing"
+                if annealing_schedule == "fixed" else
+                f"{proposal_learner}_guided_adaptive_simulated_annealing"),
+            "proposal_policy": (
+                "epsilon_greedy_contextual_bandit"
+                if proposal_learner == "bandit" else "candidate_set_ppo"),
             "proposal_focus": (
                 "current_bottleneck_stage" if focus_fraction == 1.0
                 else f"mixed_bottleneck_{focus_fraction:.3f}"
@@ -3669,6 +3832,16 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "update_at_chain_end": update_at_chain_end,
             "weight_decay": weight_decay,
             "reward_mode": reward_mode,
+            "proposal_learner": proposal_learner,
+            "bandit_replay_capacity": (
+                bandit_replay_capacity if proposal_learner == "bandit" else None),
+            "bandit_warmup": (
+                bandit_warmup if proposal_learner == "bandit" else None),
+            "bandit_epsilon_final": (
+                bandit_epsilon_final if proposal_learner == "bandit" else None),
+            "bandit_epsilon_decay_fraction": (
+                bandit_epsilon_decay_fraction
+                if proposal_learner == "bandit" else None),
             "update_style": update_style,
             "policy_value_parameter_sharing": (
                 update_style != "reference_separate"),
@@ -4490,6 +4663,19 @@ def main():
                         help="Freeze masked PPO for a matched untrained-policy control")
     parser.add_argument("--ppo_asa_candidates", type=int, default=16,
                         help="Unevaluated legal neighbors ranked at each PPO-ASA step")
+    parser.add_argument(
+        "--ppo_asa_learner", choices=["ppo", "bandit"], default="ppo",
+        help="Proposal learner: PPO or an immediate-gain contextual bandit")
+    parser.add_argument("--ppo_asa_bandit_replay", type=int, default=50000,
+                        help="Maximum selected-move observations retained by the bandit")
+    parser.add_argument("--ppo_asa_bandit_warmup", type=int, default=512,
+                        help="Uniform proposals collected before bandit exploitation")
+    parser.add_argument("--ppo_asa_bandit_epsilon_final", type=float,
+                        default=0.10,
+                        help="Final random-proposal probability for the bandit")
+    parser.add_argument("--ppo_asa_bandit_epsilon_decay", type=float,
+                        default=0.50,
+                        help="Fraction of the run used to decay bandit exploration")
     parser.add_argument("--ppo_asa_rollout_steps", type=int, default=256,
                         help="Accepted/rejected proposal transitions per PPO-ASA update")
     parser.add_argument("--ppo_asa_weight_decay", type=float, default=0.0,
@@ -4530,7 +4716,7 @@ def main():
         "--ppo_asa_finetune_loaded", action="store_true",
         help="Explicitly allow PPO updates from a loaded proposal checkpoint")
     parser.add_argument("--ppo_asa_disable_learning", action="store_true",
-                        help="Keep PPO-ASA proposal scores exactly uniform for a matched control")
+                        help="Keep learned-SA proposals exactly uniform for a matched control")
     parser.add_argument("--ppo_asa_focus_bottleneck", action="store_true",
                         help="Anchor every PPO-ASA candidate on the current bottleneck stage")
     parser.add_argument("--ppo_asa_focus_fraction", type=float, default=0.0,
@@ -5017,6 +5203,11 @@ def main():
             max_grad_norm=args.ppo_max_grad_norm,
             hidden_dim=args.ppo_hidden_dim,
             disable_learning=args.ppo_asa_disable_learning,
+            proposal_learner=args.ppo_asa_learner,
+            bandit_replay_capacity=args.ppo_asa_bandit_replay,
+            bandit_warmup=args.ppo_asa_bandit_warmup,
+            bandit_epsilon_final=args.ppo_asa_bandit_epsilon_final,
+            bandit_epsilon_decay_fraction=args.ppo_asa_bandit_epsilon_decay,
             update_style=args.ppo_asa_update_style,
             reward_mode=args.ppo_asa_reward_mode,
             focus_bottleneck=args.ppo_asa_focus_bottleneck,

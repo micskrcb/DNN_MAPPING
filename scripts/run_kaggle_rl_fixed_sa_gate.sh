@@ -4,6 +4,7 @@ set -euo pipefail
 mode="${1:-short}"
 output_dir="${2:-runs/kaggle-rl-fixed-sa-${mode}}"
 archive="${output_dir%/}.zip"
+learner="ppo"
 
 case "${mode}" in
   short)
@@ -26,8 +27,20 @@ case "${mode}" in
     seeds=(0 1 2)
     annealing="adaptive"
     ;;
+  bandit-short)
+    budget=20000
+    seeds=(0)
+    annealing="fixed"
+    learner="bandit"
+    ;;
+  bandit-extended)
+    budget=100000
+    seeds=(0 1 2)
+    annealing="fixed"
+    learner="bandit"
+    ;;
   *)
-    echo "Usage: $0 [short|extended|adaptive-short|adaptive-extended] [output-directory]" >&2
+    echo "Usage: $0 [short|extended|adaptive-short|adaptive-extended|bandit-short|bandit-extended] [output-directory]" >&2
     exit 2
     ;;
 esac
@@ -71,14 +84,14 @@ if (( gpu_count < 1 )); then
 fi
 
 python - "${output_dir}/experiment-manifest.json" "${mode}" \
-  "${annealing}" "${budget}" "${seeds[*]}" <<'PY'
+  "${annealing}" "${learner}" "${budget}" "${seeds[*]}" <<'PY'
 import json
 import subprocess
 import sys
 
-destination, mode, annealing, budget, seeds = sys.argv[1:]
+destination, mode, annealing, learner, budget, seeds = sys.argv[1:]
 manifest = {
-    "experiment": f"PPO learned proposals inside {annealing} SA",
+    "experiment": f"{learner} learned proposals inside {annealing} SA",
     "repository_commit": subprocess.check_output(
         ["git", "rev-parse", "HEAD"], text=True).strip(),
     "mode": mode,
@@ -91,8 +104,9 @@ manifest = {
         "vva_additions_per_cycle": 16,
         "partition_vva_additions_per_cycle": 1,
         "annealing_schedule": annealing,
+        "proposal_learner": learner,
         "reward": "immediate improvement-only positive objective delta",
-        "ppo_gamma": 0.0,
+        "ppo_gamma": 0.0 if learner == "ppo" else None,
         "candidate_pool": 16,
     },
     "interpretation": (
@@ -115,6 +129,7 @@ common=(
 
 ppo_common=(
   --algo ppo_asa --ppo_asa_annealing "${annealing}"
+  --ppo_asa_learner "${learner}"
   --ppo_asa_candidates 16 --ppo_asa_focus_fraction 0.5
   --ppo_asa_update_style reference_separate
   --ppo_asa_reward_mode positive_delta
@@ -205,6 +220,7 @@ for seed_dir in sorted(out.glob("seed-*")):
         "learned_wins": learned < control,
         "learned_updates": learned_metadata["update_count"],
         "learned_schedule": learned_metadata["annealing_schedule"],
+        "proposal_learner": learned_metadata["proposal_learner"],
         "control_schedule": control_metadata["annealing_schedule"],
     })
 
@@ -212,14 +228,14 @@ improvements = [
     row["learned_improvement_over_control_percent"] for row in rows]
 schedule = rows[0]["learned_schedule"] if rows else "unknown"
 summary = {
-    "protocol": f"PPO proposal learning inside matched {schedule} SA",
+    "protocol": f"Learned proposal selection inside matched {schedule} SA",
     "seeds": len(rows),
     "learned_win_count": sum(row["learned_wins"] for row in rows),
     "mean_learned_improvement_over_control_percent": statistics.mean(improvements),
     "individual_results": rows,
     "next_decision": (
         "Run extended only if the short learned policy beats its frozen control "
-        "and performs at least one finite PPO update."
+        "and performs at least one finite learner update."
         if len(rows) == 1 else
         "Treat learning as supported only if the mean improvement is positive "
         "and learned proposals win at least two of three seeds."

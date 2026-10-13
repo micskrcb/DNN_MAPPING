@@ -170,6 +170,40 @@ class TimingTests(unittest.TestCase):
         self.assertGreater(fixed["update_count"], 0)
 
     @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
+    def test_contextual_bandit_starts_tied_and_updates_with_fixed_sa(self):
+        import torch
+        torch.set_num_threads(2)
+        model = rm.ProposalBanditRegressor(8, 9, hidden_dim=16)
+        scores = model(torch.zeros((2, 8)), torch.randn((2, 4, 9)))
+        torch.testing.assert_close(scores, torch.zeros((2, 4)))
+
+        graph = np.zeros((4, 4), dtype=np.float32)
+        graph[0, 1] = graph[1, 2] = graph[2, 3] = 1.0
+        env = MultiChipEnvironment(
+            1, 1, 2, 3, task_graph=graph, num_tasks=4)
+        metadata = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                contextlib.redirect_stdout(io.StringIO()):
+            result = rm.run_ppo_asa(
+                env, n_iter=24, candidate_count=4, rollout_steps=4,
+                device="cpu", update_epochs=1, minibatch_size=4,
+                hidden_dim=16, calibration_trials=4, adapt_window=4,
+                checkpoint_every=24, seed=13, proposal_learner="bandit",
+                bandit_replay_capacity=32, bandit_warmup=4,
+                annealing_schedule="fixed",
+                diagnostics_path=f"{directory}/bandit.jsonl",
+                save_checkpoint=f"{directory}/bandit.pt", metadata=metadata)
+            checkpoint = torch.load(
+                f"{directory}/bandit.pt", map_location="cpu",
+                weights_only=False)
+        self.assertTrue(np.isfinite(result))
+        self.assertEqual(metadata["proposal_learner"], "bandit")
+        self.assertEqual(metadata["proposal_policy"],
+                         "epsilon_greedy_contextual_bandit")
+        self.assertGreater(metadata["update_count"], 0)
+        self.assertEqual(checkpoint["algorithm"], "bandit_sa_proposal_v1")
+
+    @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
     def test_reference_ppo_asa_separates_actor_and_critic(self):
         import torch
         torch.set_num_threads(2)
