@@ -701,6 +701,24 @@ annealing, feature, or exploration setting was changed from the frozen
 AlexNet-FC method. This passes the one-seed transfer gate and justifies a
 three-seed 100,000-evaluation AlexNet-CONV extension.
 
+The three-seed AlexNet-CONV extension at revision `ab8b352` completed (archive
+SHA-256 `20ded5670df2e2a97eae86d4af4bd3e5608070ef0d1b4ca4549eeb8959095491`).
+At 100,000 proposals, learned RL+SA, frozen control, and fixed SA all reached
+the same 37.02117-microsecond best cost in every seed. RL made 389 finite
+updates per seed and reached final epsilon 0.5026, so this is a valid optimizer
+tie rather than a failed learning run. ASA means were worse, but varied by
+seed.
+
+The short-run CONV advantage was therefore an early-convergence signal rather
+than a better final minimum. Learned RL+SA reached the shared floor at roughly
+59,932, 36,432, and 33,432 proposals; frozen control reached it at roughly
+61,132, 30,432, and 41,032. Mean best-so-far trajectory cost favored learned
+proposals by 0.357%, but the three-seed interval crossed zero. Fixed SA reached
+the floor no earlier than the 64,000, 92,000, and 62,000 logged checkpoints,
+showing that candidate-pool proposal mechanics accelerate this workload, while
+the extra contribution from learning is not resolved. Do not claim improved
+final CONV quality or statistically supported sample efficiency.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate

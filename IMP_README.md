@@ -124,14 +124,15 @@ For held-out AlexNet-FC seeds 3--5, RL+SA beat its frozen control in all three
 seeds by 1.965% on average. It beat ASA by 9.288% on average. Its mean advantage
 over fixed SA was 0.669%, but that comparison is not yet statistically settled.
 
-In the first frozen AlexNet-CONV transfer test, RL+SA reached 37.02117
-microseconds, compared with 37.44656 for the frozen control, 37.87195 for fixed
-SA, and 38.72273 for ASA. This was a one-seed short gate; the multi-seed CONV
-experiment is the next validation step.
+In the first frozen AlexNet-CONV short test, RL+SA reached 37.02117
+microseconds, compared with 37.44656 for the frozen control and 37.87195 for
+fixed SA. In the later three-seed 100,000-proposal test, learned RL+SA, frozen
+control, and fixed SA all reached the same 37.02117-microsecond minimum. CONV
+therefore shows a short-budget signal but a final-cost tie.
 
 Do not describe the method as proven across all workloads yet. The supported
 claim is that the frozen learned proposal policy showed a positive held-out
-benefit on AlexNet-FC and a positive one-seed transfer signal on AlexNet-CONV.
+benefit on AlexNet-FC. AlexNet-CONV currently shows no final-cost advantage.
 
 ## Main theory references
 

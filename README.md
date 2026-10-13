@@ -1116,6 +1116,13 @@ by 2.246%, and ASA by 4.394%, with 77 finite learner updates. No method setting
 changed from AlexNet-FC. This is a one-seed transfer signal and advances to a
 three-seed 100,000-evaluation CONV gate.
 
+At 100,000 proposals across three CONV seeds, learned RL+SA, its frozen control,
+and fixed SA all reached the same 37.02117-microsecond minimum. The short-run
+advantage therefore did not become a final-quality improvement. Learned
+proposals had a small mean best-so-far trajectory advantage, but its interval
+crossed zero. Treat AlexNet-CONV as a valid final-cost tie, not a positive
+learning result.
+
 The next short gate tests the intended RL+ASA combination while keeping a
 matched frozen adaptive control:
 
