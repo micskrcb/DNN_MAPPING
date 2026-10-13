@@ -1106,6 +1106,12 @@ frozen transfer tests. These change only the workload; bandit architecture,
 features, optimizer, exploration, candidate count, annealing, and gate remain
 unchanged. Use a short AlexNet-CONV gate before committing a large GPU budget.
 
+The frozen AlexNet-CONV short gate passed at seed zero. Learned RL+SA reached
+37.02117 microseconds, improving over its frozen control by 1.136%, fixed SA
+by 2.246%, and ASA by 4.394%, with 77 finite learner updates. No method setting
+changed from AlexNet-FC. This is a one-seed transfer signal and advances to a
+three-seed 100,000-evaluation CONV gate.
+
 The next short gate tests the intended RL+ASA combination while keeping a
 matched frozen adaptive control:
 

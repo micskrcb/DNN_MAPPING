@@ -689,6 +689,18 @@ zero), while RL+SA beats ASA in all six by 8.572% on average. The held-out
 control result is the primary unbiased learning evidence. The next requirement
 is cross-workload validation, not more tuning on AlexNet-FC.
 
+The first frozen cross-workload transfer gate completed on AlexNet-CONV at
+revision `cedf929` (archive SHA-256
+`fa0fb4aff3b2e746f32a0b7126b49dbf4f9688611b65f8ded16521bf419b4c3d`).
+At seed zero and 20,001 objective evaluations, learned bandit+SA reached
+37.02117 microseconds versus 37.44656 for its frozen control, 37.87195 for
+fixed SA, and 38.72273 for ASA. It therefore improved over control by 1.136%,
+fixed SA by 2.246%, and ASA by 4.394%. The learner made 77 finite updates,
+recorded 19,968 observations, and reached final epsilon 0.5128. No learner,
+annealing, feature, or exploration setting was changed from the frozen
+AlexNet-FC method. This passes the one-seed transfer gate and justifies a
+three-seed 100,000-evaluation AlexNet-CONV extension.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate
