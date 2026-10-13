@@ -649,6 +649,24 @@ test of the actual 0.7525-exploration configuration, but not of the declared
 replay eviction and reports final epsilon in run metadata. Rerun before using
 the extended result as final method evidence.
 
+The epsilon-fixed paired rerun at revision `0608cf0` completed (archive
+SHA-256 `8da3ae0c743abdec001ab6a2e743c5c5698e07a0857024a4ba8f89614f55499a`).
+All learned runs reached final epsilon 0.5026, recorded 99,968 bandit
+observations, made 389 finite updates, and used 100,001 total objective
+evaluations. Learned costs were 2.26688, 2.17600, and 2.23904 microseconds;
+matched frozen-control costs were 2.26704, 2.23216, and 2.22720. Relative
+improvements were +0.007%, +2.516%, and -0.532%. The method therefore won two
+of three seeds with +0.664% mean per-seed improvement, passing the directional
+gate. Its approximate paired three-seed 95% t interval remains wide at
+[-3.38%, +4.70%].
+
+Combining the rerun with already archived same-seed baselines gives mean costs
+of 2.22731 microseconds learned, 2.24213 frozen control, 2.20576 fixed SA, and
+2.41760 ASA. Learned bandit+SA beats ASA by 7.87% but remains 0.98% worse than
+fixed SA. This is repeated evidence of a small learned-proposal benefit over
+the causal control, not yet evidence that the hybrid is the strongest search
+method. Freeze this configuration before adding seeds or workloads.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate

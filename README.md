@@ -1085,6 +1085,14 @@ valid result for the actual higher-exploration configuration. The implementation
 now decays from total observations and records final epsilon; rerun the extended
 gate before treating it as final evidence.
 
+The epsilon-fixed paired rerun reached 0.5026 exploration in every seed and
+again won two of three learned-versus-frozen pairs. Mean improvement over the
+frozen control was 0.664%. Combined with the already archived same-seed
+baselines, learned bandit+SA beat ASA by 7.87% and remained 0.98% worse than
+fixed SA. The three-seed interval still crosses zero. Treat this as repeated
+directional evidence and freeze the configuration before evaluating held-out
+seeds and additional workloads.
+
 The next short gate tests the intended RL+ASA combination while keeping a
 matched frozen adaptive control:
 
