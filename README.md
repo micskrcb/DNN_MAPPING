@@ -1093,6 +1093,14 @@ fixed SA. The three-seed interval still crosses zero. Treat this as repeated
 directional evidence and freeze the configuration before evaluating held-out
 seeds and additional workloads.
 
+On the frozen configuration, all three previously unused seeds 3--5 beat their
+matched controls. Mean improvement was 1.965%, with a paired 95% t interval of
+[1.008%, 2.922%]. RL+SA also beat ASA in all three held-out seeds by 9.288%
+on average. It beat fixed SA in two of three and by 0.669% on average, but that
+interval crosses zero. This is the first unbiased positive learning result for
+the method. The configuration is now frozen; the next test is transfer to
+additional workloads rather than more AlexNet-FC tuning.
+
 The next short gate tests the intended RL+ASA combination while keeping a
 matched frozen adaptive control:
 

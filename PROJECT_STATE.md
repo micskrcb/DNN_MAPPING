@@ -667,6 +667,28 @@ fixed SA. This is repeated evidence of a small learned-proposal benefit over
 the causal control, not yet evidence that the hybrid is the strongest search
 method. Freeze this configuration before adding seeds or workloads.
 
+The frozen-configuration held-out test on previously unused seeds 3--5 at
+revision `073f003` completed (archive SHA-256
+`e229999cba4d9ed89c0a8fafd1c3dcf7c01bfd339c39e7c87e7759440cf0387e`).
+RL+SA beat its frozen control in all three held-out pairs. Per-seed improvements
+were 2.284%, 1.537%, and 2.074%, for a mean of 1.965% and a paired 95% t
+interval of [1.008%, 2.922%]. Mean held-out costs were 2.20656 microseconds
+learned, 2.25077 control, 2.22160 fixed SA, and 2.43248 ASA. RL+SA beat fixed
+SA in two of three seeds and by 0.669% on average, but that interval crosses
+zero. It beat ASA in all three seeds by 9.288% on average, with interval
+[7.833%, 10.742%]. All mechanics and budgets passed: 389 finite updates,
+99,968 observations, final epsilon 0.5026, and 100,001 objective evaluations
+per learned/control run.
+
+Across all six epsilon-corrected seeds 0--5, RL+SA beat the frozen control in
+five of six pairs and improved by 1.314% on average; the combined interval is
+approximately [-0.024%, 2.653%], narrowly including zero because seeds 0--2
+were more variable. RL+SA and fixed SA are effectively tied across the six
+seeds (RL+SA 0.161% worse by mean paired relative difference, interval crossing
+zero), while RL+SA beats ASA in all six by 8.572% on average. The held-out
+control result is the primary unbiased learning evidence. The next requirement
+is cross-workload validation, not more tuning on AlexNet-FC.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate
