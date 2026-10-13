@@ -6,6 +6,8 @@ output_dir="${2:-runs/kaggle-rl-fixed-sa-${mode}}"
 archive="${output_dir%/}.zip"
 learner="ppo"
 skip_context_baselines="${SKIP_CONTEXT_BASELINES:-0}"
+model="${MODEL_OVERRIDE:-alexnet}"
+workload_region="${WORKLOAD_REGION_OVERRIDE:-fc}"
 
 case "${mode}" in
   short)
@@ -90,12 +92,12 @@ fi
 
 python - "${output_dir}/experiment-manifest.json" "${mode}" \
   "${annealing}" "${learner}" "${budget}" "${seeds[*]}" \
-  "${skip_context_baselines}" <<'PY'
+  "${skip_context_baselines}" "${model}" "${workload_region}" <<'PY'
 import json
 import subprocess
 import sys
 
-destination, mode, annealing, learner, budget, seeds, skip_baselines = sys.argv[1:]
+destination, mode, annealing, learner, budget, seeds, skip_baselines, model, region = sys.argv[1:]
 manifest = {
     "experiment": f"{learner} learned proposals inside {annealing} SA",
     "repository_commit": subprocess.check_output(
@@ -106,8 +108,8 @@ manifest = {
     "context_baselines_included": skip_baselines != "1",
     "primary_comparison": f"learned versus frozen proposals inside matched {annealing} SA",
     "configuration": {
-        "model": "alexnet",
-        "region": "fc",
+        "model": model,
+        "region": region,
         "vva_additions_per_cycle": 16,
         "partition_vva_additions_per_cycle": 1,
         "annealing_schedule": annealing,
@@ -131,8 +133,8 @@ with open(destination, "w") as stream:
 PY
 
 common=(
-  --use_cnn --model alexnet
-  --partition_mode paper_targets --workload_region fc
+  --use_cnn --model "${model}"
+  --partition_mode paper_targets --workload_region "${workload_region}"
   --timing_model paper_pipeline --routing_model paper_xy
   --chips_x 4 --chips_y 4 --rows 16 --cols 16
   --vva_ops_per_cycle 16 --partition_vva_ops_per_cycle 1

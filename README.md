@@ -1101,6 +1101,11 @@ interval crosses zero. This is the first unbiased positive learning result for
 the method. The configuration is now frozen; the next test is transfer to
 additional workloads rather than more AlexNet-FC tuning.
 
+The paired runner accepts `MODEL_OVERRIDE` and `WORKLOAD_REGION_OVERRIDE` for
+frozen transfer tests. These change only the workload; bandit architecture,
+features, optimizer, exploration, candidate count, annealing, and gate remain
+unchanged. Use a short AlexNet-CONV gate before committing a large GPU budget.
+
 The next short gate tests the intended RL+ASA combination while keeping a
 matched frozen adaptive control:
 
