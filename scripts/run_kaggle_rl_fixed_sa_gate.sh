@@ -46,6 +46,10 @@ case "${mode}" in
     ;;
 esac
 
+if [[ -n "${SEEDS_OVERRIDE:-}" ]]; then
+  read -r -a seeds <<<"${SEEDS_OVERRIDE}"
+fi
+
 mkdir -p "${output_dir}"
 
 archive_results() {
