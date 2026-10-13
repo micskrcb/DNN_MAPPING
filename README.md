@@ -1,5 +1,9 @@
 # DNN Mapping with Reinforcement Learning
 
+If you are starting work on the current branch, read
+[`IMP_README.md`](IMP_README.md) first. It contains the branch rules, setup,
+tests, current RL+SA method, evidence, and theory summary.
+
 This repository maps DNN computation tasks onto a multi-chip many-core accelerator using DDPG, guided DDPG, masked categorical PPO, PPO-guided adaptive simulated annealing, random search, fixed simulated annealing, adaptive simulated annealing (ASA), a DDPG→ASA hybrid, or the sequential baseline (BS). Its reproduction target is Wu et al., **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning**, ACM TODAES 2020 ([DOI 10.1145/3418498](https://doi.org/10.1145/3418498)).
 
 The `cpu` branch is the CPU-oriented continuation of the reconciled paper implementation. It is runnable and tested on CPU, explicitly controls PyTorch thread use, supports concurrent independent experiments, reduces diagnostic overhead, and uses exact affected-stage reevaluation for ASA. The paper does not publish its simulator or every parameter, so the code records reconstruction assumptions instead of claiming exact numerical reproduction.
