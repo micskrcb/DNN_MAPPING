@@ -3065,6 +3065,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     pending = []
     bandit_replay = []
     bandit_steps_since_update = 0
+    bandit_observations = 0
+    epsilon = 1.0
 
     def update_bandit():
         nonlocal update_count, bandit_steps_since_update
@@ -3308,7 +3310,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 else:
                     decay_steps = max(
                         1, round(policy_steps * bandit_epsilon_decay_fraction))
-                    learned_steps = max(0, len(bandit_replay) - bandit_warmup)
+                    # Use total observations, not replay length: replay is
+                    # capped and must not freeze the exploration schedule.
+                    learned_steps = max(
+                        0, bandit_observations - bandit_warmup)
                     decay_progress = min(1.0, learned_steps / decay_steps)
                     epsilon = (1.0 - decay_progress *
                                (1.0 - bandit_epsilon_final))
@@ -3402,6 +3407,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             reward_mode, proposed_reward, realized_reward,
             features[selected, 7])
         if proposal_learner == "bandit":
+            bandit_observations += 1
             bandit_replay.append((
                 global_state.copy(), features[selected].copy(),
                 proposed_reward))
@@ -3835,6 +3841,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "bandit_epsilon_decay_fraction": (
                 bandit_epsilon_decay_fraction
                 if proposal_learner == "bandit" else None),
+            "bandit_observations": (
+                bandit_observations if proposal_learner == "bandit" else None),
+            "final_exploration_epsilon": (
+                epsilon if proposal_learner == "bandit" else None),
             "update_style": update_style,
             "policy_value_parameter_sharing": (
                 update_style != "reference_separate"),

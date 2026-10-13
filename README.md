@@ -1076,6 +1076,15 @@ direction of observed targets without collapsing exploration. This is enough
 to run `bandit-extended`, but it is a one-seed pilot with a very small effect,
 not evidence of a reliable learning advantage.
 
+The first three-seed extended run also passed directionally: learned proposals
+won two seeds and improved over their frozen controls by 0.491% on average.
+They beat ASA by 7.70% but remained 1.16% worse than fixed SA, and the
+three-seed interval crossed zero. Inspection found that replay eviction froze
+epsilon near 0.7525 rather than the declared 0.5 endpoint. That archive is a
+valid result for the actual higher-exploration configuration. The implementation
+now decays from total observations and records final epsilon; rerun the extended
+gate before treating it as final evidence.
+
 The next short gate tests the intended RL+ASA combination while keeping a
 matched frozen adaptive control:
 

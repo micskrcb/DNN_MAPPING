@@ -629,6 +629,26 @@ fixes the first run's severe positive overprediction and passes the
 prespecified short directional gate, but the 0.124% one-seed effect is too
 small for a claim. Proceed to the unchanged three-seed `bandit-extended` gate.
 
+The three-seed signed-bandit extended gate at revision `d4b46ce` completed
+(archive SHA-256
+`f9a81276acc281f5f9e51aad95480db0b32da1e6284fb90b0bf7aa7d12be324a`).
+Learned proposals beat the frozen control in two of three seeds. Per-seed
+improvements were -1.129%, +2.072%, and +0.532%; mean per-seed improvement was
++0.491%. Mean costs were 2.23131 microseconds learned, 2.24213 control, 2.20576
+fixed SA, and 2.41760 ASA. The learned hybrid beat ASA by 7.70% but remained
+1.16% worse than fixed SA. The three-seed 95% t interval for improvement over
+control was approximately [-3.49%, +4.47%], so the directional gate passes but
+the effect is not statistically resolved.
+
+The archive also exposed an implementation error in the declared exploration
+schedule. Replay capacity was 50,000, and epsilon decay used current replay
+length rather than total observations. Epsilon therefore stopped at 0.7525 in
+the 100,000-proposal runs instead of reaching 0.5. The result remains a valid
+test of the actual 0.7525-exploration configuration, but not of the declared
+0.5 endpoint. The code now counts all bandit observations independently of
+replay eviction and reports final epsilon in run metadata. Rerun before using
+the extended result as final method evidence.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate
