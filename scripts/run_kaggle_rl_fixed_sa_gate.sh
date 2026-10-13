@@ -5,6 +5,7 @@ mode="${1:-short}"
 output_dir="${2:-runs/kaggle-rl-fixed-sa-${mode}}"
 archive="${output_dir%/}.zip"
 learner="ppo"
+skip_context_baselines="${SKIP_CONTEXT_BASELINES:-0}"
 
 case "${mode}" in
   short)
@@ -84,12 +85,13 @@ if (( gpu_count < 1 )); then
 fi
 
 python - "${output_dir}/experiment-manifest.json" "${mode}" \
-  "${annealing}" "${learner}" "${budget}" "${seeds[*]}" <<'PY'
+  "${annealing}" "${learner}" "${budget}" "${seeds[*]}" \
+  "${skip_context_baselines}" <<'PY'
 import json
 import subprocess
 import sys
 
-destination, mode, annealing, learner, budget, seeds = sys.argv[1:]
+destination, mode, annealing, learner, budget, seeds, skip_baselines = sys.argv[1:]
 manifest = {
     "experiment": f"{learner} learned proposals inside {annealing} SA",
     "repository_commit": subprocess.check_output(
@@ -97,6 +99,7 @@ manifest = {
     "mode": mode,
     "budget_per_method_per_seed": int(budget),
     "seeds": [int(value) for value in seeds.split()],
+    "context_baselines_included": skip_baselines != "1",
     "primary_comparison": f"learned versus frozen proposals inside matched {annealing} SA",
     "configuration": {
         "model": "alexnet",
@@ -183,17 +186,19 @@ for seed in "${seeds[@]}"; do
     exit 1
   fi
 
-  echo "===== Seed ${seed}: context baselines ====="
-  PYTHONUNBUFFERED=1 python src/run_multi_chip.py \
-    "${common[@]}" --algo sa --device cpu \
-    --seed "${seed}" --iters "${budget}" \
-    --report "${seed_dir}/fixed-sa-report.json" \
-    >"${seed_dir}/fixed-sa.log" 2>&1
-  PYTHONUNBUFFERED=1 python src/run_multi_chip.py \
-    "${common[@]}" --algo asa --device cpu \
-    --seed "${seed}" --iters "${budget}" \
-    --report "${seed_dir}/asa-report.json" \
-    >"${seed_dir}/asa.log" 2>&1
+  if [[ "${skip_context_baselines}" != "1" ]]; then
+    echo "===== Seed ${seed}: context baselines ====="
+    PYTHONUNBUFFERED=1 python src/run_multi_chip.py \
+      "${common[@]}" --algo sa --device cpu \
+      --seed "${seed}" --iters "${budget}" \
+      --report "${seed_dir}/fixed-sa-report.json" \
+      >"${seed_dir}/fixed-sa.log" 2>&1
+    PYTHONUNBUFFERED=1 python src/run_multi_chip.py \
+      "${common[@]}" --algo asa --device cpu \
+      --seed "${seed}" --iters "${budget}" \
+      --report "${seed_dir}/asa-report.json" \
+      >"${seed_dir}/asa.log" 2>&1
+  fi
   archive_results
 done
 
@@ -208,8 +213,10 @@ rows = []
 for seed_dir in sorted(out.glob("seed-*")):
     reports = {}
     for method in ("learned", "control", "fixed-sa", "asa"):
-        with (seed_dir / f"{method}-report.json").open() as stream:
-            reports[method] = json.load(stream)
+        path = seed_dir / f"{method}-report.json"
+        if path.exists():
+            with path.open() as stream:
+                reports[method] = json.load(stream)
     learned = reports["learned"]["best_cost"]
     control = reports["control"]["best_cost"]
     learned_metadata = reports["learned"]["algorithm_metadata"]
@@ -218,8 +225,12 @@ for seed_dir in sorted(out.glob("seed-*")):
         "seed": int(seed_dir.name.split("-")[-1]),
         "learned_microseconds": learned * 1e6,
         "frozen_control_microseconds": control * 1e6,
-        "fixed_sa_microseconds": reports["fixed-sa"]["best_cost"] * 1e6,
-        "asa_microseconds": reports["asa"]["best_cost"] * 1e6,
+        "fixed_sa_microseconds": (
+            reports["fixed-sa"]["best_cost"] * 1e6
+            if "fixed-sa" in reports else None),
+        "asa_microseconds": (
+            reports["asa"]["best_cost"] * 1e6
+            if "asa" in reports else None),
         "learned_improvement_over_control_percent": (
             (control - learned) / control * 100),
         "learned_wins": learned < control,
