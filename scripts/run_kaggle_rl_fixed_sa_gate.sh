@@ -204,6 +204,11 @@ for seed in "${seeds[@]}"; do
       --seed "${seed}" --iters "${budget}" \
       --report "${seed_dir}/asa-report.json" \
       >"${seed_dir}/asa.log" 2>&1
+    PYTHONUNBUFFERED=1 python src/run_multi_chip.py \
+      "${common[@]}" --algo random --device cpu \
+      --seed "${seed}" --iters "${budget}" \
+      --report "${seed_dir}/random-report.json" \
+      >"${seed_dir}/random.log" 2>&1
   fi
   archive_results
 done
@@ -218,7 +223,7 @@ out = Path(sys.argv[1])
 rows = []
 for seed_dir in sorted(out.glob("seed-*")):
     reports = {}
-    for method in ("learned", "control", "fixed-sa", "asa"):
+    for method in ("learned", "control", "fixed-sa", "asa", "random"):
         path = seed_dir / f"{method}-report.json"
         if path.exists():
             with path.open() as stream:
@@ -237,6 +242,9 @@ for seed_dir in sorted(out.glob("seed-*")):
         "asa_microseconds": (
             reports["asa"]["best_cost"] * 1e6
             if "asa" in reports else None),
+        "random_microseconds": (
+            reports["random"]["best_cost"] * 1e6
+            if "random" in reports else None),
         "learned_improvement_over_control_percent": (
             (control - learned) / control * 100),
         "learned_wins": learned < control,

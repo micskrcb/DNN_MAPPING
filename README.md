@@ -1139,6 +1139,10 @@ All learned runs made 389 finite updates and reached epsilon 0.5026. This is a
 positive frozen-method transfer result on VGG16-FC. Random search was not part
 of this archive, so no random-search comparison is claimed.
 
+For subsequent held-out runs, the paired runner also executes matched random
+search when context baselines are enabled. Its report appears as
+`random-report.json` and the aggregate summary includes `random_microseconds`.
+
 The next short gate tests the intended RL+ASA combination while keeping a
 matched frozen adaptive control:
 
