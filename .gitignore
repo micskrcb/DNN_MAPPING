@@ -1,6 +1,28 @@
-chip_env/
+# Python bytecode & virtual environments
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+chip_env/
+
+# Testing & tool caches
+.pytest_cache/
+.coverage
+htmlcov/
+
+# PyTorch checkpoints & weights (exclude already-tracked artifacts)
+*.pt
+*.pth
+*.ckpt
+!src/alexnet_ckpt.pt
+!runs/kaggle-ppo-asa-deployment-265759f-2026-10-09/trained.pt
+!runs/kaggle-ppo-asa-multichain-5ea4c65-2026-10-09/ppo-asa-trained.pt
+
+# Large generated Kaggle archives (exclude deliberately tracked benchmark packages)
 runs/kaggle-guided-*/
 runs/kaggle-masked-ppo-*/
 runs/kaggle-masked-ppo-*.zip
+!runs/kaggle-bandit-vgg16-fc-extended-2026-10-14/results.zip
+!runs/kaggle-bandit-vgg16-fc-heldout-2026-10-14/results.zip
