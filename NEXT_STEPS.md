@@ -107,7 +107,8 @@ Current paper targets:
 60. [x] Add frozen workload overrides and complete the AlexNet-CONV short transfer gate without changing learner hyperparameters. RL+SA beat frozen control by 1.136%, fixed SA by 2.246%, and ASA by 4.394%, with 77 finite updates. Advance to the three-seed 100,000-evaluation CONV gate.
 61. [x] Complete the three-seed AlexNet-CONV extension. Learned, frozen control, and fixed SA all reached the identical 37.02117-microsecond final minimum in all three seeds. Learned proposals had a small 0.357% mean best-so-far trajectory advantage over control, but its interval crossed zero. Record CONV as a final-quality tie and move to a new DNN workload without retuning.
 62. [x] Complete the frozen VGG16-FC short transfer gate at seed zero. RL+SA reached 4.59088 microseconds, beating frozen control by 1.834%, fixed SA by 1.490%, and ASA by 2.739%, with 77 finite updates. This is a passed one-seed signal only.
-63. Run the unchanged three-seed VGG16-FC `bandit-extended` gate at 100,000 evaluations per method. Require positive mean improvement over frozen control and wins in at least two of three paired seeds; report the paired interval and comparisons with fixed SA and ASA.
+63. [x] Complete the unchanged three-seed VGG16-FC `bandit-extended` gate at 100,000 evaluations per method. Learned RL+SA beat frozen control in all three pairs by 2.255% on average, with paired 95% interval [1.107%, 3.403%]. It beat fixed SA in all three by 0.908% on average, though that interval crosses zero, and beat ASA in all three by 5.418% with a positive interval. The cross-workload final-quality gate passes.
+64. Run frozen VGG16-FC seeds 3--5 as a held-out confirmation and add a matched 100,000-evaluation random-search baseline. Do not change the learner, features, annealing, exploration, or candidate pool. Report learned versus frozen control as the primary test and random, fixed SA, and ASA as context.
 
 ## Gate 4: improvements after reproduction
 

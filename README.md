@@ -1131,6 +1131,14 @@ made 77 finite updates and used the unchanged AlexNet-FC configuration. This
 is a one-seed screening result; the required next experiment is a three-seed
 100,000-evaluation VGG16-FC gate.
 
+That three-seed gate passed. Learned RL+SA beat its frozen control in every
+pair by 2.255% on average; the paired 95% t interval was [1.107%, 3.403%]. It
+also beat fixed SA in every seed by 0.908% on average, although that interval
+crossed zero, and beat ASA in every seed by 5.418% with a positive interval.
+All learned runs made 389 finite updates and reached epsilon 0.5026. This is a
+positive frozen-method transfer result on VGG16-FC. Random search was not part
+of this archive, so no random-search comparison is claimed.
+
 The next short gate tests the intended RL+ASA combination while keeping a
 matched frozen adaptive control:
 

@@ -731,6 +731,21 @@ AlexNet-FC method. This passes the one-seed short gate, but it is not yet
 multi-seed evidence. Run the unchanged three-seed, 100,000-evaluation
 VGG16-FC extension before making a transfer claim.
 
+The three-seed VGG16-FC extension at revision `6ab5a41` completed (archive
+SHA-256 `3e9f5874ebc704fee430f2b7913a236432a72fafc1fa6395cbb4cffee2826def`).
+At 100,001 evaluations per learned/control run, learned RL+SA beat its frozen
+control in all three pairs. Per-seed improvements were 1.729%, 2.593%, and
+2.444%; the mean was 2.255% with a paired 95% t interval of approximately
+[1.107%, 3.403%]. Each learner made 389 finite updates and reached epsilon
+0.5026, while each frozen control made zero updates and remained uniform.
+
+Learned RL+SA also beat fixed SA in all three seeds by 0.908% on average,
+although the three-seed interval [-0.489%, 2.305%] crosses zero. It beat ASA
+in all three by 5.418% on average with interval [3.656%, 7.179%]. This passes
+the prespecified extended gate and is the first positive cross-workload final
+quality result for the frozen learned proposal method. Random search was not
+included in this archive and must not be inferred from these comparisons.
+
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
 PPO beat its control by 0.40% but lost to ASA by 0.42%. Its improving-move rate
