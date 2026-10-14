@@ -1159,6 +1159,25 @@ selector that ranks candidates directly by the analytic `proxy_gain` feature.
 This is the minimum test of whether the learned scorer contributes beyond the
 hand-built proxy while leaving the frozen learner unchanged.
 
+The opt-in contention-aware gate tests the next method without changing the
+historical defaults. `contention12` adds cached shared-link, affected-stage
+slack, and source-serialization deltas; stages within 5% of the current maximum
+can supply focused candidates; and structured exploration divides probability
+between the best score, the top four, and a 5% global-uniform component. The
+gate includes shuffled-label, proxy-greedy, bottleneck-random, fixed-SA, and
+random-search controls:
+
+```bash
+bash scripts/run_kaggle_contention_bandit_gate.sh short \
+  runs/kaggle-contention-vgg16-conv-short
+```
+
+Run the `extended` mode only if the short summary sets
+`extended_gate_pass` to `true`. This requires the learned method to beat
+shuffled labels, proxy-greedy, and fixed SA in at least two of three seeds.
+The new configuration is experimental and is incompatible with historical
+nine-feature proposal checkpoints.
+
 The next short gate tests the intended RL+ASA combination while keeping a
 matched frozen adaptive control:
 

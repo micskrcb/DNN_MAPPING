@@ -2315,15 +2315,19 @@ class IncrementalPipelineEvaluator:
         for stage_index, stage in enumerate(self.stages):
             self.task_stage[stage] = stage_index
         self.predecessors = [[] for _ in range(env.num_tasks)]
+        self.predecessor_edges = [[] for _ in range(env.num_tasks)]
         for source, successors in enumerate(env._succ_cache):
-            for destination, _ in successors:
+            for destination, volume in successors:
                 self.predecessors[destination].append(source)
+                self.predecessor_edges[destination].append((source, volume))
+        self.stage_details = [
+            self._stage_details(index) for index in range(len(self.stages))]
         self.stage_costs = np.asarray(
-            [self._stage_cost(index) for index in range(len(self.stages))],
-            dtype=np.float64)
+            [details[0] for details in self.stage_details], dtype=np.float64)
         self.pending = None
+        self.pending_details = None
 
-    def _stage_cost(self, stage_index):
+    def _stage_details(self, stage_index):
         env = self.env
         stage = self.stages[stage_index]
         if env.pipeline_model == "task_sum":
@@ -2338,12 +2342,12 @@ class IncrementalPipelineEvaluator:
                     if destination >= 0:
                         communication += volume * env.topo.comm_cost(source, destination)
                 maximum = max(maximum, float(env.compute_latency[task]) + communication)
-            return maximum
+            return maximum, 0.0, 0.0, {}, {}
 
         compute = max((float(env.compute_latency[task]) for task in stage
                        if env.placement[task] >= 0), default=0.0)
         loads = {}
-        routed_task_times = []
+        source_times = {}
         for task in stage:
             source = int(env.placement[task])
             if source < 0:
@@ -2359,38 +2363,142 @@ class IncrementalPipelineEvaluator:
                     routed_time += volume * (
                         env.topo.on_chip_latency if kind == "on"
                         else env.topo.off_chip_latency)
-            routed_task_times.append(routed_time)
+            source_times[task] = routed_time
         link_bottleneck = max(
             (volume * (env.topo.on_chip_latency if kind == "on"
                        else env.topo.off_chip_latency)
              for (kind, _), volume in loads.items()), default=0.0)
-        communication = max(link_bottleneck,
-                            max(routed_task_times, default=0.0))
-        return compute + communication
+        source_bottleneck = max(source_times.values(), default=0.0)
+        communication = max(link_bottleneck, source_bottleneck)
+        return (compute + communication, link_bottleneck,
+                source_bottleneck, loads, source_times)
 
-    def candidate_cost(self, changed_tasks):
+    def _stage_cost(self, stage_index):
+        return self._stage_details(stage_index)[0]
+
+    def _affected_stages(self, changed_tasks):
         affected = set()
         for task in np.asarray(changed_tasks, dtype=np.int64).tolist():
             affected.add(int(self.task_stage[task]))
             affected.update(int(self.task_stage[pred])
                             for pred in self.predecessors[task])
-        pending = {stage: self._stage_cost(stage) for stage in affected}
+        return affected
+
+    def candidate_contention_features(self, candidate, changed_tasks):
+        """Return cheap contention-aware deltas for an unevaluated candidate.
+
+        Only routes incident to moved tasks can change.  The method applies
+        those route deltas to cached per-stage link loads and source
+        serialization times without calling the placement objective.  Positive
+        deltas mean the candidate reduces the corresponding bottleneck.
+        """
+        env = self.env
+        changed = set(np.asarray(changed_tasks, dtype=np.int64).tolist())
+        affected = self._affected_stages(changed_tasks)
+        global_cost = max(float(self.stage_costs.max(initial=0.0)),
+                          np.finfo(float).eps)
+        if not affected:
+            return 0.0, 0.0, 0.0
+
+        link_deltas = {stage: {} for stage in affected}
+        source_deltas = {stage: {} for stage in affected}
+        edges = set()
+        for task in changed:
+            edges.update((task, int(destination), float(volume))
+                         for destination, volume in env._succ_cache[task])
+            edges.update((int(source), task, float(volume))
+                         for source, volume in self.predecessor_edges[task])
+
+        for source, destination, volume in edges:
+            stage = int(self.task_stage[source])
+            if stage not in affected:
+                continue
+            old_source = int(env.placement[source])
+            old_destination = int(env.placement[destination])
+            new_source = int(candidate[source])
+            new_destination = int(candidate[destination])
+            old_time = new_time = 0.0
+            for sign, source_core, destination_core in (
+                    (-1.0, old_source, old_destination),
+                    (1.0, new_source, new_destination)):
+                for kind, link in env.topo.xy_route(
+                        source_core, destination_core):
+                    key = (kind, link)
+                    delta = sign * volume
+                    link_deltas[stage][key] = (
+                        link_deltas[stage].get(key, 0.0) + delta)
+                    latency = (env.topo.on_chip_latency if kind == "on"
+                               else env.topo.off_chip_latency)
+                    if sign < 0:
+                        old_time += volume * latency
+                    else:
+                        new_time += volume * latency
+            source_deltas[stage][source] = (
+                source_deltas[stage].get(source, 0.0) +
+                new_time - old_time)
+
+        old_link_peak = new_link_peak = 0.0
+        old_source_peak = new_source_peak = 0.0
+        for stage in affected:
+            _, link_peak, source_peak, loads, source_times = \
+                self.stage_details[stage]
+            old_link_peak = max(old_link_peak, link_peak)
+            old_source_peak = max(old_source_peak, source_peak)
+
+            adjusted_loads = dict(loads)
+            for key, delta in link_deltas[stage].items():
+                adjusted_loads[key] = adjusted_loads.get(key, 0.0) + delta
+            stage_link_peak = max((
+                max(0.0, volume) *
+                (env.topo.on_chip_latency if kind == "on"
+                 else env.topo.off_chip_latency)
+                for (kind, _), volume in adjusted_loads.items()), default=0.0)
+            new_link_peak = max(new_link_peak, stage_link_peak)
+
+            adjusted_sources = dict(source_times)
+            for source, delta in source_deltas[stage].items():
+                adjusted_sources[source] = max(
+                    0.0, adjusted_sources.get(source, 0.0) + delta)
+            new_source_peak = max(
+                new_source_peak, max(adjusted_sources.values(), default=0.0))
+
+        stage_slack_ratio = max(
+            float(self.stage_costs[stage]) for stage in affected) / global_cost
+        return (
+            float(np.clip((old_link_peak - new_link_peak) / global_cost,
+                          -1.0, 1.0)),
+            float(np.clip(stage_slack_ratio, 0.0, 1.0)),
+            float(np.clip((old_source_peak - new_source_peak) / global_cost,
+                          -1.0, 1.0)),
+        )
+
+    def candidate_cost(self, changed_tasks):
+        affected = self._affected_stages(changed_tasks)
+        pending_details = {
+            stage: self._stage_details(stage) for stage in affected}
+        pending = {
+            stage: details[0] for stage, details in pending_details.items()}
         if not pending:
             self.pending = {}
+            self.pending_details = {}
             return float(self.stage_costs.max(initial=0.0))
         candidate = self.stage_costs.copy()
         for stage, value in pending.items():
             candidate[stage] = value
         self.pending = pending
+        self.pending_details = pending_details
         return float(candidate.max(initial=0.0))
 
     def accept(self):
         for stage, value in (self.pending or {}).items():
             self.stage_costs[stage] = value
+            self.stage_details[stage] = self.pending_details[stage]
         self.pending = None
+        self.pending_details = None
 
     def reject(self):
         self.pending = None
+        self.pending_details = None
 
 
 def run_adaptive_sa(env: MultiChipEnvironment, n_iter: int = 100000,
@@ -2596,10 +2704,17 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 bandit_warmup: int = 512,
                 bandit_epsilon_final: float = 0.50,
                 bandit_epsilon_decay_fraction: float = 1.00,
+                bandit_exploration: str = "epsilon_all",
+                bandit_top_m: int = 4,
+                bandit_global_epsilon: float = 0.05,
+                bandit_feature_set: str = "legacy9",
+                bandit_shuffle_labels: bool = False,
                 update_style: str = "shared_gae",
                 reward_mode: str = "realized",
                 focus_bottleneck: bool = False,
-                focus_fraction: float = 0.0, restart_interval: int = 0,
+                focus_fraction: float = 0.0,
+                focus_stage_slack: float = 0.0,
+                restart_interval: int = 0,
                 update_at_chain_end: bool = False,
                 seed: int = None, initial_acceptance: float = 0.8,
                 target_acceptance: float = 0.30, adapt_window: int = 100,
@@ -2639,7 +2754,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("PPO-ASA requires at least two proposal candidates")
     if proposal_learner not in {"ppo", "bandit"}:
         raise ValueError("unknown proposal learner")
-    if bandit_control not in {"uniform", "proxy_greedy"}:
+    if bandit_control not in {
+            "uniform", "proxy_greedy", "bottleneck_random"}:
         raise ValueError("unknown bandit control")
     if bandit_control != "uniform" and (
             proposal_learner != "bandit" or not disable_learning):
@@ -2654,8 +2770,22 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("bandit final epsilon must be in [0, 1]")
     if not 0.0 < bandit_epsilon_decay_fraction <= 1.0:
         raise ValueError("bandit epsilon decay fraction must be in (0, 1]")
+    if bandit_exploration not in {"epsilon_all", "epsilon_top_m"}:
+        raise ValueError("unknown bandit exploration rule")
+    if not 1 <= bandit_top_m <= candidate_count:
+        raise ValueError("bandit top-m must be in [1, candidate_count]")
+    if not 0.0 <= bandit_global_epsilon <= 1.0:
+        raise ValueError("bandit global epsilon must be in [0, 1]")
+    if bandit_feature_set not in {"legacy9", "contention12"}:
+        raise ValueError("unknown bandit candidate feature set")
+    if bandit_shuffle_labels and (
+            proposal_learner != "bandit" or disable_learning):
+        raise ValueError(
+            "shuffled labels require an enabled contextual bandit")
     if not 0.0 <= focus_fraction <= 1.0:
         raise ValueError("PPO-ASA focus fraction must be in [0, 1]")
+    if not 0.0 <= focus_stage_slack < 1.0:
+        raise ValueError("PPO-ASA focus stage slack must be in [0, 1)")
     if update_style not in {"shared_gae", "reference_separate"}:
         raise ValueError("unknown PPO-ASA update style")
     if reward_mode not in {
@@ -2731,9 +2861,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             evaluator = IncrementalPipelineEvaluator(env)
         except (TypeError, AttributeError):
             evaluator = None
-    if focus_fraction > 0 and evaluator is None:
+    if (focus_fraction > 0 or bandit_feature_set == "contention12") and \
+            evaluator is None:
         raise ValueError(
-            "bottleneck-focused PPO-ASA requires the incremental pipeline evaluator")
+            "focused/contention-aware PPO-ASA requires the incremental "
+            "pipeline evaluator")
 
     diagnostics = None
     if diagnostics_path:
@@ -2747,6 +2879,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         "pressure_max", "motion", "chip_change",
         "bottleneck_fraction", "proxy_gain", "affected_volume",
     ]
+    if bandit_feature_set == "contention12":
+        oracle_feature_names.extend([
+            "max_link_delta", "stage_slack_ratio",
+            "max_source_byte_hop_delta",
+        ])
     oracle_feature_rows = []
     oracle_global_rows = []
     oracle_gain_rows = []
@@ -2800,8 +2937,14 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     def bottleneck_tasks(use_focus):
         if not use_focus:
             return None
-        stage_index = int(np.argmax(evaluator.stage_costs))
-        return evaluator.stages[stage_index]
+        maximum = float(evaluator.stage_costs.max(initial=0.0))
+        threshold = maximum * (1.0 - focus_stage_slack)
+        return [
+            task
+            for stage_index, stage in enumerate(evaluator.stages)
+            if evaluator.stage_costs[stage_index] >= threshold
+            for task in stage
+        ]
 
     topo = env.topo
     core_ids = np.arange(env.total_cores, dtype=np.int64)
@@ -2865,7 +3008,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 evaluator.task_stage[changed] == bottleneck_stage))
         else:
             bottleneck_fraction = 0.0
-        return np.asarray([
+        feature_values = [
             len(changed) / max(1, expected_changes),
             float(relocation is not None),
             pressure_mean,
@@ -2875,7 +3018,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             bottleneck_fraction,
             float(proxy_gain),
             float(min(1.0, affected_volume)),
-        ], dtype=np.float32)
+        ]
+        if bandit_feature_set == "contention12":
+            feature_values.extend(
+                evaluator.candidate_contention_features(candidate, changed))
+        return np.asarray(feature_values, dtype=np.float32)
 
     def evaluate(candidate, changed):
         env.place(candidate)
@@ -2893,7 +3040,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             env.place(candidate)
             if evaluator is not None:
                 cost = evaluator.candidate_cost(changed)
-                pending_updates.append(dict(evaluator.pending or {}))
+                pending_updates.append((
+                    dict(evaluator.pending or {}),
+                    dict(evaluator.pending_details or {}),
+                ))
                 evaluator.reject()
             else:
                 cost = float(env.evaluate())
@@ -2965,7 +3115,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                      fixed_temperature_steps))
     reward_scale = max(abs(initial_cost) * 1e-3, np.finfo(float).eps)
 
-    global_dim, candidate_dim = 8, 9
+    global_dim = 8
+    candidate_dim = len(oracle_feature_names)
     model = actor = critic = bandit = None
     if proposal_learner == "bandit":
         bandit = ProposalBanditRegressor(
@@ -3004,6 +3155,15 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 focus_fraction, rel_tol=0.0, abs_tol=0.0):
             raise ValueError(
                 "checkpoint proposal focus does not match this run")
+        if not math.isclose(
+                float(loaded_checkpoint.get("focus_stage_slack", 0.0)),
+                focus_stage_slack, rel_tol=0.0, abs_tol=0.0):
+            raise ValueError(
+                "checkpoint focus-stage slack does not match this run")
+        if loaded_checkpoint.get("bandit_feature_set", "legacy9") != \
+                bandit_feature_set:
+            raise ValueError(
+                "checkpoint candidate feature set does not match this run")
         if proposal_learner == "bandit":
             bandit.load_state_dict(loaded_checkpoint["bandit"])
         elif update_style == "reference_separate":
@@ -3054,14 +3214,15 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             return min(1.0, chain_evaluations / restart_interval)
         return evaluations / n_iter
 
+    focused_candidate_count = round(candidate_count * focus_fraction)
+
     def make_proposal_pool(n_perturb):
         candidates, changed_sets, relocations, features = [], [], [], []
-        focused_candidates = round(candidate_count * focus_fraction)
         for candidate_index in range(candidate_count):
             candidate, changed, relocation = _placement_neighbor(
                 placement, n_perturb, free_pool, rng=proposal_rng,
                 anchor_tasks=bottleneck_tasks(
-                    candidate_index < focused_candidates))
+                    candidate_index < focused_candidate_count))
             candidates.append(candidate)
             changed_sets.append(changed)
             relocations.append(relocation)
@@ -3097,9 +3258,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             candidate_rows = torch.as_tensor(
                 np.asarray([bandit_replay[i][1] for i in chosen]),
                 dtype=torch.float32, device=torch_device).unsqueeze(1)
+            target_values = [bandit_replay[i][2] for i in chosen]
+            if bandit_shuffle_labels:
+                bandit_rng.shuffle(target_values)
             targets = torch.as_tensor(
-                [bandit_replay[i][2] for i in chosen],
-                dtype=torch.float32, device=torch_device)
+                target_values, dtype=torch.float32, device=torch_device)
             predictions = bandit(global_states, candidate_rows).squeeze(1)
             loss = F.smooth_l1_loss(predictions, targets)
             bandit_optimizer.zero_grad()
@@ -3318,6 +3481,17 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                     normalized_logits = bandit(global_tensor, feature_tensor)
                 if disable_learning and bandit_control == "uniform":
                     epsilon = 1.0
+                    probabilities = torch.full_like(
+                        normalized_logits, 1.0 / candidate_count)
+                elif disable_learning and \
+                        bandit_control == "bottleneck_random":
+                    if focused_candidate_count <= 0:
+                        raise ValueError(
+                            "bottleneck_random requires a positive focus fraction")
+                    epsilon = 1.0
+                    probabilities = torch.zeros_like(normalized_logits)
+                    probabilities[:, :focused_candidate_count] = (
+                        1.0 / focused_candidate_count)
                 else:
                     if bandit_observations < bandit_warmup:
                         epsilon = 1.0
@@ -3333,13 +3507,39 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                             1.0, learned_steps / decay_steps)
                         epsilon = (1.0 - decay_progress *
                                    (1.0 - bandit_epsilon_final))
-                probabilities = torch.full_like(
-                    normalized_logits, epsilon / candidate_count)
-                greedy = normalized_logits.argmax(dim=-1, keepdim=True)
-                probabilities.scatter_add_(
-                    1, greedy,
-                    torch.full_like(greedy, 1.0 - epsilon,
-                                    dtype=probabilities.dtype))
+                    if bandit_observations < bandit_warmup or \
+                            bandit_exploration == "epsilon_all":
+                        probabilities = torch.full_like(
+                            normalized_logits, epsilon / candidate_count)
+                        greedy = normalized_logits.argmax(
+                            dim=-1, keepdim=True)
+                        probabilities.scatter_add_(
+                            1, greedy,
+                            torch.full_like(
+                                greedy, 1.0 - epsilon,
+                                dtype=probabilities.dtype))
+                    else:
+                        global_mass = bandit_global_epsilon
+                        top_mass = epsilon * (1.0 - global_mass)
+                        greedy_mass = ((1.0 - epsilon) *
+                                       (1.0 - global_mass))
+                        probabilities = torch.full_like(
+                            normalized_logits,
+                            global_mass / candidate_count)
+                        top_indices = normalized_logits.topk(
+                            bandit_top_m, dim=-1).indices
+                        probabilities.scatter_add_(
+                            1, top_indices,
+                            torch.full_like(
+                                top_indices, top_mass / bandit_top_m,
+                                dtype=probabilities.dtype))
+                        greedy = normalized_logits.argmax(
+                            dim=-1, keepdim=True)
+                        probabilities.scatter_add_(
+                            1, greedy,
+                            torch.full_like(
+                                greedy, greedy_mass,
+                                dtype=probabilities.dtype))
                 value = torch.zeros(1, device=torch_device)
             elif update_style == "reference_separate":
                 distribution = actor.distribution(
@@ -3400,7 +3600,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             })
             env.place(candidate)
             if evaluator is not None:
-                evaluator.pending = oracle_pending[selected]
+                (evaluator.pending,
+                 evaluator.pending_details) = oracle_pending[selected]
             new_cost = float(oracle_costs[selected])
             window_selected_true_gains.append(selected_gain)
             window_uniform_true_gains.append(uniform_gain)
@@ -3769,12 +3970,18 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "update_count": update_count,
             "hidden_dim": hidden_dim,
             "focus_fraction": focus_fraction,
+            "focus_stage_slack": focus_stage_slack,
             "restart_interval": restart_interval,
             "update_at_chain_end": update_at_chain_end,
             "independent_chains": chain_count,
             "update_style": update_style,
             "proposal_learner": proposal_learner,
             "bandit_control": bandit_control,
+            "bandit_feature_set": bandit_feature_set,
+            "bandit_exploration": bandit_exploration,
+            "bandit_top_m": bandit_top_m,
+            "bandit_global_epsilon": bandit_global_epsilon,
+            "bandit_shuffle_labels": bandit_shuffle_labels,
             "reward_mode": reward_mode,
             "annealing_schedule": annealing_schedule,
         }
@@ -3806,13 +4013,19 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 "epsilon_greedy_proxy_gain"
                 if (proposal_learner == "bandit" and
                     bandit_control == "proxy_greedy")
+                else "focused_candidate_uniform"
+                if (proposal_learner == "bandit" and
+                    bandit_control == "bottleneck_random")
                 else "uniform_candidate_selection"
                 if (proposal_learner == "bandit" and disable_learning)
                 else "epsilon_greedy_contextual_bandit"
                 if proposal_learner == "bandit" else "candidate_set_ppo"),
             "proposal_focus": (
-                "current_bottleneck_stage" if focus_fraction == 1.0
-                else f"mixed_bottleneck_{focus_fraction:.3f}"
+                (f"stages_within_{focus_stage_slack:.3f}_of_bottleneck"
+                 if focus_stage_slack > 0 else
+                 "current_bottleneck_stage") if focus_fraction == 1.0
+                else (f"mixed_near_bottleneck_{focus_fraction:.3f}_"
+                      f"slack_{focus_stage_slack:.3f}")
                 if focus_fraction > 0 else "uniform_tasks"),
             "acceptance_rule": "fixed_metropolis",
             "temperature_controller": (
@@ -3865,6 +4078,18 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "bandit_epsilon_decay_fraction": (
                 bandit_epsilon_decay_fraction
                 if proposal_learner == "bandit" else None),
+            "bandit_exploration": (
+                bandit_exploration if proposal_learner == "bandit" else None),
+            "bandit_top_m": (
+                bandit_top_m if proposal_learner == "bandit" else None),
+            "bandit_global_epsilon": (
+                bandit_global_epsilon
+                if proposal_learner == "bandit" else None),
+            "bandit_feature_set": (
+                bandit_feature_set if proposal_learner == "bandit" else None),
+            "bandit_shuffle_labels": (
+                bandit_shuffle_labels
+                if proposal_learner == "bandit" else None),
             "bandit_observations": (
                 bandit_observations if proposal_learner == "bandit" else None),
             "final_exploration_epsilon": (
@@ -3879,6 +4104,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 "6e64bec12b9a7c6db601a4a4ae254b942e4aed79"
                 if update_style == "reference_separate" else None),
             "proposal_candidates_per_step": candidate_count,
+            "candidate_feature_names": oracle_feature_names,
             "generated_proposal_candidates": (
                 calibration + max(0, n_iter - calibration) * candidate_count),
             "unevaluated_proposal_candidates": (
@@ -4705,9 +4931,29 @@ def main():
                         help="Fraction of the run used to decay bandit exploration")
     parser.add_argument(
         "--ppo_asa_bandit_control",
-        choices=["uniform", "proxy_greedy"], default="uniform",
+        choices=["uniform", "proxy_greedy", "bottleneck_random"],
+        default="uniform",
         help=("Non-learned comparator used with --ppo_asa_disable_learning: "
-              "uniform selection or epsilon-greedy ranking by proxy_gain"))
+              "uniform selection, epsilon-greedy proxy ranking, or uniform "
+              "selection within the focused half of the pool"))
+    parser.add_argument(
+        "--ppo_asa_bandit_exploration",
+        choices=["epsilon_all", "epsilon_top_m"], default="epsilon_all",
+        help=("Bandit exploration: uniform across the whole pool or split "
+              "between greedy, top-m, and a small global-uniform mass"))
+    parser.add_argument("--ppo_asa_bandit_top_m", type=int, default=4,
+                        help="Top-scored candidates used by epsilon_top_m")
+    parser.add_argument(
+        "--ppo_asa_bandit_global_epsilon", type=float, default=0.05,
+        help="Global-uniform probability retained by epsilon_top_m")
+    parser.add_argument(
+        "--ppo_asa_bandit_feature_set",
+        choices=["legacy9", "contention12"], default="legacy9",
+        help=("Candidate features: historical hop proxies or those features "
+              "plus cached link, stage-slack, and source-serialization deltas"))
+    parser.add_argument(
+        "--ppo_asa_bandit_shuffle_labels", action="store_true",
+        help="Shuffle bandit targets within each update as a learning control")
     parser.add_argument("--ppo_asa_rollout_steps", type=int, default=256,
                         help="Accepted/rejected proposal transitions per PPO-ASA update")
     parser.add_argument("--ppo_asa_weight_decay", type=float, default=0.0,
@@ -4753,6 +4999,10 @@ def main():
                         help="Anchor every PPO-ASA candidate on the current bottleneck stage")
     parser.add_argument("--ppo_asa_focus_fraction", type=float, default=0.0,
                         help="Fraction of each PPO-ASA pool anchored on the bottleneck stage")
+    parser.add_argument(
+        "--ppo_asa_focus_stage_slack", type=float, default=0.0,
+        help=("Also focus on stages within this fractional latency of the "
+              "current bottleneck; 0 retains strict top-stage focus"))
     parser.add_argument("--ppo_asa_restart_interval", type=int, default=0,
                         help="Start an independent random placement chain after this many proposals; 0 disables restarts")
     parser.add_argument("--ppo_asa_update_at_chain_end", action="store_true",
@@ -4913,6 +5163,13 @@ def main():
         parser.error("PPO-ASA requires at least two candidates and a positive rollout")
     if not 0.0 <= args.ppo_asa_focus_fraction <= 1.0:
         parser.error("--ppo_asa_focus_fraction must be in [0, 1]")
+    if not 0.0 <= args.ppo_asa_focus_stage_slack < 1.0:
+        parser.error("--ppo_asa_focus_stage_slack must be in [0, 1)")
+    if not 1 <= args.ppo_asa_bandit_top_m <= args.ppo_asa_candidates:
+        parser.error(
+            "--ppo_asa_bandit_top_m must be in [1, ppo_asa_candidates]")
+    if not 0.0 <= args.ppo_asa_bandit_global_epsilon <= 1.0:
+        parser.error("--ppo_asa_bandit_global_epsilon must be in [0, 1]")
     if args.ppo_asa_restart_interval < 0:
         parser.error("--ppo_asa_restart_interval cannot be negative")
     if (not math.isfinite(args.ppo_learning_rate) or args.ppo_learning_rate <= 0 or
@@ -5241,10 +5498,16 @@ def main():
             bandit_warmup=args.ppo_asa_bandit_warmup,
             bandit_epsilon_final=args.ppo_asa_bandit_epsilon_final,
             bandit_epsilon_decay_fraction=args.ppo_asa_bandit_epsilon_decay,
+            bandit_exploration=args.ppo_asa_bandit_exploration,
+            bandit_top_m=args.ppo_asa_bandit_top_m,
+            bandit_global_epsilon=args.ppo_asa_bandit_global_epsilon,
+            bandit_feature_set=args.ppo_asa_bandit_feature_set,
+            bandit_shuffle_labels=args.ppo_asa_bandit_shuffle_labels,
             update_style=args.ppo_asa_update_style,
             reward_mode=args.ppo_asa_reward_mode,
             focus_bottleneck=args.ppo_asa_focus_bottleneck,
             focus_fraction=args.ppo_asa_focus_fraction,
+            focus_stage_slack=args.ppo_asa_focus_stage_slack,
             restart_interval=args.ppo_asa_restart_interval,
             update_at_chain_end=args.ppo_asa_update_at_chain_end,
             seed=args.seed,

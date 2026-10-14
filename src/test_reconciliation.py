@@ -572,6 +572,40 @@ class TimingTests(unittest.TestCase):
                 evaluator.accept()
                 placement = candidate
 
+    def test_contention_features_match_exact_affected_stage_components(self):
+        graph = np.zeros((6, 6), dtype=np.float32)
+        graph[0, 2], graph[1, 2] = 2.0, 3.0
+        graph[2, 3], graph[2, 4] = 4.0, 5.0
+        graph[3, 5], graph[4, 5] = 6.0, 7.0
+        env = MultiChipEnvironment(
+            2, 1, 2, 2, on_chip_latency=1.0, off_chip_latency=5.0,
+            task_graph=graph, num_tasks=6, routing_model="paper_xy",
+            pipeline_model="xy_contention")
+        placement = np.array([0, 1, 2, 3, 4, 5], dtype=np.int32)
+        env.place(placement)
+        evaluator = rm.IncrementalPipelineEvaluator(env)
+        candidate = placement.copy()
+        candidate[0], candidate[5] = candidate[5], candidate[0]
+        changed = [0, 5]
+
+        actual = evaluator.candidate_contention_features(candidate, changed)
+        affected = evaluator._affected_stages(changed)
+        scale = max(float(evaluator.stage_costs.max()), np.finfo(float).eps)
+        old_link = max(evaluator.stage_details[s][1] for s in affected)
+        old_source = max(evaluator.stage_details[s][2] for s in affected)
+        env.place(candidate)
+        new_details = [evaluator._stage_details(s) for s in affected]
+        env.place(placement)
+        expected = (
+            np.clip((old_link - max(row[1] for row in new_details)) / scale,
+                    -1.0, 1.0),
+            max(evaluator.stage_costs[s] for s in affected) / scale,
+            np.clip((old_source - max(row[2] for row in new_details)) / scale,
+                    -1.0, 1.0),
+        )
+        np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-12)
+        np.testing.assert_array_equal(env.placement, placement)
+
     def test_fixed_sa_incremental_path_matches_full_evaluation(self):
         graph = np.zeros((6, 6), dtype=np.float32)
         graph[0, 2], graph[1, 2] = 2.0, 3.0
