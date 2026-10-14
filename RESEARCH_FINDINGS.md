@@ -553,13 +553,15 @@ random scoring, or focus changes explain the advantage. Three-seed t intervals
 are descriptive because their variance estimates are unstable and exact
 distribution-free tests have little power.
 
-Before confirmatory claims, run a matched control ladder: focused uniform,
-focus-zero uniform, proxy-greedy with the same exploration schedule, frozen
-random weights, learned without `proxy_gain`, and learned with focus zero.
-Then freeze the strongest non-learned comparator, precommit a fresh seed list,
-use full runs as the independent units, report log-cost ratios and wall-clock
-time, and verify saved best placements with the full evaluator. Raw reports
-must be retained with their archive hashes.
+The minimum decisive next control is proxy-greedy selection with the same
+focused pools, epsilon schedule, and objective-call budget. If the learner
+beats that control, the proxy alone does not explain the gain. Focus-zero,
+random-weight, shuffled-target, and feature-removal ablations remain useful if
+the result is ambiguous, but they are not all mandatory before continuing the
+planned held-out VGG runs. Larger 10--20-seed studies strengthen a formal
+significance claim; they are recommendations rather than a retroactive reason
+to discard the current exploratory evidence. Continue to report full runs as
+the independent units, wall-clock time, and raw archive hashes.
 
 ## Paired Kaggle short result (8 October 2026)
 

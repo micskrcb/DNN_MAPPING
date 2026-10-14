@@ -759,7 +759,10 @@ neighborhood and temperature calibration. Therefore the supported claim is a
 2.255% VGG16-FC benefit over the focused-uniform control under equal true-
 objective calls. It is not yet a claim of superiority over the best
 non-learned heuristic, equal-wall-clock superiority, or broad RL
-generalization. A precommitted control ladder and more fresh seeds are required.
+generalization. The immediate check is a matched proxy-greedy control, followed
+by the already planned VGG16-FC seeds 3--5. A larger control ladder and 20-seed
+study are possible publication-strength extensions, not conditions for treating
+the current result as a valid positive exploratory result.
 
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
