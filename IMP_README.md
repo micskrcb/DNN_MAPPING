@@ -145,6 +145,18 @@ bash scripts/run_kaggle_rl_fixed_sa_gate.sh \
   bandit-extended runs/kaggle-bandit-vgg16-fc-heldout
 ```
 
+Run the three-seed, 20,000-evaluation learned-versus-proxy diagnostic without
+repeating the context baselines:
+
+```bash
+MODEL_OVERRIDE="vgg16" \
+WORKLOAD_REGION_OVERRIDE="fc" \
+SEEDS_OVERRIDE="6 7 8" \
+SKIP_CONTEXT_BASELINES="1" \
+bash scripts/run_kaggle_rl_fixed_sa_gate.sh \
+  bandit-proxy-short runs/kaggle-bandit-vgg16-fc-proxy-short
+```
+
 When the work is ready:
 
 ```bash
@@ -219,6 +231,13 @@ and beat ASA in all three by 5.418%. A methodology audit identified a useful
 next check: compare against non-learned proxy-greedy selection under the same
 pool and exploration schedule. This does not erase the positive result or
 require every suggested ablation before work continues.
+
+The later VGG16-FC seeds 3--5 confirmed the direction: RL+SA beat focused-
+uniform control 3/3 by 1.637% on average, ASA by 3.793%, and random by 22.405%,
+while remaining effectively tied with fixed SA. Across all six VGG seeds it
+beat control 6/6 by 1.946%. The next short command uses `bandit-proxy-short`
+to compare learning with direct proxy-greedy selection without changing the
+trained method.
 
 ## Main theory references
 

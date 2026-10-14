@@ -1147,6 +1147,20 @@ For subsequent held-out runs, the paired runner also executes matched random
 search when context baselines are enabled. Its report appears as
 `random-report.json` and the aggregate summary includes `random_microseconds`.
 
+The VGG16-FC held-out seeds 3--5 also passed. Learned RL+SA beat the matched
+focused-uniform control in all three by 1.637% on average, ASA by 3.793%, and
+random by 22.405%. It was effectively tied with fixed SA. Across all six VGG
+seeds, learned proposals beat focused-uniform control 6/6 times by 1.946% on
+average. Held-out learned and control runs each took about 59 minutes, versus
+43.5 minutes for fixed SA, so objective-call and wall-clock comparisons are
+reported separately.
+
+The runner now supports `bandit-proxy-short` and `bandit-proxy-extended`.
+These replace the uniform matched control with a zero-update epsilon-greedy
+selector that ranks candidates directly by the analytic `proxy_gain` feature.
+This is the minimum test of whether the learned scorer contributes beyond the
+hand-built proxy while leaving the frozen learner unchanged.
+
 The next short gate tests the intended RL+ASA combination while keeping a
 matched frozen adaptive control:
 

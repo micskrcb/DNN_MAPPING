@@ -5,6 +5,7 @@ mode="${1:-short}"
 output_dir="${2:-runs/kaggle-rl-fixed-sa-${mode}}"
 archive="${output_dir%/}.zip"
 learner="ppo"
+control_selector="uniform"
 skip_context_baselines="${SKIP_CONTEXT_BASELINES:-0}"
 model="${MODEL_OVERRIDE:-alexnet}"
 workload_region="${WORKLOAD_REGION_OVERRIDE:-fc}"
@@ -42,8 +43,22 @@ case "${mode}" in
     annealing="fixed"
     learner="bandit"
     ;;
+  bandit-proxy-short)
+    budget=20000
+    seeds=(0 1 2)
+    annealing="fixed"
+    learner="bandit"
+    control_selector="proxy_greedy"
+    ;;
+  bandit-proxy-extended)
+    budget=100000
+    seeds=(0 1 2)
+    annealing="fixed"
+    learner="bandit"
+    control_selector="proxy_greedy"
+    ;;
   *)
-    echo "Usage: $0 [short|extended|adaptive-short|adaptive-extended|bandit-short|bandit-extended] [output-directory]" >&2
+    echo "Usage: $0 [short|extended|adaptive-short|adaptive-extended|bandit-short|bandit-extended|bandit-proxy-short|bandit-proxy-extended] [output-directory]" >&2
     exit 2
     ;;
 esac
@@ -92,12 +107,13 @@ fi
 
 python - "${output_dir}/experiment-manifest.json" "${mode}" \
   "${annealing}" "${learner}" "${budget}" "${seeds[*]}" \
-  "${skip_context_baselines}" "${model}" "${workload_region}" <<'PY'
+  "${skip_context_baselines}" "${model}" "${workload_region}" \
+  "${control_selector}" <<'PY'
 import json
 import subprocess
 import sys
 
-destination, mode, annealing, learner, budget, seeds, skip_baselines, model, region = sys.argv[1:]
+destination, mode, annealing, learner, budget, seeds, skip_baselines, model, region, control_selector = sys.argv[1:]
 manifest = {
     "experiment": f"{learner} learned proposals inside {annealing} SA",
     "repository_commit": subprocess.check_output(
@@ -107,6 +123,7 @@ manifest = {
     "seeds": [int(value) for value in seeds.split()],
     "context_baselines_included": skip_baselines != "1",
     "primary_comparison": f"learned versus frozen proposals inside matched {annealing} SA",
+    "control_selector": control_selector,
     "configuration": {
         "model": model,
         "region": region,
@@ -124,7 +141,7 @@ manifest = {
         "candidate_pool": 16,
     },
     "interpretation": (
-        "The frozen policy is the causal control. Plain fixed SA and ASA are "
+        "The selected non-learned policy is the matched control. Plain fixed SA and ASA are "
         "context baselines; a one-seed short win is only a signal for the extended gate."
     ),
 }
@@ -177,6 +194,7 @@ for seed in "${seeds[@]}"; do
     python src/run_multi_chip.py \
     "${common[@]}" "${ppo_common[@]}" --device cuda \
     --ppo_asa_disable_learning \
+    --ppo_asa_bandit_control "${control_selector}" \
     --seed "${seed}" --iters "${budget}" \
     --asa_diagnostics "${seed_dir}/control.jsonl" \
     --report "${seed_dir}/control-report.json" \
@@ -252,6 +270,7 @@ for seed_dir in sorted(out.glob("seed-*")):
         "learned_schedule": learned_metadata["annealing_schedule"],
         "proposal_learner": learned_metadata["proposal_learner"],
         "control_schedule": control_metadata["annealing_schedule"],
+        "control_selector": control_metadata.get("bandit_control", "uniform"),
     })
 
 improvements = [

@@ -749,6 +749,25 @@ the prespecified extended gate and is the first positive cross-workload final
 quality result for the frozen learned proposal method. Random search was not
 included in this archive and must not be inferred from these comparisons.
 
+The genuinely new VGG16-FC seeds 3--5 completed at revision `bacc334`
+(archive SHA-256
+`87e08605cc75b02e9de3d595e73f8781ca236d86f3068d4a7402aac3c3a6c7ba`).
+Learned RL+SA beat focused-uniform control in all three pairs by 1.637% on
+average, with paired three-seed t interval [0.336%, 2.938%]. It beat ASA in
+all three by 3.793% and matched fixed SA: one win, two small losses, and 0.122%
+mean advantage with an interval crossing zero. The newly included random
+baseline was worse in all three seeds by 22.405% on average.
+
+Across all six VGG16-FC seeds, learned RL+SA beat focused-uniform control 6/6
+times by 1.946% on average, with paired t interval [1.362%, 2.530%]. The exact
+two-sided sign test for six wins is 0.03125, reported descriptively because the
+first three seeds followed the positive short screen. RL+SA beat ASA 6/6 by
+4.605% and beat fixed SA 4/6 by 0.515%; the fixed-SA interval
+[-0.200%, 1.230%] crosses zero. On held-out seeds, mean wall-clock time was
+59.0 minutes for learned and frozen-control runs, 43.5 for fixed SA, 41.4 for
+ASA, and 61.3 for random. Claims must distinguish objective-call quality from
+wall-clock efficiency.
+
 An external methodology audit correctly identified a remaining attribution
 gap. The matched frozen control isolates the effect of selecting candidates
 non-uniformly with the trained scorer, but it does not show that learned

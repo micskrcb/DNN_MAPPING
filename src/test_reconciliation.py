@@ -204,6 +204,43 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(checkpoint["algorithm"], "bandit_sa_proposal_v1")
 
     @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
+    def test_proxy_greedy_control_uses_proxy_without_learning(self):
+        import torch
+        torch.set_num_threads(2)
+        graph = np.zeros((4, 4), dtype=np.float32)
+        graph[0, 1] = graph[1, 2] = graph[2, 3] = 1.0
+        env = MultiChipEnvironment(
+            1, 1, 2, 3, task_graph=graph, num_tasks=4)
+        metadata = {}
+        with tempfile.TemporaryDirectory() as directory, \
+                contextlib.redirect_stdout(io.StringIO()):
+            result = rm.run_ppo_asa(
+                env, n_iter=24, candidate_count=4, rollout_steps=4,
+                device="cpu", update_epochs=1, minibatch_size=4,
+                hidden_dim=16, calibration_trials=4, adapt_window=4,
+                checkpoint_every=24, seed=29, proposal_learner="bandit",
+                bandit_control="proxy_greedy", disable_learning=True,
+                bandit_replay_capacity=32, bandit_warmup=4,
+                bandit_epsilon_final=0.5,
+                bandit_epsilon_decay_fraction=1.0,
+                annealing_schedule="fixed",
+                diagnostics_path=f"{directory}/proxy.jsonl",
+                metadata=metadata)
+            with open(f"{directory}/proxy.jsonl") as stream:
+                records = [json.loads(line) for line in stream]
+        self.assertTrue(np.isfinite(result))
+        self.assertFalse(metadata["learning_enabled"])
+        self.assertEqual(metadata["update_count"], 0)
+        self.assertEqual(metadata["bandit_control"], "proxy_greedy")
+        self.assertEqual(metadata["proposal_policy"],
+                         "epsilon_greedy_proxy_gain")
+        self.assertLess(metadata["final_exploration_epsilon"], 1.0)
+        self.assertTrue(all(record["update_count"] == 0
+                            for record in records))
+        self.assertTrue(all(record["bandit_loss"] is None
+                            for record in records))
+
+    @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
     def test_reference_ppo_asa_separates_actor_and_critic(self):
         import torch
         torch.set_num_threads(2)

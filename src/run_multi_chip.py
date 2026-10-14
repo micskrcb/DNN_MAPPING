@@ -2591,6 +2591,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 value_coefficient: float = 0.5, max_grad_norm: float = 0.5,
                 hidden_dim: int = 128, disable_learning: bool = False,
                 proposal_learner: str = "ppo",
+                bandit_control: str = "uniform",
                 bandit_replay_capacity: int = 50000,
                 bandit_warmup: int = 512,
                 bandit_epsilon_final: float = 0.50,
@@ -2638,6 +2639,13 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("PPO-ASA requires at least two proposal candidates")
     if proposal_learner not in {"ppo", "bandit"}:
         raise ValueError("unknown proposal learner")
+    if bandit_control not in {"uniform", "proxy_greedy"}:
+        raise ValueError("unknown bandit control")
+    if bandit_control != "uniform" and (
+            proposal_learner != "bandit" or not disable_learning):
+        raise ValueError(
+            "non-uniform bandit controls require the bandit learner with "
+            "learning disabled")
     if min(bandit_replay_capacity, bandit_warmup) <= 0:
         raise ValueError("bandit replay capacity and warmup must be positive")
     if bandit_warmup > bandit_replay_capacity:
@@ -3304,19 +3312,27 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             device=torch_device).unsqueeze(0)
         with torch.no_grad():
             if proposal_learner == "bandit":
-                normalized_logits = bandit(global_tensor, feature_tensor)
-                if disable_learning or len(bandit_replay) < bandit_warmup:
+                if disable_learning and bandit_control == "proxy_greedy":
+                    normalized_logits = feature_tensor[:, :, 7]
+                else:
+                    normalized_logits = bandit(global_tensor, feature_tensor)
+                if disable_learning and bandit_control == "uniform":
                     epsilon = 1.0
                 else:
-                    decay_steps = max(
-                        1, round(policy_steps * bandit_epsilon_decay_fraction))
-                    # Use total observations, not replay length: replay is
-                    # capped and must not freeze the exploration schedule.
-                    learned_steps = max(
-                        0, bandit_observations - bandit_warmup)
-                    decay_progress = min(1.0, learned_steps / decay_steps)
-                    epsilon = (1.0 - decay_progress *
-                               (1.0 - bandit_epsilon_final))
+                    if bandit_observations < bandit_warmup:
+                        epsilon = 1.0
+                    else:
+                        decay_steps = max(
+                            1, round(policy_steps *
+                                     bandit_epsilon_decay_fraction))
+                        # Use total observations, not replay length: replay is
+                        # capped and must not freeze the exploration schedule.
+                        learned_steps = max(
+                            0, bandit_observations - bandit_warmup)
+                        decay_progress = min(
+                            1.0, learned_steps / decay_steps)
+                        epsilon = (1.0 - decay_progress *
+                                   (1.0 - bandit_epsilon_final))
                 probabilities = torch.full_like(
                     normalized_logits, epsilon / candidate_count)
                 greedy = normalized_logits.argmax(dim=-1, keepdim=True)
@@ -3758,6 +3774,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "independent_chains": chain_count,
             "update_style": update_style,
             "proposal_learner": proposal_learner,
+            "bandit_control": bandit_control,
             "reward_mode": reward_mode,
             "annealing_schedule": annealing_schedule,
         }
@@ -3786,7 +3803,12 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 if annealing_schedule == "fixed" else
                 f"{proposal_learner}_guided_adaptive_simulated_annealing"),
             "proposal_policy": (
-                "epsilon_greedy_contextual_bandit"
+                "epsilon_greedy_proxy_gain"
+                if (proposal_learner == "bandit" and
+                    bandit_control == "proxy_greedy")
+                else "uniform_candidate_selection"
+                if (proposal_learner == "bandit" and disable_learning)
+                else "epsilon_greedy_contextual_bandit"
                 if proposal_learner == "bandit" else "candidate_set_ppo"),
             "proposal_focus": (
                 "current_bottleneck_stage" if focus_fraction == 1.0
@@ -3832,6 +3854,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "weight_decay": weight_decay,
             "reward_mode": reward_mode,
             "proposal_learner": proposal_learner,
+            "bandit_control": (
+                bandit_control if proposal_learner == "bandit" else None),
             "bandit_replay_capacity": (
                 bandit_replay_capacity if proposal_learner == "bandit" else None),
             "bandit_warmup": (
@@ -4679,6 +4703,11 @@ def main():
     parser.add_argument("--ppo_asa_bandit_epsilon_decay", type=float,
                         default=1.00,
                         help="Fraction of the run used to decay bandit exploration")
+    parser.add_argument(
+        "--ppo_asa_bandit_control",
+        choices=["uniform", "proxy_greedy"], default="uniform",
+        help=("Non-learned comparator used with --ppo_asa_disable_learning: "
+              "uniform selection or epsilon-greedy ranking by proxy_gain"))
     parser.add_argument("--ppo_asa_rollout_steps", type=int, default=256,
                         help="Accepted/rejected proposal transitions per PPO-ASA update")
     parser.add_argument("--ppo_asa_weight_decay", type=float, default=0.0,
@@ -5207,6 +5236,7 @@ def main():
             hidden_dim=args.ppo_hidden_dim,
             disable_learning=args.ppo_asa_disable_learning,
             proposal_learner=args.ppo_asa_learner,
+            bandit_control=args.ppo_asa_bandit_control,
             bandit_replay_capacity=args.ppo_asa_bandit_replay,
             bandit_warmup=args.ppo_asa_bandit_warmup,
             bandit_epsilon_final=args.ppo_asa_bandit_epsilon_final,
