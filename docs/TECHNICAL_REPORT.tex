@@ -82,38 +82,37 @@ external repair heuristic.
 \section{Paper-aligned benchmark comparison}
 
 The reference paper's Figure~10 reports latency and throughput normalized to
-its sequential baseline (BS). It is a bar chart, rather than a numerical
-table. Table~\ref{tab:paper-bars} records two-significant-figure readings of
-its latency bars so that the comparison is explicit; the rounded readings must
-not be treated as newly measured paper data. The paper's exact aggregate
-statement is that DDPG reduces latency by 50.5\%, 38.4\%, and 18.6\% relative
-to BS, random search (RS), and SA, respectively. It evaluates one million
-placements for RS and SA and reports that DDPG passes their best results after
-roughly 300k--400k evaluated placements.
+its sequential baseline (BS). A random-search (RS) reference is less sensitive
+to the unpublished sequential logical-core ordering. Table~\ref{tab:paper-bars}
+therefore uses RS as the primary comparison. It is a bar chart rather than a
+numerical table, so its values are two-significant-figure readings and must not
+be treated as newly measured paper data. The exact aggregate claim is that
+DDPG improves 50.5\%, 38.4\%, and 18.6\% relative to BS, RS, and SA,
+respectively. It evaluates one million placements for RS and SA and reports
+that DDPG passes their best results around 300k--400k placements.
 
-\begin{longtable}{lrrrrrr}
-\caption{Approximate latency ratios read from Wu et al.'s Figure~10. All
-ratios use the paper's BS value for the same workload as denominator.
-``Reduction'' columns compare DDPG with the named baseline.}
+\begin{longtable}{lrrrr}
+\caption{Approximate latency ratios read from Wu et al.'s Figure~10, using RS
+as the primary reference. The final column is retained only as context.}
 \label{tab:paper-bars}\\
 \toprule
-Workload & RS/BS & SA/BS & DDPG/BS & vs BS & vs RS & vs SA \\
+Workload & SA/RS & DDPG/RS & DDPG improvement & RS/BS \\
 \midrule
 \endfirsthead
 \toprule
-Workload & RS/BS & SA/BS & DDPG/BS & vs BS & vs RS & vs SA \\
+Workload & SA/RS & DDPG/RS & DDPG improvement & RS/BS \\
 \midrule
 \endhead
-AlexNet CONV & $\sim$0.88 & $\sim$0.80 & $\sim$0.72 & $\sim$28\% & $\sim$18\% & $\sim$10\% \\
-AlexNet FC & $\sim$0.58 & $\sim$0.50 & $\sim$0.43 & $\sim$57\% & $\sim$26\% & $\sim$14\% \\
-AlexNet overall & $\sim$0.84 & $\sim$0.77 & $\sim$0.69 & $\sim$31\% & $\sim$18\% & $\sim$10\% \\
-VGG16 CONV & $\sim$0.67 & $\sim$0.40 & $\sim$0.32 & $\sim$68\% & $\sim$52\% & $\sim$20\% \\
-VGG16 FC & $\sim$0.40 & $\sim$0.28 & $\sim$0.21 & $\sim$79\% & $\sim$48\% & $\sim$25\% \\
-VGG16 overall & $\sim$0.67 & $\sim$0.40 & $\sim$0.32 & $\sim$68\% & $\sim$52\% & $\sim$20\% \\
-ResNet50 CONV & $\sim$0.86 & $\sim$0.64 & $\sim$0.53 & $\sim$47\% & $\sim$38\% & $\sim$17\% \\
-ResNet50 FC & $\sim$0.88 & $\sim$0.86 & $\sim$0.83 & $\sim$17\% & $\sim$6\% & $\sim$3\% \\
-ResNet50 overall & $\sim$0.86 & $\sim$0.64 & $\sim$0.52 & $\sim$48\% & $\sim$40\% & $\sim$19\% \\
-\textbf{Paper geometric average} & --- & --- & \textbf{0.495 implied} & \textbf{50.5\%} & \textbf{38.4\%} & \textbf{18.6\%} \\
+AlexNet CONV & $\sim$0.91 & $\sim$0.82 & $\sim$18\% & $\sim$0.88 \\
+AlexNet FC & $\sim$0.86 & $\sim$0.74 & $\sim$26\% & $\sim$0.58 \\
+AlexNet overall & $\sim$0.92 & $\sim$0.82 & $\sim$18\% & $\sim$0.84 \\
+VGG16 CONV & $\sim$0.60 & $\sim$0.48 & $\sim$52\% & $\sim$0.67 \\
+VGG16 FC & $\sim$0.70 & $\sim$0.53 & $\sim$48\% & $\sim$0.40 \\
+VGG16 overall & $\sim$0.60 & $\sim$0.48 & $\sim$52\% & $\sim$0.67 \\
+ResNet50 CONV & $\sim$0.74 & $\sim$0.62 & $\sim$38\% & $\sim$0.86 \\
+ResNet50 FC & $\sim$0.98 & $\sim$0.94 & $\sim$6\% & $\sim$0.88 \\
+ResNet50 overall & $\sim$0.74 & $\sim$0.60 & $\sim$40\% & $\sim$0.86 \\
+\textbf{Paper geometric average} & \textbf{$\sim$0.76 implied} & \textbf{0.616} & \textbf{38.4\%} & --- \\
 \bottomrule
 \end{longtable}
 
@@ -121,25 +120,25 @@ The repository implements the paper-facing topology and workload counts, but
 the VVA throughput, logical ordering, per-layer grids and reference simulator
 are unavailable. Its numerical result is therefore an independent
 reconstruction, not a direct value-for-value replication. Table~\ref{tab:ours}
-uses the same baseline-normalized form for the current AlexNet-FC calibrations.
+uses the same RS-normalized form for the current AlexNet-FC calibrations.
 Within each row, larger reductions are better; comparisons between rows are not
 valid because the operating conditions differ.
 
-\begin{longtable}{p{0.27\linewidth}rrrrp{0.24\linewidth}}
+\begin{longtable}{p{0.27\linewidth}rp{0.19\linewidth}p{0.19\linewidth}p{0.23\linewidth}}
 \caption{Project baseline calibration in paper-style format. All conditions
 use AlexNet-FC on 4$\times$4 chips with 16$\times$16 cores/chip and one million
 evaluations per search method.}
 \label{tab:ours}\\
 \toprule
-Condition & BS ($\mu$s) & RS reduction & Fixed-SA reduction & ASA reduction & Interpretation \\
+Condition & RS ($\mu$s) & Fixed SA / improvement vs RS & ASA / improvement vs RS & Interpretation \\
 \midrule
 \endfirsthead
 \toprule
-Condition & BS ($\mu$s) & RS reduction & Fixed-SA reduction & ASA reduction & Interpretation \\
+Condition & RS ($\mu$s) & Fixed SA / improvement vs RS & ASA / improvement vs RS & Interpretation \\
 \midrule
 \endhead
-VVA=1 op/cycle; fixed grids; seed 0 & 24.92032 & 3.94\% & 8.89\% & 7.33\% & Compute floor is 89.9\% of BS, so no optimizer can reach the paper's AlexNet-FC bars under this condition. Fixed SA improves 5.15\% over RS. \\
-VVA=16 ops/cycle; rate-one grids held fixed; seed 0 & 3.92032 & 21.64\% & 47.68\% & 38.91\% & Fixed SA improves 33.23\% over RS and is near the paper's approximate 0.50 SA/BS bar. RS remains far above its $\sim$0.58 bar; this is exploratory. \\
+VVA=1 op/cycle; fixed grids; seed 0 & 23.93728 & 22.70400 / 5.15\% & 23.09328 / 3.53\% & Fixed SA is below the paper's $\sim$26\% AlexNet-FC DDPG-versus-RS reading. BS=24.92032 $\mu$s; compute floor is 89.9\% of BS. \\
+VVA=16 ops/cycle; rate-one grids held fixed; seed 0 & 3.07200 & 2.05125 / 33.23\% & 2.39488 / 22.04\% & Fixed SA exceeds the paper chart's $\sim$26\% AlexNet-FC DDPG-versus-RS reading, but this is an exploratory one-seed assumed-rate result, not RL. BS=3.92032 $\mu$s. \\
 \bottomrule
 \end{longtable}
 
