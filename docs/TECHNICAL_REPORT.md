@@ -54,6 +54,65 @@ Only the third statement is an optimizer result. A low best-so-far cost by
 itself is not evidence that RL learned; random exploration, initialisation or a
 repair heuristic may have found it.
 
+## Paper-aligned benchmark comparison
+
+The reference paper reports latency and throughput normalized to its sequential
+baseline (BS).  Its Figure 10 contains bars rather than a numerical table, so
+the per-workload ratios below are **two-significant-figure readings of those
+bars**, included to make the comparison concrete rather than to claim
+precision that the figure does not provide.  The reported aggregate DDPG
+reductions are exact statements from the paper: 50.5% versus BS, 38.4% versus
+random search (RS), and 18.6% versus SA.  Its protocol uses one million RS and
+SA placement evaluations; DDPG is described as passing the best RS/SA result
+around 300k--400k evaluated placements.
+
+| Paper Figure 10 latency, normalized to BS | RS / BS | SA / BS | DDPG / BS | DDPG reduction vs BS | DDPG reduction vs RS | DDPG reduction vs SA |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| AlexNet CONV | ~0.88 | ~0.80 | ~0.72 | ~28% | ~18% | ~10% |
+| AlexNet FC | ~0.58 | ~0.50 | ~0.43 | ~57% | ~26% | ~14% |
+| AlexNet overall | ~0.84 | ~0.77 | ~0.69 | ~31% | ~18% | ~10% |
+| VGG16 CONV | ~0.67 | ~0.40 | ~0.32 | ~68% | ~52% | ~20% |
+| VGG16 FC | ~0.40 | ~0.28 | ~0.21 | ~79% | ~48% | ~25% |
+| VGG16 overall | ~0.67 | ~0.40 | ~0.32 | ~68% | ~52% | ~20% |
+| ResNet50 CONV | ~0.86 | ~0.64 | ~0.53 | ~47% | ~38% | ~17% |
+| ResNet50 FC | ~0.88 | ~0.86 | ~0.83 | ~17% | ~6% | ~3% |
+| ResNet50 overall | ~0.86 | ~0.64 | ~0.52 | ~48% | ~40% | ~19% |
+| **Paper geometric-average claim** | — | — | **0.495 implied** | **50.5%** | **38.4%** | **18.6%** |
+
+The reconstructed system implements the paper-facing topology and workload
+counts, but cannot yet be called a numeric reproduction.  The missing VVA
+throughput, logic-core numbering, per-layer grids and simulator details change
+the amount of placement headroom.  The following table therefore compares
+**matched project baselines** in the same format while keeping the operating
+condition explicit.  Percentages are reductions in latency, so larger is
+better.  They are valid comparisons *within each row*, not against a paper
+bar in another row.
+
+| Project protocol: AlexNet FC, 4x4 chips, 16x16 cores/chip | BS latency (µs) | RS latency / reduction vs BS | Fixed-SA latency / reduction vs BS | ASA latency / reduction vs BS | Best search reduction vs RS | Interpretation against Figure 10 |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 1M evaluations, VVA = 1 op/cycle, fixed grids, seed 0 | 24.92032 | 23.93728 / **3.94%** | 22.70400 / **8.89%** | 23.09328 / **7.33%** | Fixed SA: **5.15%** | Compute floor alone is 89.9% of BS; no optimizer can approach the paper's AlexNet-FC bars under this condition. |
+| 1M evaluations, VVA = 16 ops/cycle, rate-one grids held fixed, seed 0 | 3.92032 | 3.07200 / **21.64%** | 2.05125 / **47.68%** | 2.39488 / **38.91%** | Fixed SA: **33.23%** | Fixed SA is near the paper's approximate 0.50 SA/BS bar, but RS remains far above its ~0.58 bar. This is an exploratory assumed-rate result. |
+
+The current learned bandit is **not** entered in the preceding paper table:
+its 100,001-call experiments use a focused candidate pool and a different
+control question.  It would be misleading to compare its 1.6--2.3% advantage
+over a matched frozen control with the paper's one-million-placement DDPG/RS/SA
+bars.  Its proper, paper-style improvement table is instead:
+
+| Current learned-SA protocol | Budget | Comparator | Learned improvement | Result scope |
+| --- | ---: | --- | ---: | --- |
+| AlexNet FC, held-out seeds 3--5 | 100,001 true-objective evaluations | Focused uniform frozen control | **1.965%** mean; 3/3 seeds | Positive matched-control evidence; development workload, not a new-instance test. |
+| VGG16 FC, seeds 0--2 | 100,001 true-objective evaluations | Focused uniform frozen control | **2.255%** mean; 3/3 seeds | Transfer without retuning, but exploratory. |
+| VGG16 FC, held-out seeds 3--5 | 100,001 true-objective evaluations | Focused uniform frozen control | **1.637%** mean; 3/3 seeds | Held-out-seed confirmation. |
+| VGG16 FC, all six seeds | 100,001 true-objective evaluations | Focused uniform frozen control | **1.946%** mean; 6/6 seeds | Strongest current RL+SA result; fixed-SA comparison remains inconclusive. |
+
+The next defensible paper-aligned RL experiment is to freeze an execution-rate
+and logical-order condition, run fixed SA, ASA and learned SA at the same
+one-million complete-placement budget over multiple predeclared seeds, and
+then report this exact table with confidence intervals.  Only then can a
+learned-SA value be compared to the classical paper baselines without mixing
+different budgets or controls.
+
 ## 2. System and workload model
 
 ### 2.1 Physical topology

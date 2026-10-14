@@ -1,0 +1,614 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue,
+  pdftitle={RL-Guided Core Placement for Multi-Chip DNN Accelerators},
+  pdfauthor={DNN_MAPPING Project}
+}
+
+\newcommand{\repo}{\texttt{DNN\_MAPPING}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\todoitem}[1]{\textcolor{red}{[Citation needed: #1]}}
+
+\title{RL-Guided Core Placement for Multi-Chip DNN Accelerators\\
+\large Technical Report and Codebase Guide}
+\author{DNN\_MAPPING Project}
+\date{October 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report documents an implementation and experimental study of core
+placement for multi-chip, many-core DNN accelerators. The project is an
+independent reconstruction motivated by Wu et al.'s 2020 TODAES paper on
+reinforcement-learning-based core placement. Because the original simulator and
+several parameters were not released, this work does not claim exact numerical
+reproduction. Instead, it makes all reconstruction assumptions explicit.
+
+The system partitions DNN layers into vector-matrix-multiply (VMM) and
+vector-vector-accumulation (VVA) logic cores, maps them to a hierarchical
+multi-chip mesh, and minimizes a reconstructed bottleneck pipeline latency.
+The repository includes random search, fixed simulated annealing (SA), adaptive
+SA, DDPG, guided DDPG, masked PPO, PPO-guided SA, and contextual-bandit-guided
+SA. The active method is a contextual bandit that ranks legal SA proposals while
+fixed SA retains temperature control and Metropolis acceptance.
+
+Current results provide positive matched-control evidence for the contextual
+bandit on AlexNet-FC and VGG16-FC. They do not yet prove superiority over the
+strongest non-learned proposal heuristic, over fixed SA on every workload, or
+over a broader class of accelerators. This report explains the theory, code,
+experimental evidence and limits needed to extend the project responsibly.
+\end{abstract}
+
+\section{Scope and research question}
+
+The goal is to assign every DNN logic core to a distinct physical core so that
+the latency of the slowest pipeline stage is minimized. The reference problem
+comes from Wu et al., ``Core Placement Optimization for Multi-chip Many-core
+Neural Network Systems with Reinforcement Learning,'' ACM TODAES 2020,
+DOI~\href{https://doi.org/10.1145/3418498}{10.1145/3418498}.
+
+The project distinguishes three progressively stronger claims:
+
+\begin{enumerate}[label=\arabic*.]
+  \item The program produces legal placements and finite costs.
+  \item A trained learner changes its scores and decisions relative to a frozen
+  control.
+  \item Under matched mechanics and equal objective-evaluation budget, the
+  learner improves the optimizer's final result.
+\end{enumerate}
+
+Only the third is an optimizer claim. A single low best-so-far value does not
+prove learning: it can arise from random exploration, initialisation or an
+external repair heuristic.
+
+\section{Paper-aligned benchmark comparison}
+
+The reference paper's Figure~10 reports latency and throughput normalized to
+its sequential baseline (BS). It is a bar chart, rather than a numerical
+table. Table~\ref{tab:paper-bars} records two-significant-figure readings of
+its latency bars so that the comparison is explicit; the rounded readings must
+not be treated as newly measured paper data. The paper's exact aggregate
+statement is that DDPG reduces latency by 50.5\%, 38.4\%, and 18.6\% relative
+to BS, random search (RS), and SA, respectively. It evaluates one million
+placements for RS and SA and reports that DDPG passes their best results after
+roughly 300k--400k evaluated placements.
+
+\begin{longtable}{lrrrrrr}
+\caption{Approximate latency ratios read from Wu et al.'s Figure~10. All
+ratios use the paper's BS value for the same workload as denominator.
+``Reduction'' columns compare DDPG with the named baseline.}
+\label{tab:paper-bars}\\
+\toprule
+Workload & RS/BS & SA/BS & DDPG/BS & vs BS & vs RS & vs SA \\
+\midrule
+\endfirsthead
+\toprule
+Workload & RS/BS & SA/BS & DDPG/BS & vs BS & vs RS & vs SA \\
+\midrule
+\endhead
+AlexNet CONV & $\sim$0.88 & $\sim$0.80 & $\sim$0.72 & $\sim$28\% & $\sim$18\% & $\sim$10\% \\
+AlexNet FC & $\sim$0.58 & $\sim$0.50 & $\sim$0.43 & $\sim$57\% & $\sim$26\% & $\sim$14\% \\
+AlexNet overall & $\sim$0.84 & $\sim$0.77 & $\sim$0.69 & $\sim$31\% & $\sim$18\% & $\sim$10\% \\
+VGG16 CONV & $\sim$0.67 & $\sim$0.40 & $\sim$0.32 & $\sim$68\% & $\sim$52\% & $\sim$20\% \\
+VGG16 FC & $\sim$0.40 & $\sim$0.28 & $\sim$0.21 & $\sim$79\% & $\sim$48\% & $\sim$25\% \\
+VGG16 overall & $\sim$0.67 & $\sim$0.40 & $\sim$0.32 & $\sim$68\% & $\sim$52\% & $\sim$20\% \\
+ResNet50 CONV & $\sim$0.86 & $\sim$0.64 & $\sim$0.53 & $\sim$47\% & $\sim$38\% & $\sim$17\% \\
+ResNet50 FC & $\sim$0.88 & $\sim$0.86 & $\sim$0.83 & $\sim$17\% & $\sim$6\% & $\sim$3\% \\
+ResNet50 overall & $\sim$0.86 & $\sim$0.64 & $\sim$0.52 & $\sim$48\% & $\sim$40\% & $\sim$19\% \\
+\textbf{Paper geometric average} & --- & --- & \textbf{0.495 implied} & \textbf{50.5\%} & \textbf{38.4\%} & \textbf{18.6\%} \\
+\bottomrule
+\end{longtable}
+
+The repository implements the paper-facing topology and workload counts, but
+the VVA throughput, logical ordering, per-layer grids and reference simulator
+are unavailable. Its numerical result is therefore an independent
+reconstruction, not a direct value-for-value replication. Table~\ref{tab:ours}
+uses the same baseline-normalized form for the current AlexNet-FC calibrations.
+Within each row, larger reductions are better; comparisons between rows are not
+valid because the operating conditions differ.
+
+\begin{longtable}{p{0.27\linewidth}rrrrp{0.24\linewidth}}
+\caption{Project baseline calibration in paper-style format. All conditions
+use AlexNet-FC on 4$\times$4 chips with 16$\times$16 cores/chip and one million
+evaluations per search method.}
+\label{tab:ours}\\
+\toprule
+Condition & BS ($\mu$s) & RS reduction & Fixed-SA reduction & ASA reduction & Interpretation \\
+\midrule
+\endfirsthead
+\toprule
+Condition & BS ($\mu$s) & RS reduction & Fixed-SA reduction & ASA reduction & Interpretation \\
+\midrule
+\endhead
+VVA=1 op/cycle; fixed grids; seed 0 & 24.92032 & 3.94\% & 8.89\% & 7.33\% & Compute floor is 89.9\% of BS, so no optimizer can reach the paper's AlexNet-FC bars under this condition. Fixed SA improves 5.15\% over RS. \\
+VVA=16 ops/cycle; rate-one grids held fixed; seed 0 & 3.92032 & 21.64\% & 47.68\% & 38.91\% & Fixed SA improves 33.23\% over RS and is near the paper's approximate 0.50 SA/BS bar. RS remains far above its $\sim$0.58 bar; this is exploratory. \\
+\bottomrule
+\end{longtable}
+
+The learned contextual-bandit method is deliberately excluded from
+Table~\ref{tab:ours}: its 100,001-call focused-candidate experiments answer a
+different causal question than the paper's million-placement BS/RS/SA
+comparison. Its valid improvements are 1.965\% on held-out AlexNet-FC seeds,
+2.255\% on VGG16-FC development seeds, 1.637\% on held-out VGG16-FC seeds,
+and 1.946\% over all six VGG16-FC seeds, always relative to the matched
+focused-uniform frozen control. A paper-aligned learned-SA claim requires a
+frozen execution-rate and logical-order condition, fixed SA/ASA/learned-SA
+under the same one-million-call budget, and multiple predeclared seeds.
+
+\section{Hardware and workload reconstruction}
+
+\subsection{Physical topology}
+
+The paper-oriented configuration has a $4 \times 4$ array of chips. Each chip
+contains a $16 \times 16$ mesh of processing cores, for
+
+\begin{equation}
+N_{\mathrm{physical}} = 4 \times 4 \times 16 \times 16 = 4096
+\end{equation}
+
+physical cores. The implementation is in
+\code{src/multi\_chip\_topology.py}. A global core ID is chip-major; helper
+functions recover chip and local coordinates.
+
+The active paper-oriented routing model, \code{paper\_xy}, uses dimension
+ordered routing. Intra-chip traffic follows XY routing in the local mesh.
+Inter-chip traffic routes from the source core to a lower-left chip-periphery
+gateway, travels X then Y across the chip array, then travels from the target
+gateway to the destination core. This gateway choice and detailed global
+routing-switch behaviour are reconstruction assumptions.
+
+\subsection{DNN logic cores}
+
+The workload extractor in \code{src/run\_multi\_chip.py} traces supported
+Torchvision models and represents every layer with a two-dimensional partition
+grid. For $M$ output-channel groups and $N$ input-channel groups, the layer
+contains $MN$ VMM cores and $M$ VVA cores. VMM tasks compute partial products;
+VVA tasks accumulate partial sums and emit activations.
+
+\code{src/compute\_model.py} implements the partition reconstruction. In
+\code{paper\_targets} mode, it selects per-layer $(M,N)$ grids that match the
+aggregate logic-core totals reported in the reference paper, satisfy the
+64~KB 8-bit weight-tile restriction, and balance estimated VMM/VVA work.
+
+\begin{table}[h]
+\centering
+\caption{Published aggregate logic-core targets used by the reconstruction.}
+\begin{tabular}{lrr}
+\toprule
+Model & CONV logic cores & FC logic cores \\
+\midrule
+AlexNet & 183 & 932 \\
+VGG16 & 1,024 & 1,924 \\
+ResNet50 & 512 & 37 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The paper does not publish individual layer grids, VVA execution rate or the
+logical indexing order. These settings are documented reconstruction parameters,
+not recovered ground truth.
+
+\subsection{Compute timing}
+
+VMM timing uses 128 MACs per cycle at a 400~MHz clock. VVA timing uses the
+explicit parameter \code{--vva\_ops\_per\_cycle}, because the paper does not
+publish that rate. For task $i$,
+
+\begin{equation}
+t_{\mathrm{comp}}(i) =
+\frac{\left\lceil operations_i / (rate_i\,u) \right\rceil}{400\text{ MHz}},
+\end{equation}
+
+where $u$ is assumed arithmetic utilization. The model excludes several
+unpublished factors, including detailed packet scheduling, activation-buffer
+stalls, router startup and exact compute/communication overlap.
+
+\section{Placement objective and evaluator}
+
+\subsection{Legal placement}
+
+Let $P(i)$ be the physical core assigned to logic task $i$. A placement is
+legal when every assignment is in the allowed physical-core region and
+$P(i) \neq P(j)$ for $i \neq j$. \code{MultiChipEnvironment} in
+\code{src/multi\_chip\_environment.py} owns this state, validates legality and
+calculates cost.
+
+The code can allocate disjoint whole-chip masks to convolutional and
+fully-connected regions, matching the paper's high-level separation of these
+workload classes.
+
+\subsection{Bottleneck pipeline latency}
+
+The primary objective is reconstructed bottleneck pipeline latency, not summed
+wirelength. Kahn topological levels form task stages $S_k$. The objective is
+
+\begin{equation}
+L(P) = \max_k T_k(P).
+\end{equation}
+
+In the basic task-sum model, a placed source task has service time
+
+\begin{equation}
+t_i(P) = t_{\mathrm{comp}}(i) +
+\sum_{j \in \mathrm{succ}(i)} bytes(i,j)\,c(P(i),P(j)),
+\end{equation}
+
+and stage time is the largest service time in that stage. Under
+\code{paper\_pipeline}, the evaluator constructs explicit XY routes and models
+shared directed-link serialization. For each phase it uses the larger of the
+largest single-source routed traffic time and the most loaded directed link.
+
+The methods \code{pipeline\_stages()}, \code{pipeline\_breakdown()} and
+\code{\_xy\_contention\_components()} implement this calculation.
+
+\subsection{Why sensitivity is checked first}
+
+An optimizer cannot reliably improve a nearly flat objective. Earlier AlexNet
+CONV partitioning concentrated work in a placement-independent VVA task,
+creating an apparent optimization problem with almost no real headroom. The
+current runner samples random legal placements before long paper-mode runs and
+can stop if the observed relative objective span is too small. The bypass flag
+\code{--allow\_flat\_objective} is intended for diagnostics, not normal
+experiments.
+
+\subsection{Incremental exact evaluation}
+
+SA moves relocate or swap only a few tasks. \code{IncrementalPipelineEvaluator}
+in \code{src/run\_multi\_chip.py} caches unaffected stage costs and evaluates
+only stages affected by a candidate move. It is designed to agree with complete
+evaluation while allowing large SA budgets. Full-evaluation flags remain
+available for debugging and reference checks.
+
+\section{Classical search baselines}
+
+\begin{table}[h]
+\centering
+\caption{Implemented optimization methods.}
+\begin{tabular}{p{0.24\linewidth}p{0.16\linewidth}p{0.51\linewidth}}
+\toprule
+Method & CLI value & Role \\
+\midrule
+Sequential baseline & \code{bs} & Deterministic chip-major reference placement. \\
+Random search & \code{random} & Independent valid placements; retain the best sampled cost. \\
+Fixed SA & \code{sa} & Primary classical baseline with calibrated geometric cooling. \\
+Adaptive SA & \code{asa} & Temperature and neighborhood feedback baseline. \\
+Continuous DDPG & \code{ddpg} & Historical paper-oriented actor--critic path. \\
+Guided DDPG & \code{ddpg\_guided} & Legal-action DDPG with demonstrations. \\
+Masked PPO & \code{ppo\_masked} & Constructive legal categorical placement policy. \\
+Learned SA & \code{ppo\_asa} & PPO or contextual-bandit proposal selection inside SA. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For fixed SA, a candidate $P'$ is accepted automatically if
+$\Delta = L(P') - L(P) \leq 0$. Otherwise it is accepted with probability
+
+\begin{equation}
+p_{\mathrm{accept}} = \exp(-\Delta/T).
+\end{equation}
+
+The initial temperature is calibrated from uphill candidate deltas to target an
+initial acceptance probability, normally 0.8. Temperature then cools
+geometrically with the paper-oriented factor 0.99. This calibration replaced
+historical absolute temperatures that were inconsistent with a seconds-valued
+objective.
+
+Adaptive SA adjusts temperature and move scale over windows to target an
+acceptance rate near 0.30. It is a useful comparison, but its current controller
+has generally performed worse than calibrated fixed SA on the evaluated
+settings. That is a result about this controller, not a general rejection of
+adaptive metaheuristics.
+
+\section{Retained reinforcement-learning methods}
+
+\subsection{Continuous DDPG}
+
+The original paper-oriented DDPG path has actor and critic networks that emit
+continuous coordinates and estimate action values. It supports an MLP, a spatial
+CNN and a Figure-9-inspired CNN. Actions are discretized and collision-repaired
+when several tasks map to the same physical core.
+
+This repair causes a credit-assignment problem: replay stores the actor's
+continuous intent while the evaluator sees a substantially different repaired
+placement. Earlier diagnostics showed high repair rates and degenerate intended
+positions. The DDPG implementation is therefore retained for historical audit,
+not treated as the active solution.
+
+\subsection{Guided DDPG and masked PPO}
+
+\code{run\_ddpg\_guided()} attempts to improve DDPG with legal candidates,
+ASA demonstrations, prioritized replay, twin critics and behaviour cloning.
+\code{run\_masked\_ppo()} places tasks autoregressively with an exact mask over
+occupied and disallowed cores, eliminating collision repairs. Its PPO objective
+is
+
+\begin{equation}
+L^{\mathrm{CLIP}}(\theta) = \mathbb{E}_t
+\left[\min\left(r_t(\theta)\hat{A}_t,
+\operatorname{clip}(r_t(\theta),1-\epsilon,1+\epsilon)\hat{A}_t\right)\right].
+\end{equation}
+
+These methods demonstrate legal-action mechanics but have not provided a robust
+final-quality gain over strong SA baselines in the documented experiments.
+
+\subsection{PPO-guided SA}
+
+The PPO-SA path ranks a dynamic set of legal neighbor moves while SA retains
+candidate generation and Metropolis acceptance. The
+\code{reference\_separate} update style uses disjoint actor and critic modules,
+separate optimizers, reward-to-go value targets and GAE-style advantages. It was
+informed by the independently adapted training structure of the public
+RL-Based-SA project, whose attribution is recorded in
+\code{THIRD\_PARTY\_NOTICES.md}. Long tests did not establish a reliable PPO
+proposal advantage, motivating a simpler one-step learner.
+
+\section{Active method: contextual-bandit-guided fixed SA}
+
+\subsection{Design}
+
+The active method retains fixed SA's global optimization mechanics and learns
+only to choose a move from a legal candidate set. This is a contextual-bandit
+formulation because one objective evaluation reveals the selected proposal's
+immediate gain. It avoids using a long-horizon value model when the supervised
+signal is naturally one-step.
+
+At each SA step, the system creates $K=16$ legal candidate moves. In the active
+configuration, half are anchored on current bottleneck-stage tasks and half are
+ordinary legal proposals. SA remains responsible for initial placement,
+candidate legality, temperature, uphill-move acceptance and best-so-far
+retention.
+
+\subsection{Candidate representation}
+
+Each proposal receives nine features:
+
+\begin{enumerate}
+  \item bottleneck-stage membership;
+  \item VVA-task indicator;
+  \item normalized task work;
+  \item task work fraction within its stage;
+  \item predecessor-hop change;
+  \item successor-hop change;
+  \item traffic-weighted hop change;
+  \item same-chip connectivity change;
+  \item an inexpensive routed-communication \code{proxy\_gain}.
+\end{enumerate}
+
+The global context contains chain progress, previous objective delta, previous
+accept/reject state and recent acceptance fraction.
+
+\subsection{Bandit network and update}
+
+\code{ProposalBanditRegressor} uses a global-state encoder and candidate
+encoder, each a one-layer 128-unit \code{tanh} MLP. Their embeddings are added,
+nonlinearly transformed and passed to a scalar score head. The score head is
+initialised to zero. Before learning, all candidates have equal score, which
+makes the frozen control exactly uniform.
+
+For selected proposal $P'$, the normalized signed proposed reward is
+
+\begin{equation}
+r = \operatorname{clip}\left(\frac{L(P)-L(P')}{s},-10,10\right),
+\end{equation}
+
+where $s$ is the reward scale. Positive reward means the proposal improved the
+objective before the Metropolis accept/reject decision. The network minimizes
+smooth-L1 loss,
+
+\begin{equation}
+\mathcal{L}_{\mathrm{bandit}}=
+\operatorname{Huber}\big(\hat{r}(g,x),r\big),
+\end{equation}
+
+using uniform replay and AdamW. Uniform replay is deliberate: an earlier
+positive-balanced replay scheme overrepresented rare gains and led to harmful
+overprediction.
+
+\subsection{Exploration and controls}
+
+After a uniform warm-up, epsilon-greedy selection gradually reduces random
+selection to 0.50 across the entire run. This relatively high final exploration
+rate is intentional because only selected candidates obtain labels.
+
+The primary frozen control has the same candidate pool, warm-up, cooling,
+acceptance rule, budget and random-stream structure, but makes no parameter
+updates. A stricter \code{proxy\_greedy} control ranks candidates directly by
+the hand-designed \code{proxy\_gain} feature; it tests whether the learned
+model contributes beyond that heuristic.
+
+\section{Current evidence}
+
+The supported conclusion is deliberately narrow:
+
+\begin{quote}
+Under equal true-objective budgets and the same focused candidate pool, the
+contextual-bandit selector improved over a focused-uniform frozen control on
+tested AlexNet-FC and VGG16-FC workloads. It is not yet proven superior to the
+best non-learned proposal heuristic, fixed SA across every workload, or a broad
+class of accelerators.
+\end{quote}
+
+\begin{table}[h]
+\centering
+\caption{Selected recorded evidence. Costs and confidence intervals are
+documented in \code{docs/PROJECT\_STATE.md}.}
+\begin{tabular}{p{0.30\linewidth}p{0.27\linewidth}p{0.34\linewidth}}
+\toprule
+Protocol & Main observation & Interpretation \\
+\midrule
+AlexNet-FC, held-out seeds 3--5 & Learned method beat frozen control 3/3;
+mean relative improvement $1.965\%$. & Positive held-out-seed evidence on a
+graph used in development; not a new-instance test. \\
+AlexNet-CONV, 3 seeds & Learned, frozen and fixed-SA conditions reached the
+same final minimum. & Valid final-quality tie. \\
+VGG16-FC, seeds 0--2 & Learned beat frozen control 3/3; mean improvement
+$2.255\%$. & Positive transfer signal without retuning. \\
+VGG16-FC, held-out seeds 3--5 & Learned beat focused-uniform 3/3; it was
+effectively tied with fixed SA. & Strengthens the control result, but does not
+prove fixed-SA superiority. \\
+VGG16-FC, all 6 seeds & Learned beat focused-uniform 6/6; mean improvement
+$1.946\%$. & Strongest current evidence, still exploratory. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The proxy-greedy comparator is the immediate next causal test. It holds the
+candidate set and objective budget fixed while removing training. A longer
+matched proxy-greedy study is required before claiming that the learned scorer
+adds value beyond the hand-designed heuristic.
+
+\section{Limitations and threats to validity}
+
+\subsection{Evaluator fidelity}
+
+The implementation is a documented sensitivity model, not the unpublished
+reference simulator. The main gaps are exact global routing, VVA throughput,
+activation-buffer stalls, detailed packet scheduling, router startup,
+compute/communication overlap and logical task ordering. Paper-normalized
+ratios should therefore be reported as reconstruction diagnostics rather than
+exact reproduction proof.
+
+\subsection{Causal attribution}
+
+The frozen focused-uniform control isolates the package of trained scoring plus
+the selected candidate representation. It does not isolate the learned model
+from bottleneck focusing or \code{proxy\_gain}. The proxy-greedy control,
+feature removal, focus-zero and shuffled-label studies are the appropriate next
+ablations.
+
+\subsection{Statistics and wall-clock cost}
+
+Seeds are repeated stochastic executions, not independent workload instances.
+Three-seed uncertainty intervals are descriptive and unstable. Every report
+should provide individual seeds, complete-objective-call budgets, wall-clock
+time and predeclared decision rules. Equal objective-call counts do not imply
+equal wall-clock cost because learned SA constructs, featurizes and scores a
+candidate pool and performs neural updates.
+
+\section{Codebase guide}
+
+\begin{longtable}{p{0.29\linewidth}p{0.28\linewidth}p{0.34\linewidth}}
+\caption{Active repository components.}\\
+\toprule
+Location & Responsibility & Read it when you need to\\
+\midrule
+\endfirsthead
+\toprule
+Location & Responsibility & Read it when you need to\\
+\midrule
+\endhead
+\code{src/run\_multi\_chip.py} & Workload extraction, algorithms, neural
+models, CLI and reports. & Change an algorithm, a reward, a candidate feature
+or a command-line option.\\
+\code{src/multi\_chip\_environment.py} & Legality, Kahn stages, objective and
+diagnostics. & Change or validate latency semantics.\\
+\code{src/multi\_chip\_topology.py} & Physical IDs, mesh/torus distances and
+XY routes. & Change topology or routing construction.\\
+\code{src/compute\_model.py} & Layer grids, operation counts and timing. &
+Change partition or VMM/VVA assumptions.\\
+\code{src/run\_paper\_experiment.py} & CONV/FC paper-style orchestration. &
+Run a documented reproduction suite.\\
+\code{src/run\_multiseed\_experiment.py} & Independent multi-seed scheduler. &
+Run matched repeated experiments.\\
+\code{src/analysis/} & Post-hoc analysis and gates. & Analyse an existing
+archive without changing optimization.\\
+\code{src/experiments/} & Historical and exploratory prototypes. & Inspect old
+approaches; do not treat them as supported runners.\\
+\code{scripts/} & Kaggle and batch experiment gates. & Run preserved protocols.\\
+\code{tests/} & Smoke and reconciliation tests. & Verify a change before a
+long experiment.\\
+\code{docs/PROJECT\_STATE.md} & Current quantitative evidence. & Make a
+result claim.\\
+\code{docs/RECONCILIATION.md} & Paper assumptions and evaluator corrections. &
+Compare the implementation with the source paper.\\
+\code{docs/RESEARCH\_FINDINGS.md} & Literature, failure analysis and causal
+concerns. & Choose the next experiment.\\
+\code{docs/PROJECT\_JOURNEY.md} & Chronological project history. & Understand
+why prior decisions changed.\\
+\code{docs/archive/} & Preserved superseded evidence. & Audit older claims.\\
+\bottomrule
+\end{longtable}
+
+\section{Reproducibility protocol}
+
+For every reported experiment:
+
+\begin{enumerate}
+  \item Record Git commit, model, workload region, topology, timing model,
+  VVA rate, logical task order, seed and device.
+  \item Run the objective-sensitivity preflight before large paper-mode search.
+  \item Use matched complete-placement objective evaluations.
+  \item Keep learning and frozen-control conditions identical except for
+  parameter updates.
+  \item Save configuration/report JSON, diagnostic JSONL, manifest and archive
+  checksum.
+  \item Report every seed and distinguish tuned, held-out and new-workload
+  experiments.
+\end{enumerate}
+
+The active family is selected with \code{--algo ppo\_asa},
+\code{--ppo\_asa\_learner bandit}, and
+\code{--ppo\_asa\_annealing fixed}. Exact supported commands belong in the
+repository README and \code{docs/IMP\_README.md}; experiment commands should
+not be reconstructed from memory.
+
+\section{Publication path}
+
+The present result is suitable for a bounded workshop or reproducibility-style
+submission only if claims remain matched to evidence. A stronger positive-method
+paper needs:
+
+\begin{enumerate}
+  \item a longer proxy-greedy matched-control experiment;
+  \item feature and candidate-focus ablations;
+  \item more held-out seeds and at least one additional workload family;
+  \item a frozen evaluator configuration and recoverable archives; and
+  \item explicit reconstruction limits in the method and discussion sections.
+\end{enumerate}
+
+The defensible contribution is not that RL universally beats SA. It is a
+contextual-bandit candidate-selection mechanism for fixed SA in a reconstructed
+multi-chip DNN placement simulator, with matched controls, documented negative
+results and a reproducible experimental methodology.
+
+\begin{thebibliography}{9}
+\bibitem{wu2020}
+N. Wu, F. Deng, Y. Xie, et al.
+\newblock Core Placement Optimization for Multi-chip Many-core Neural Network
+Systems with Reinforcement Learning.
+\newblock \emph{ACM Transactions on Design Automation of Electronic Systems},
+2020. DOI: \href{https://doi.org/10.1145/3418498}{10.1145/3418498}.
+
+\bibitem{qiu2025}
+N. Qiu and R. Liang.
+\newblock Reinforcement-Learning-Based Simulated Annealing.
+\newblock AAMAS, 2025. Public implementation audited by this project:
+\url{https://github.com/nathanqiu07/RL-Based-SA-Public}.
+
+\bibitem{vashisht2020}
+D. Vashisht et al.
+\newblock Placement in Integrated Circuits using Cyclic Reinforcement Learning
+and Simulated Annealing.
+\newblock NeurIPS Workshop on Machine Learning for Engineering Modeling,
+Simulation and Design, 2020. \url{https://arxiv.org/abs/2011.07577}.
+\end{thebibliography}
+
+\end{document}
