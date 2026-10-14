@@ -62,6 +62,32 @@ Use the other documents only when they are relevant to your task:
   internals.
 - Read `THIRD_PARTY_NOTICES.md` before using or modifying external code.
 
+## Files to understand before changing RL+SA
+
+Most RL+SA behavior is intentionally kept in a small set of files:
+
+- `src/run_multi_chip.py` contains the implementation. Start with
+  `run_ppo_asa`, despite the historical function name. Within it,
+  `candidate_features` defines the nine inputs including `proxy_gain`,
+  `make_proposal_pool` creates the 16 legal candidates, `update_bandit` trains
+  the signed-gain regressor, and the epsilon-greedy block selects a move. This
+  file also owns SA temperature, Metropolis acceptance, checkpoint metadata,
+  reports, and command-line arguments.
+- `scripts/run_kaggle_rl_fixed_sa_gate.sh` is the canonical experiment runner.
+  It freezes the workload and algorithm flags, launches learned and uniform
+  control runs with matched seeds and objective budgets, runs fixed SA, ASA,
+  and random-search context baselines, and creates the result ZIP.
+- `src/test_reconciliation.py` contains the invariants that must continue to
+  pass. Relevant tests cover learned/control separation, legal candidates,
+  exact incremental-versus-full objective agreement, and fixed-SA agreement.
+- `PROJECT_STATE.md` records completed results and their limitations.
+  `NEXT_STEPS.md` records the active experiment order, and
+  `RESEARCH_FINDINGS.md` explains why each algorithmic change was made.
+
+For the next RL improvement, inspect the `proxy_gain` feature and epsilon-
+greedy selection in `src/run_multi_chip.py`. Add the proxy-greedy comparator as
+a new explicit control mode; do not silently change the frozen learner.
+
 ## Run tests before pushing
 
 ```bash
@@ -71,6 +97,52 @@ python src/validate_device.py \
   --device cpu \
   --output runs/cpu-validation.json
 git diff --check
+```
+
+Run a small local CPU smoke test after changing the RL code:
+
+```bash
+python src/run_multi_chip.py \
+  --algo ppo_asa --ppo_asa_learner bandit \
+  --ppo_asa_annealing fixed --ppo_asa_candidates 16 \
+  --ppo_asa_focus_fraction 0.5 \
+  --ppo_asa_update_style reference_separate \
+  --ppo_asa_reward_mode positive_delta \
+  --ppo_asa_rollout_steps 256 --ppo_update_epochs 4 \
+  --ppo_minibatch_size 256 --ppo_hidden_dim 128 \
+  --ppo_learning_rate 3e-4 --ppo_asa_weight_decay 1e-4 \
+  --ppo_gamma 0 --ppo_gae_lambda 0 --ppo_entropy_coef 0.001 \
+  --ppo_asa_bandit_epsilon_final 0.5 \
+  --ppo_asa_bandit_epsilon_decay 1.0 \
+  --use_cnn --model alexnet \
+  --partition_mode paper_targets --workload_region fc \
+  --timing_model paper_pipeline --routing_model paper_xy \
+  --chips_x 4 --chips_y 4 --rows 16 --cols 16 \
+  --vva_ops_per_cycle 16 --partition_vva_ops_per_cycle 1 \
+  --device cpu --seed 0 --iters 1000 \
+  --asa_diagnostics runs/local-bandit-smoke.jsonl \
+  --report runs/local-bandit-smoke-report.json
+```
+
+Run the canonical short Kaggle gate from the repository root:
+
+```bash
+MODEL_OVERRIDE="vgg16" \
+WORKLOAD_REGION_OVERRIDE="fc" \
+SEEDS_OVERRIDE="0" \
+bash scripts/run_kaggle_rl_fixed_sa_gate.sh \
+  bandit-short runs/kaggle-bandit-vgg16-fc-short
+```
+
+Run the 100,000-evaluation held-out VGG16-FC gate with random, fixed-SA, and
+ASA baselines:
+
+```bash
+MODEL_OVERRIDE="vgg16" \
+WORKLOAD_REGION_OVERRIDE="fc" \
+SEEDS_OVERRIDE="3 4 5" \
+bash scripts/run_kaggle_rl_fixed_sa_gate.sh \
+  bandit-extended runs/kaggle-bandit-vgg16-fc-heldout
 ```
 
 When the work is ready:
@@ -84,7 +156,8 @@ git push -u origin work-YOURNAME-TASK
 
 Share the branch name, commit hash, changes made, reason for the changes, test
 results, and any limitation found. Do not commit `.venv`, model checkpoints,
-large result ZIPs, or generated experiment folders.
+or generated experiment folders. Only commit a result ZIP when it is selected
+as compact research evidence and its SHA-256 is recorded.
 
 ## What the current method does
 
@@ -134,13 +207,13 @@ Do not describe the method as proven across all workloads yet. The supported
 claim is that the frozen learned proposal policy showed a positive held-out
 benefit on AlexNet-FC. AlexNet-CONV currently shows no final-cost advantage.
 
-The frozen VGG16-FC short test is also positive: learned RL+SA beat its frozen
+The frozen VGG16-FC short test was positive: learned RL+SA beat its frozen
 control by 1.834%, fixed SA by 1.490%, and ASA by 2.739% at seed zero. It made
-77 finite updates. Treat this as a passed screening test, not a final result;
-the unchanged three-seed 100,000-evaluation VGG16-FC test is still required.
+77 finite updates and justified the completed extended gate below.
 
-The extended VGG16-FC test passed its exploratory gate: RL+SA beat its frozen control in all three
-seeds by 2.255% on average, with paired 95% interval [1.107%, 3.403%]. It beat
+The extended VGG16-FC test passed its exploratory gate: RL+SA beat its frozen
+control in all three seeds by 2.255% on average, with paired 95% interval
+[1.107%, 3.403%]. It beat
 fixed SA in all three by 0.908% on average, but that interval crosses zero,
 and beat ASA in all three by 5.418%. A methodology audit identified a useful
 next check: compare against non-learned proxy-greedy selection under the same
