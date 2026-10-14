@@ -201,13 +201,13 @@ Each script:
 
 ## 7. Recommended Reading Order for Contributors
 
-1. **[`README.md`](../README.md)**: Repository overview, quickstart commands, and setup instructions.
-2. **[`docs/IMP_README.md`](IMP_README.md)**: Essential contributor rules, branch hygiene, and contextual bandit execution guide.
-3. **[`docs/PROJECT_STATE.md`](PROJECT_STATE.md)**: Current empirical benchmark numbers, statistical intervals, and hardware reconciliation details.
-4. **[`docs/NEXT_STEPS.md`](NEXT_STEPS.md)**: The active 66-item experimental backlog and immediate pending tasks.
-5. **[`docs/RESEARCH_FINDINGS.md`](RESEARCH_FINDINGS.md)**: Theoretical grounding, DDPG failure analysis, and VVA throughput sensitivity review.
-6. **[`docs/RECONCILIATION.md`](RECONCILIATION.md)**: Model reconciliation history against paper equations and Table 1 parameters.
-7. **[`docs/archive/README.md`](archive/README.md)**: Reference guide to superseded research documents and historical READMEs.
+1. **[`README.md`](README.md)**: Repository overview, specifications, and quickstart commands from scratch.
+2. **[`CODEBASE_GUIDE.md`](CODEBASE_GUIDE.md)**: **(This document)** Complete technical reference, file-by-file explanations, and exhaustive CLI parameters.
+3. **[`docs/IMP_README.md`](docs/IMP_README.md)**: Essential contributor rules, branch hygiene, and contextual-bandit execution instructions.
+4. **[`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)**: Current empirical benchmark numbers, statistical intervals, and hardware reconciliation details.
+5. **[`docs/PROJECT_JOURNEY.md`](docs/PROJECT_JOURNEY.md)**: Complete chronological research narrative from paper reproduction through DDPG failure analysis, PPO, and contextual-bandit SA.
+6. **[`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md)**: The active 66-item experimental backlog and immediate pending tasks.
+7. **[`docs/RESEARCH_FINDINGS.md`](docs/RESEARCH_FINDINGS.md)**: Theoretical grounding, DDPG failure analysis, and VVA throughput sensitivity review.
 
 ---
 
@@ -218,4 +218,3 @@ The following components are preserved for auditability and historical reference
 - **`src/experiments/run_multi_chip_fast.py`**: An early unvalidated fast DDPG prototype.
 - **`src/experiments/compare_algos.py`**: An early standalone script comparing SA and PPO on random graphs. Note: preserved in its exact original state; it is historically stale and cannot run as-is because `run_ppo` in `run_multi_chip.py` was long ago refactored to `run_masked_ppo`, and its random task graph is symmetric (violating Kahn DAG acyclicity requirements for pipeline scheduling).
 - **`src/experiments/run_consistent_bn_experiment.py`** & **`run_compact_state_experiment.py`**: Exploratory normalization/state ablations.
-- **`docs/archive/`**: Contains superseded research decision memos, DDPG reference audits, and old READMEs.

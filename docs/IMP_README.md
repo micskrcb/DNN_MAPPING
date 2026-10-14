@@ -48,19 +48,16 @@ environment specification for the current branch.
 Do not try to read every project document before starting. First read this
 file, then read:
 
-- The part of `README.md` related to your task.
+- [`README.md`](../README.md) for quickstart and specifications.
+- [`CODEBASE_GUIDE.md`](../CODEBASE_GUIDE.md) for full codebase architecture, file breakdown, and CLI flags.
 - `PROJECT_STATE.md` for the current results and the present state of the code.
 
 Use the other documents only when they are relevant to your task:
 
+- Read `PROJECT_JOURNEY.md` for the complete forensic history and evolution of the project.
 - Read `NEXT_STEPS.md` when selecting or planning the next experiment or task.
-- Read `RESEARCH_FINDINGS.md` for literature review, result interpretation, or
-  paper writing.
-- Read `RECONCILIATION.md` when comparing the old implementation with the
-  current reconciled code.
-- Read `PPO_REFERENCE_ADAPTER.md` only when working on PPO or learned-SA
-  internals.
-- Read `THIRD_PARTY_NOTICES.md` before using or modifying external code.
+- Read `RESEARCH_FINDINGS.md` for literature review, failure mode analysis, or paper writing.
+- Read `../THIRD_PARTY_NOTICES.md` before using or modifying external code.
 
 ## Files to understand before changing RL+SA
 

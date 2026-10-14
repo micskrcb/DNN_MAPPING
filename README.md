@@ -59,15 +59,12 @@ python src/run_multi_chip.py \
 
 ## Documentation Roadmap
 
-For in-depth explanations, refer to the documentation in `docs/`:
-
-- **[`docs/CODEBASE_GUIDE.md`](docs/CODEBASE_GUIDE.md)**: **The complete technical manual.** Detailed repository structure, file-by-file purpose, and an exhaustive reference of all CLI flags and operational modes.
-- **[`docs/IMP_README.md`](docs/IMP_README.md)**: Essential onboarding rules, branch hygiene, and recommended workflows.
+- **[`CODEBASE_GUIDE.md`](CODEBASE_GUIDE.md)**: **The complete technical manual.** Repository structure, file-by-file purpose, hardware modeling theory, and an exhaustive reference of all CLI flags and operational modes.
+- **[`docs/IMP_README.md`](docs/IMP_README.md)**: Essential onboarding rules, branch hygiene, and contextual bandit execution guide.
 - **[`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)**: Current verified benchmarks, statistical intervals, and hardware reconciliation details.
 - **[`docs/PROJECT_JOURNEY.md`](docs/PROJECT_JOURNEY.md)**: Full chronological research narrative from paper reproduction through DDPG failure analysis, PPO, and contextual-bandit SA.
 - **[`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md)**: Active 66-item reproduction checklist and experiment backlog.
 - **[`docs/RESEARCH_FINDINGS.md`](docs/RESEARCH_FINDINGS.md)**: Theoretical insights, VVA throughput sensitivity, and literature review.
-- **[`docs/archive/`](docs/archive/)**: Indexed archive of historical decision memos, audit logs, and previous README iterations.
 
 ---
 
@@ -75,6 +72,8 @@ For in-depth explanations, refer to the documentation in `docs/`:
 
 ```
 DNN_MAPPING/
+├── CODEBASE_GUIDE.md              # Technical manual: architecture, file index, CLI flags
+├── README.md                      # Entry point: specifications, quickstart, and workflow
 ├── src/                           # Active multi-chip placement engine & algorithms
 │   ├── run_multi_chip.py          # Primary placement engine (CLI, models, evaluators)
 │   ├── multi_chip_topology.py     # NoC mesh/torus topology & XY routing
@@ -88,7 +87,7 @@ DNN_MAPPING/
 │   └── experiments/               # Exploratory ablations & historical comparators
 ├── tests/                         # Unit and regression test suites (run_all_tests.py)
 ├── scripts/                       # Automated Kaggle & SLURM experiment launcher scripts
-├── docs/                          # Guides, specifications, journey, and historical archive
+├── docs/                          # Specialized technical guides & research journey
 ├── legacy/                        # Archived upstream single-chip GCN PPO framework
 └── runs/                          # Benchmark logs, study reports, and checkpoints
 ```
