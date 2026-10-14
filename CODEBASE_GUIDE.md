@@ -1,7 +1,7 @@
 # Codebase Architecture & Contributor Guide
 
 **Repository**: `DNN_MAPPING`
-**Active Research Branch**: `cleaned-up` (tracking `origin/cpu`)
+**Active Research Branch**: `minimalist` (streamlined architecture with unified root guide)
 **Target Literature**: Wu et al., *Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning* (ACM TODAES 2020, [DOI 10.1145/3418498](https://doi.org/10.1145/3418498))
 
 ---

@@ -100,41 +100,41 @@ DNN_MAPPING/
 
 All commands in this section run from a terminal. The hybrid order is **DDPG first, then Adaptive Simulated Annealing**: DDPG constructs the warm-start placement and ASA refines the best placement found by DDPG.
 
-### 1. Clone the CPU branch
+### 1. Clone the minimalist branch
 
 For a new checkout:
 
 ```bash
-git clone --branch cpu https://github.com/micskrcb/DNN_MAPPING.git
+git clone --branch minimalist https://github.com/micskrcb/DNN_MAPPING.git
 cd DNN_MAPPING
 git branch --show-current
 git log -1 --oneline
 ```
 
-`git branch --show-current` must print `cpu`.
+`git branch --show-current` must print `minimalist`.
 
-If the repository is already cloned and the local `cpu` branch exists:
+If the repository is already cloned and the local `minimalist` branch exists:
 
 ```bash
 cd DNN_MAPPING
 git fetch origin
-git switch cpu
-git pull --ff-only origin cpu
+git switch minimalist
+git pull --ff-only origin minimalist
 ```
 
-If the repository is already cloned but the local `cpu` branch does not exist:
+If the repository is already cloned but the local `minimalist` branch does not exist:
 
 ```bash
 cd DNN_MAPPING
 git fetch origin
-git switch --track -c cpu origin/cpu
+git switch --track -c minimalist origin/minimalist
 ```
 
 Before pulling later updates, preserve or commit any local edits. Then update with:
 
 ```bash
-git switch cpu
-git pull --ff-only origin cpu
+git switch minimalist
+git pull --ff-only origin minimalist
 ```
 
 ### 2. Create the CPU Python environment
