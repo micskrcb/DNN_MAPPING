@@ -563,6 +563,55 @@ significance claim; they are recommendations rather than a retroactive reason
 to discard the current exploratory evidence. Continue to report full runs as
 the independent units, wall-clock time, and raw archive hashes.
 
+## Independent literature review audit (14 October 2026)
+
+A Gemini literature report supports a useful but narrow novelty hypothesis:
+to the best of the reviewed evidence, applying an online contextual-bandit
+candidate ranker inside fixed SA to reconstructed-latency multi-chip DNN core
+placement has not been reported in exactly this form. This must be phrased as
+"to our knowledge," not as proof that no such work exists. Broad claims of
+being first to combine RL and SA, first to learn an SA proposal distribution,
+or first to apply RL to multi-chip core placement are already excluded by
+Vashisht et al., Correia et al., Qiu and Liang, and Myung et al.
+
+Primary-source verification corrected several errors in the report:
+
+- [Neural Simulated Annealing](https://proceedings.mlr.press/v206/correia23a.html)
+  learns SA proposal distributions for general optimization and has an
+  [official public implementation](https://github.com/Qualcomm-AI-research/neural-simulated-annealing).
+- [Qiu and Liang's AAMAS 2025 paper](https://www.ifaamas.org/Proceedings/aamas2025/pdfs/p1718.pdf)
+  is not a multi-agent placement application. It learns proposal policies for
+  Knapsack, Bin Packing, TSP, and continuous test functions, uses immediate
+  energy gain, and is a close algorithmic reference. Its
+  [public implementation](https://github.com/nathanqiu07/RL-Based-SA-Public)
+  is already audited in `THIRD_PARTY_NOTICES.md`.
+- [Vashisht et al.](https://arxiv.org/abs/2011.07577) use RL to produce a
+  rough initialization followed by SA refinement, rather than ranking each SA
+  proposal inside the loop.
+- Myung et al.'s correct DOI is
+  [10.1109/TNNLS.2021.3117878](https://doi.org/10.1109/TNNLS.2021.3117878),
+  not `10.1109/TNNLS.2021.3115456`. Their
+  [public repository](https://github.com/WOOSHIK-M/Core_Placement_with_Reinforcement_Learning)
+  states that the uploaded executable path is single-chip and that multi-chip
+  execution is not available.
+
+The report's positive interpretation is also too strong. Learned versus
+focused-uniform supports a causal statement about the trained selector package
+under equal true-objective calls; it is not "irrefutable proof" that learned
+relationships rather than direct exploitation of `proxy_gain` explain the
+benefit. Three seeds do not warrant "highly significant" language, and the
+tested ASA result does not establish a general failure of adaptive
+metaheuristics. The VGG16-FC 3/3 transfer win remains positive evidence and the
+running held-out VGG test remains appropriate.
+
+The defensible paper angle is therefore a contextual-bandit-guided SA proposal
+mechanism for latency-aware multi-chip DNN core placement, evaluated against a
+matched focused-uniform control plus standard search baselines. VLSID or an
+ML-for-systems/EDA workshop is a realistic first target. MICRO, DAC, ICCAD, or
+TNNLS would require broader workload validation, stronger evaluator evidence,
+and comparison with the best non-learned proposal heuristic; they should not
+be described as immediate or guaranteed fits.
+
 ## Paired Kaggle short result (8 October 2026)
 
 The corrected one-seed trained/control run used commit `aa75b2d`, 300 online
