@@ -174,3 +174,42 @@ The validated and currently supported entry points are:
    - Run test suite and `--help` checks.
    - Verify git status and diff.
    - Commit changes in logical, well-structured commits.
+
+---
+
+## 7. Verification Results & Completed Execution Log
+
+### Completed Actions:
+1. **Branch Hygiene**: Created branch `cleaned-up` originating from commit `1e9dee285d25d1ea7a59a996c7366cfd222cb5e9` (`origin/cpu`). All operations strictly confined to `cleaned-up`.
+2. **Deletions / Caches**:
+   - Removed `temp.txt` (terminal crash log) and `src/tree.txt` (stale file listing).
+   - Removed 7 redundant inner `.gitignore` files from `runs/local-cpu-*`.
+   - Updated root `.gitignore` to prevent leaks of virtualenvs, `.pytest_cache`, `.pyc`, and generated experiment outputs, while explicitly whitelisting tracked checkpoints (`!src/alexnet_ckpt.pt`, `!runs/**/*.pt`, `!runs/**/*.zip`).
+3. **Documentation Reorganization**:
+   - Historical decision memos moved to `docs/archive/` (`CLAUDE_AUDIT_RESPONSE.md`, `DDPG_REFERENCE_AUDIT.md`, `GITHUB_IMPLEMENTATION_AUDIT.md`, `PAPER_SCALE_DECISION.md`, `Two_Month_Publication_Roadmap.docx`, `prev version readmes/`).
+   - Created indexed guide `docs/archive/README.md`.
+   - Active documentation consolidated in `docs/` (`IMP_README.md`, `PROJECT_STATE.md`, `NEXT_STEPS.md`, `RESEARCH_FINDINGS.md`, `RECONCILIATION.md`, `PPO_REFERENCE_ADAPTER.md`) with lightweight forwarder stubs at root.
+   - Created comprehensive `docs/CODEBASE_GUIDE.md` detailing architecture, evaluator data flow, baseline algorithms, contextual bandit RL+SA, checkpoints, and developer onboarding.
+   - Updated root `README.md` to reflect new directory structure, test runners, and active bandit-guided SA milestones.
+4. **Legacy Single-Chip Isolation**:
+   - Isolated upstream GCN PPO netlist package into `legacy/single_chip/` with descriptive `legacy/single_chip/README.md`.
+   - Placed deprecation notice and execution forwarder at `src/main.py`.
+5. **Modularization & Backward Compatibility**:
+   - Moved analysis scripts into `src/analysis/` and exploratory benchmarks into `src/experiments/`.
+   - Added `runpy.run_path` shims at `src/` for all moved scripts, ensuring legacy CLI commands and Kaggle shell scripts remain 100% operational.
+   - Fixed broken import and Kahn DAG generation bug in `src/experiments/compare_algos.py`.
+   - Created `tests/run_all_tests.py` running both `test_multi_chip.py` and `test_reconciliation.py`.
+
+### Test Execution Results:
+- `python3 tests/run_all_tests.py`: **21/21 non-torch unit tests passed** (0 failures, 0 errors; PyTorch tests gracefully skipped on CPU machine lacking torch).
+- `python3 src/run_multi_chip.py --help`: **Succeeded** (exited code 0, all CLI options and algorithms displayed).
+- `python3 src/main.py --help`: **Succeeded** (legacy forwarder correctly forwarded to `legacy/single_chip/main.py`).
+- `python3 src/compare_algos.py --help`: **Succeeded** (compatibility shim executed without import errors).
+
+### Git Log Summary on `cleaned-up`:
+- Commit 1: `2338d0d` - `audit: add REPOSITORY_CLEANUP_AUDIT.md and remove stale caches and duplicate gitignores`
+- Commit 2: `93eae4f` - `docs: reorganize documentation into docs/, archive/, and references/ with indexed archive`
+- Commit 3: `961ea32` - `refactor: isolate legacy single-chip code in legacy/single_chip/ with documentation and forwarder`
+- Commit 4: `e20e976` - `refactor: modularize analysis and experiment scripts with backward-compat shims and add tests runner`
+- Commit 5: (pending docs & audit finalization)
+

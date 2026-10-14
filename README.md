@@ -1,12 +1,12 @@
 # DNN Mapping with Reinforcement Learning
 
 If you are starting work on the current branch, read
-[`IMP_README.md`](IMP_README.md) first. It contains the branch rules, setup,
-tests, current RL+SA method, evidence, and theory summary.
+[`docs/IMP_README.md`](docs/IMP_README.md) and [`docs/CODEBASE_GUIDE.md`](docs/CODEBASE_GUIDE.md) first. They contain the branch rules, setup,
+codebase architecture, tests, current RL+SA method, evidence, and theory summary.
 
 This repository maps DNN computation tasks onto a multi-chip many-core accelerator using DDPG, guided DDPG, masked categorical PPO, PPO-guided adaptive simulated annealing, random search, fixed simulated annealing, adaptive simulated annealing (ASA), a DDPG→ASA hybrid, or the sequential baseline (BS). Its reproduction target is Wu et al., **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning**, ACM TODAES 2020 ([DOI 10.1145/3418498](https://doi.org/10.1145/3418498)).
 
-The `cpu` branch is the CPU-oriented continuation of the reconciled paper implementation. It is runnable and tested on CPU, explicitly controls PyTorch thread use, supports concurrent independent experiments, reduces diagnostic overhead, and uses exact affected-stage reevaluation for ASA. The paper does not publish its simulator or every parameter, so the code records reconstruction assumptions instead of claiming exact numerical reproduction.
+The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented continuation of the reconciled paper implementation. It is runnable and tested on CPU, explicitly controls PyTorch thread use, supports concurrent independent experiments, reduces diagnostic overhead, and uses exact affected-stage reevaluation for ASA. The paper does not publish its simulator or every parameter, so the code records reconstruction assumptions instead of claiming exact numerical reproduction.
 
 ## Present state
 
@@ -22,46 +22,42 @@ The `cpu` branch is the CPU-oriented continuation of the reconciled paper implem
 | Guided DDPG | Implemented as an experimental learning repair using legal actions, ASA demonstrations, complete-episode returns, prioritized replay, and twin critics |
 | Masked PPO | Implemented as an experimental exact legal-action policy with a paired frozen control |
 | PPO-guided ASA | Implemented as an experimental legal-neighbor proposal policy with fixed Metropolis acceptance, the existing ASA temperature controller, and a uniform frozen control |
+| Contextual-Bandit Fixed SA | Primary validated active method; demonstrates statistically significant improvement over matched control on AlexNet and VGG16 |
 | Objective sensitivity preflight | Implemented; flat paper-mode objectives stop before long optimization |
 | 30 placements/epoch and paper search budgets | Explicitly accounted for by the paper runner |
 | XY routing and link contention | Reconstructed and implemented |
 | 64 KB weight-buffer constraint | Enforced during paper partition reconstruction |
 | 64 KB activation-buffer stalls and exact GRS | Not published in enough detail; not implemented |
 | Paper-scale baseline calibration | Completed for AlexNet FC; evaluator failed quantitative calibration |
-| Full paper-scale RL results | Deferred until evaluator calibration |
+| Full paper-scale RL results | Contextual-bandit RL+SA active |
 
 Paper-mode reports include routed mean hop counts and on/off-chip link-load summaries. Multi-seed summaries report the objective normalized to BS and its inverse ratio. The inverse ratio is useful for comparison, but it is not labeled as measured accelerator throughput.
 
 ## Repository layout
 
-- `src/run_multi_chip.py` runs one BS, DDPG, guided-DDPG, masked-PPO, random-search, SA, ASA, or DDPG→ASA experiment.
-- `src/run_multiseed_experiment.py` runs selected methods across seeds and can schedule independent CPU jobs concurrently.
-- `src/run_paper_experiment.py` runs separate CONV and FC paper-mode suites.
-- `src/compute_model.py` reconstructs partitions and converts work/traffic to physical units.
-- `src/multi_chip_topology.py` implements physical IDs and mesh/torus routing.
-- `src/multi_chip_environment.py` implements the placement objective and diagnostics.
-- `src/validate_device.py` performs a bounded CPU/CUDA functionality profile.
-- `PROJECT_STATE.md` gives the detailed handoff state and known limitations.
-- `NEXT_STEPS.md` tracks the reproduction gates.
-- `RESEARCH_FINDINGS.md` audits the failed Kaggle run, Gemini's findings,
-  primary literature, forum leads, implemented repairs, and the staged
-  learning-validation plan.
-- `DDPG_REFERENCE_AUDIT.md` compares this implementation with OpenAI Spinning
-  Up, Stable Baselines3, TD3, Wolpertinger, and DDPGfD reference algorithms.
-- `scripts/run_kaggle_guided_ablation.sh` runs reproducible trained/control
-  Kaggle experiments and packages their reports.
-- `scripts/run_kaggle_masked_ppo_ablation.sh` runs the next paired masked-PPO
-  learning gate and packages its reports.
-- `scripts/run_kaggle_masked_ppo_multichip_gate.sh` tests AlexNet-FC PPO against
-  its frozen control and matched-budget RS/ASA/BS baselines.
-- `scripts/run_kaggle_ppo_asa_gate.sh` compares learned proposals, an exactly
-  uniform frozen proposal control, and ordinary ASA under the same objective
-  evaluation budget.
-- `scripts/run_kaggle_evaluator_vva_sensitivity.sh` diagnoses the unpublished
-  VVA-throughput assumption with matched BS, RS, and fixed-SA comparisons.
-- `prev version readmes/` preserves earlier README snapshots.
-
-The older single-chip PPO/GCN programs and `run_multi_chip_fast.py` are not part of the validated paper reproduction path.
+- `src/run_multi_chip.py`: Primary placement engine for BS, DDPG, guided-DDPG, masked-PPO, bandit-guided SA, SA, ASA, and DDPG→ASA.
+- `src/run_multiseed_experiment.py`: Schedules selected methods across seeds concurrently on independent CPU threads.
+- `src/run_paper_experiment.py`: Orchestrates separate CONV and FC paper-mode reproduction suites.
+- `src/compute_model.py`: Reconstructs layer partitions (VMM/VVA) and converts operations and activations to physical units.
+- `src/multi_chip_topology.py`: Implements physical IDs, NoC meshes, gateways, and dimension-ordered XY routing.
+- `src/multi_chip_environment.py`: Evaluator implementing Kahn DAG topological staging, contention, and bottleneck pipeline latency.
+- `src/validate_device.py`: Performs bounded CPU/CUDA functionality and component latency profiling.
+- `src/analysis/`: Post-hoc analysis scripts for experimental gates (`analyze_*.py`, `diagnose_checkpoint_normalization.py`).
+- `src/experiments/`: Standalone exploratory ablations (`run_compact_state_experiment.py`, `run_consistent_bn_experiment.py`, `run_multi_chip_fast.py`, `compare_algos.py`).
+- `tests/`: Smoke test suite (`test_multi_chip.py`) and 38-case regression suite (`test_reconciliation.py`). Runner: `tests/run_all_tests.py`.
+- `scripts/`: Production Kaggle/slurm automation scripts (`run_kaggle_*.sh`). Active: `run_kaggle_rl_fixed_sa_gate.sh`.
+- `docs/`: Active documentation:
+  - `docs/CODEBASE_GUIDE.md`: Comprehensive architecture, evaluator data flow, and contributor guide.
+  - `docs/IMP_README.md`: Essential developer onboarding rules, branch hygiene, and execution guide.
+  - `docs/PROJECT_STATE.md`: Detailed handoff state, empirical benchmark numbers, and statistical intervals.
+  - `docs/NEXT_STEPS.md`: Systematic 66-item reproduction checklist and active experimental backlog.
+  - `docs/RESEARCH_FINDINGS.md`: Literature review, failure mode audits, attribution analyses, and VVA throughput review.
+  - `docs/RECONCILIATION.md`: Model reconciliation history and hardware assumptions.
+  - `docs/PPO_REFERENCE_ADAPTER.md`: Decoupled actor-critic adapter specification.
+  - `docs/archive/`: Historical decision memos, reference audits, and previous README iterations (with `docs/archive/README.md` index).
+  - `docs/references/`: Original reference paper PDF.
+- `legacy/single_chip/`: Archived upstream single-chip GCN PPO placement framework on static netlists.
+- `runs/`: Empirical study results, logs, and summaries across local CPU and Kaggle runs.
 
 ## Complete CPU setup and DDPG→ASA workflow
 
@@ -143,6 +139,8 @@ The historical root `requirements.txt` contains old pins and is not the environm
 
 ```bash
 mkdir -p runs
+python tests/run_all_tests.py
+# or run suites individually:
 python src/test_multi_chip.py
 python -m unittest discover -s src -p 'test_reconciliation.py' -v
 python src/validate_device.py --device cpu --output runs/cpu-validation.json
@@ -548,10 +546,10 @@ best-so-far cost can still improve through random exploration and is not enough
 to establish learning.
 
 The evidence and decision rules behind this experiment are documented in
-[RESEARCH_FINDINGS.md](RESEARCH_FINDINGS.md).
+[docs/RESEARCH_FINDINGS.md](docs/RESEARCH_FINDINGS.md).
 
 The implementation comparison with maintained public DDPG code is documented
-in [DDPG_REFERENCE_AUDIT.md](DDPG_REFERENCE_AUDIT.md). The audit also found and
+in [docs/archive/DDPG_REFERENCE_AUDIT.md](docs/archive/DDPG_REFERENCE_AUDIT.md). The audit also found and
 fixed shared replay/exploration randomness: trained and no-learning conditions
 now use identical seeded action randomness while replay sampling has an
 independent stream.
@@ -716,7 +714,7 @@ bash scripts/run_kaggle_ppo_asa_gate.sh focused-extended
 ```
 
 Do not scale either short-chain PPO-ASA variant to five seeds. The public-code
-and training-scale audit in `GITHUB_IMPLEMENTATION_AUDIT.md` shows that the
+and training-scale audit in [`docs/archive/GITHUB_IMPLEMENTATION_AUDIT.md`](docs/archive/GITHUB_IMPLEMENTATION_AUDIT.md) shows that the
 closest official RL-Based-SA setup uses millions of transitions across many
 parallel problem instances. The next RL implementation must make that training
 regime possible while retaining the current evaluator and matched controls.
@@ -745,7 +743,7 @@ creates `runs/kaggle-ppo-asa-alexnet-fc-multichain-train.zip`. Run
 `multichain-preflight` first only when checking a new environment. The code
 uses the training structure described by the official RL-Based-SA project but
 does not copy its source; citations and compatibility limits are recorded in
-`GITHUB_IMPLEMENTATION_AUDIT.md`.
+[`docs/archive/GITHUB_IMPLEMENTATION_AUDIT.md`](docs/archive/GITHUB_IMPLEMENTATION_AUDIT.md).
 
 The training-scale run is complete. Trained PPO-ASA reached 23.96800
 microseconds versus 24.08032 for its frozen control, a 0.466% improvement, and
@@ -790,7 +788,7 @@ ASA. It beat uniform in three pairs and ASA in one; both paired intervals
 included zero. Final entropy remained within 0.31% of uniform, approximate KL
 was near zero, and PPO clipping never activated. The checkpoint is rejected.
 
-The paper audit in `PAPER_SCALE_DECISION.md` shows why this result does not yet
+The paper audit in [`docs/archive/PAPER_SCALE_DECISION.md`](docs/archive/PAPER_SCALE_DECISION.md) shows why this result does not yet
 reject the method: the closest RL-Based-SA implementation trains for 1,000 PPO
 epochs, while this checkpoint received 61 updates. The sufficient-scale run
 uses 1.25 million proposals, exactly 1,250 updates, paper-aligned PPO settings
@@ -831,7 +829,7 @@ proposals and exactly 1,250 PPO updates, and then runs the same 10-seed frozen
 holdout against uniform and ASA. It needs a Kaggle T4 x2 session and is expected
 to take roughly the same 7--10 hours as the completed sufficient-scale run.
 The runner archives partial output on failure. The exact source comparison,
-compatibility boundary, and attribution are in `PPO_REFERENCE_ADAPTER.md` and
+compatibility boundary, and attribution are in [`docs/PPO_REFERENCE_ADAPTER.md`](docs/PPO_REFERENCE_ADAPTER.md) and
 `THIRD_PARTY_NOTICES.md`.
 
 An independent audit subsequently identified two cheaper questions that must
@@ -849,7 +847,7 @@ tests for both shared and split PPO, and conditionally a 300-update real-reward
 split pilot plus five-seed holdout. The real pilot is automatically skipped if
 split PPO fails the planted-signal mechanics gate. Oracle calls are reported
 separately and do not masquerade as optimization proposals. See
-`CLAUDE_AUDIT_RESPONSE.md` for the accepted findings, corrections, new
+[`docs/archive/CLAUDE_AUDIT_RESPONSE.md`](docs/archive/CLAUDE_AUDIT_RESPONSE.md) for the accepted findings, corrections, new
 diagnostics, and decision rules. Do not run the full
 `run_kaggle_ppo_asa_reference_split.sh` protocol until this diagnostic gate
 shows a positive within-pool proposal-quality signal.
@@ -1188,7 +1186,7 @@ A successful run proves that the program executed; it does not prove that DDPG l
 
 Report CONV and FC separately. Normalize latency to BS as in the paper, include seed mean/sample standard deviation/minimum/maximum, and examine hop counts and link loads. Do not compare old proxy scores, full-frame scores, and paper-pipeline seconds as though they were the same metric.
 
-See `PROJECT_STATE.md` for validated evidence and `NEXT_STEPS.md` for the work still required before claiming paper-comparable results.
+See [`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md) for validated evidence and [`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md) for the work still required before claiming paper-comparable results.
 
 ## Bounded local CPU study (September 2026)
 
