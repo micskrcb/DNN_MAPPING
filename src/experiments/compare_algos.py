@@ -5,20 +5,10 @@ Compares the performance of Simulated Annealing (SA) vs Proximal Policy
 Optimization (PPO) for multi-chip core placement on the exact same task graph.
 """
 
-import os
-import sys
-SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if SRC_DIR not in sys.path:
-    sys.path.insert(0, SRC_DIR)
-
 import time
 import numpy as np
 from multi_chip_environment import MultiChipEnvironment
-try:
-    from run_multi_chip import run_sa, run_masked_ppo as run_ppo
-except ImportError:
-    from run_multi_chip import run_sa
-    run_ppo = None
+from run_multi_chip import run_sa, run_ppo
 
 def main():
     # 1. Define system parameters (2x2 chips, 4x4 cores per chip = 64 cores)
@@ -29,8 +19,9 @@ def main():
     # 2. Generate a shared task graph for a FAIR comparison
     print("Initializing shared task graph...")
     rng = np.random.default_rng(42)
-    raw_graph = rng.integers(0, 10, size=(num_tasks, num_tasks)).astype(np.float32)
-    task_graph = np.triu(raw_graph, 1)
+    task_graph = rng.integers(0, 10, size=(num_tasks, num_tasks)).astype(np.float32)
+    task_graph = (task_graph + task_graph.T) / 2
+    np.fill_diagonal(task_graph, 0)
     
     # 3. Create two identical environments using the same task graph
     env_sa = MultiChipEnvironment(
@@ -61,15 +52,8 @@ def main():
     # 5. Run Proximal Policy Optimization (PPO)
     print("Running PPO (Reinforcement Learning)...")
     start_time = time.time()
-    if run_ppo is not None:
-        try:
-            ppo_cost = run_ppo(env_ppo, n_episodes=500)
-        except (TypeError, RuntimeError) as e:
-            print(f"PPO skipped: {e}")
-            ppo_cost = sa_cost
-    else:
-        print("PPO requires PyTorch (not installed). Skipping PPO execution.")
-        ppo_cost = sa_cost
+    # Epochs set to 500 to match your default PPO settings
+    ppo_cost = run_ppo(env_ppo, epochs=500)
     ppo_time = time.time() - start_time
     ppo_bd = env_ppo.chip_breakdown()
     

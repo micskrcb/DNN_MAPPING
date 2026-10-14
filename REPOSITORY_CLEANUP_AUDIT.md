@@ -1,9 +1,9 @@
 # Repository Cleanup Audit: DNN_MAPPING
 
-**Audited Commit Hash**: `1e9dee285d25d1ea7a59a996c7366cfd222cb5e9`  
-**Base Tracking Branch**: `origin/cpu`  
-**Active Working Branch**: `cleaned-up`  
-**Date of Audit**: 2026-10-14  
+**Audited Commit Hash**: `1e9dee285d25d1ea7a59a996c7366cfd222cb5e9`
+**Base Tracking Branch**: `origin/cpu`
+**Active Working Branch**: `cleaned-up`
+**Date of Audit**: 2026-10-14
 
 ---
 
@@ -16,7 +16,7 @@ Through inspection of git history, code dependencies, and previous documentation
 1. **Upstream Single-Chip Foundation**: An initial open-source codebase for single-chip core placement using graph convolutional networks (GCNs) and Proximal Policy Optimization (PPO) over static lookup-table (LUT) netlists (`parsedata.py`, `structure.py`, `src/agent/`, `src/env/`, `src/runner/`, `src/main.py`).
 2. **Multi-Chip Extension & DDPG Reproduction**: Introduction of hierarchical multi-chip topology (`multi_chip_topology.py`), Kahn-based pipeline latency evaluators (`multi_chip_environment.py`), layer partitioning into VMM/VVA logic cores (`compute_model.py`), and continuous DDPG placement (`run_multi_chip.py`).
 3. **Algorithmic Audits & Failure Diagnoses**: Rigorous multi-seed benchmarking revealed that standard continuous DDPG suffered severe policy collapse in discrete placement spaces. Extensive ablations were conducted, including BatchNorm stabilization (`run_consistent_bn_experiment.py`), spatial CNN encoders (Figure 9), guided DDPG with adaptive simulated annealing demonstrations (`ddpg_guided`), constructive masked categorical PPO (`ppo_masked`), and proposal-scoring PPO-guided ASA (`ppo_asa`).
-4. **Current Active Research (Contextual-Bandit-Guided Fixed SA)**: PPO candidate ranking was definitively closed after sufficient-scale testing (1.25M proposals, 1,250 updates). The active, empirically validated research direction is an online contextual-bandit proposal ranker operating inside fixed Simulated Annealing (`--algo ppo_asa --ppo_asa_learner bandit --ppo_asa_annealing fixed`), demonstrating statistically significant latency gains over matched controls across multiple random seeds on AlexNet and VGG16 workloads.
+4. **Current Active Research (Contextual-Bandit-Guided Fixed SA)**: PPO candidate ranking was definitively closed after sufficient-scale testing (1.25M proposals, 1,250 updates). The active research direction is an online contextual-bandit proposal ranker operating inside fixed Simulated Annealing (`--algo ppo_asa --ppo_asa_learner bandit --ppo_asa_annealing fixed`), showing positive matched-control evidence on the tested workloads across multiple random seeds on AlexNet and VGG16 (further held-out and longer-budget confirmation is required).
 
 ---
 
@@ -211,5 +211,22 @@ The validated and currently supported entry points are:
 - Commit 2: `93eae4f` - `docs: reorganize documentation into docs/, archive/, and references/ with indexed archive`
 - Commit 3: `961ea32` - `refactor: isolate legacy single-chip code in legacy/single_chip/ with documentation and forwarder`
 - Commit 4: `e20e976` - `refactor: modularize analysis and experiment scripts with backward-compat shims and add tests runner`
-- Commit 5: (pending docs & audit finalization)
+- Commit 5: `94a1099` - `docs: create CODEBASE_GUIDE.md, update README.md and REPOSITORY_CLEANUP_AUDIT.md`
+- Commit 6: (pending post-cleanup correction)
 
+---
+
+## 8. Post-Cleanup Correction
+
+A targeted post-cleanup review identified several mechanical and scientific adjustments requiring correction:
+
+1. **Reversion of Behavioural Changes to `compare_algos.py`**:
+   - In commit `e20e976`, `compare_algos.py` was altered to use `np.triu` for DAG generation and modified to alias `run_masked_ppo` with exception handling.
+   - Because the cleanup scope prohibits altering experimental logic or algorithm implementations, `src/experiments/compare_algos.py` was restored to its exact original syntax and semantics from `origin/cpu`.
+   - The script's inability to run against current code (due to `run_ppo` having been replaced by `run_masked_ppo` in earlier commits and its symmetric random graph violating Kahn DAG acyclicity) is now explicitly documented in `docs/CODEBASE_GUIDE.md` and this audit as a historical artifact.
+2. **Scientific Precision in Statistical Claims**:
+   - Replaced uncalibrated "statistically significant" language in `README.md` and `REPOSITORY_CLEANUP_AUDIT.md` with scientifically cautious phrasing: *"shows positive matched-control evidence on tested workloads; further held-out and longer-budget confirmation is required."*
+3. **Whitespace Hygiene**:
+   - Cleaned trailing whitespace and extra blank lines introduced across markdown and Python files, verifying compliance via `git diff --check`.
+4. **Focused Smoke & Regression Verification**:
+   - Re-verified that `python3 tests/run_all_tests.py` passes all 21 regression test cases cleanly.

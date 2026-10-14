@@ -17,7 +17,7 @@ args = parser.parse_args()
 
 def runner(data: DataCollector):
     """Implement a mapping process according to the 'mode'."""
-    
+
     mode = data.config["mode"]
 
     if mode == "EM":

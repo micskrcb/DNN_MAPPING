@@ -1,7 +1,7 @@
 # Codebase Architecture & Contributor Guide
 
-**Repository**: `DNN_MAPPING`  
-**Active Research Branch**: `cleaned-up` (tracking `origin/cpu`)  
+**Repository**: `DNN_MAPPING`
+**Active Research Branch**: `cleaned-up` (tracking `origin/cpu`)
 **Target Literature**: Wu et al., *Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning* (ACM TODAES 2020, [DOI 10.1145/3418498](https://doi.org/10.1145/3418498))
 
 ---
@@ -205,6 +205,6 @@ Each script:
 The following components are preserved for auditability and historical reference, but are **not** part of the active multi-chip research pipeline:
 - **`legacy/single_chip/`**: The upstream single-chip GCN PPO netlist framework.
 - **`src/experiments/run_multi_chip_fast.py`**: An early unvalidated fast DDPG prototype.
-- **`src/experiments/compare_algos.py`**: An early standalone script comparing SA and PPO on random graphs.
+- **`src/experiments/compare_algos.py`**: An early standalone script comparing SA and PPO on random graphs. Note: preserved in its exact original state; it is historically stale and cannot run as-is because `run_ppo` in `run_multi_chip.py` was long ago refactored to `run_masked_ppo`, and its random task graph is symmetric (violating Kahn DAG acyclicity requirements for pipeline scheduling).
 - **`src/experiments/run_consistent_bn_experiment.py`** & **`run_compact_state_experiment.py`**: Exploratory normalization/state ablations.
 - **`docs/archive/`**: Contains superseded research decision memos, DDPG reference audits, and old READMEs.

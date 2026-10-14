@@ -18,7 +18,7 @@ if __name__ == "__main__":
     print(f"  {legacy_dir}")
     print("For active multi-chip placement, use: python src/run_multi_chip.py")
     print("=" * 60)
-    
+
     # Forward execution to legacy/single_chip/main.py if arguments provided
     script_path = os.path.join(legacy_dir, "main.py")
     cmd = [sys.executable, script_path] + sys.argv[1:]

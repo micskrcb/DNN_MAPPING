@@ -22,7 +22,7 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 | Guided DDPG | Implemented as an experimental learning repair using legal actions, ASA demonstrations, complete-episode returns, prioritized replay, and twin critics |
 | Masked PPO | Implemented as an experimental exact legal-action policy with a paired frozen control |
 | PPO-guided ASA | Implemented as an experimental legal-neighbor proposal policy with fixed Metropolis acceptance, the existing ASA temperature controller, and a uniform frozen control |
-| Contextual-Bandit Fixed SA | Primary validated active method; demonstrates statistically significant improvement over matched control on AlexNet and VGG16 |
+| Contextual-Bandit Fixed SA | Primary active method; shows positive matched-control evidence on tested workloads (further held-out and longer-budget confirmation is required) |
 | Objective sensitivity preflight | Implemented; flat paper-mode objectives stop before long optimization |
 | 30 placements/epoch and paper search budgets | Explicitly accounted for by the paper runner |
 | XY routing and link contention | Reconstructed and implemented |
