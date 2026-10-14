@@ -113,7 +113,7 @@ echo "Running the deterministic sequential baseline."
 python src/run_multi_chip.py --algo bs "${common[@]}" \
   --report "${output_dir}/bs-report.json" >"${output_dir}/bs.log" 2>&1
 
-python src/analyze_masked_ppo_multichip_gate.py "${output_dir}" \
+python src/analysis/analyze_masked_ppo_multichip_gate.py "${output_dir}" \
   | tee "${output_dir}/analysis.txt"
 archive_results
 trap - EXIT

@@ -169,7 +169,7 @@ if [[ "${asa_status}" -ne 0 ]]; then
   exit 1
 fi
 
-python src/analyze_ppo_asa_gate.py "${output_dir}" \
+python src/analysis/analyze_ppo_asa_gate.py "${output_dir}" \
   | tee "${output_dir}/analysis.txt"
 archive_results
 trap - EXIT

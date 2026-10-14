@@ -204,7 +204,7 @@ for seed in "${seeds[@]}"; do
   echo "Completed paired seed ${seed}."
   tail -n 4 "${output_dir}/seed${seed}-trained.log"
   tail -n 4 "${output_dir}/seed${seed}-control.log"
-  python src/analyze_masked_ppo_ablation.py "${output_dir}" \
+  python src/analysis/analyze_masked_ppo_ablation.py "${output_dir}" \
     | tee "${output_dir}/analysis.txt"
   archive_results
 done

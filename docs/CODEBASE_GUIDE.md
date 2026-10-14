@@ -70,31 +70,42 @@ Evaluating the complete graph ($N \approx 1,000–3,000$ tasks) takes several mi
 The active multi-chip research codebase is organized cleanly under `src/`:
 
 ```
-src/
-├── run_multi_chip.py              # Primary placement engine: algorithms, CLI, and models
-├── multi_chip_topology.py         # Hardware topology: mesh/torus grid, routing, gateway links
-├── multi_chip_environment.py      # RL environment, Kahn DAG pipeline stages, bottleneck latency
-├── compute_model.py               # VMM/VVA layer partitioning, DP grid solver, MAC conversion
-├── run_multiseed_experiment.py    # Concurrent multi-seed subprocess runner
-├── run_paper_experiment.py        # Paper reproduction orchestrator for CONV & FC suites
-├── train_oracle_candidate_ranker.py # Supervised candidate ranking trainer
-├── validate_device.py             # Hardware verification & component timing profiler
+DNN_MAPPING/
+├── src/
+│   ├── run_multi_chip.py              # Primary placement engine: algorithms, CLI, and models
+│   ├── multi_chip_topology.py         # Hardware topology: mesh/torus grid, routing, gateway links
+│   ├── multi_chip_environment.py      # RL environment, Kahn DAG pipeline stages, bottleneck latency
+│   ├── compute_model.py               # VMM/VVA layer partitioning, DP grid solver, MAC conversion
+│   ├── run_multiseed_experiment.py    # Concurrent multi-seed subprocess runner
+│   ├── run_paper_experiment.py        # Paper reproduction orchestrator for CONV & FC suites
+│   ├── train_oracle_candidate_ranker.py # Supervised candidate ranking trainer
+│   ├── validate_device.py             # Hardware verification & component timing profiler
+│   ├── main.py                        # Root execution forwarder with legacy pointer
+│   │
+│   ├── analysis/                      # Post-processing & statistical analysis scripts
+│   │   ├── analyze_guided_ablation.py
+│   │   ├── analyze_masked_ppo_ablation.py
+│   │   ├── analyze_masked_ppo_multichip_gate.py
+│   │   ├── analyze_multiseed.py
+│   │   ├── analyze_ppo_asa_diagnostic_gate.py
+│   │   ├── analyze_ppo_asa_gate.py
+│   │   ├── analyze_ppo_asa_holdout.py
+│   │   └── diagnose_checkpoint_normalization.py
+│   │
+│   └── experiments/                   # Special exploratory ablations & prototypes
+│       ├── compare_algos.py           # SA vs PPO diagnostic comparator
+│       ├── run_compact_state_experiment.py # Compact state representation ablation
+│       ├── run_consistent_bn_experiment.py # Consistent BatchNorm mode ablation
+│       └── run_multi_chip_fast.py     # Unvalidated fast prototype
 │
-├── analysis/                      # Post-processing & statistical analysis scripts
-│   ├── analyze_guided_ablation.py
-│   ├── analyze_masked_ppo_ablation.py
-│   ├── analyze_masked_ppo_multichip_gate.py
-│   ├── analyze_multiseed.py
-│   ├── analyze_ppo_asa_diagnostic_gate.py
-│   ├── analyze_ppo_asa_gate.py
-│   ├── analyze_ppo_asa_holdout.py
-│   └── diagnose_checkpoint_normalization.py
+├── tests/                             # Unit & regression test suite
+│   ├── run_all_tests.py               # Unified test runner
+│   ├── test_multi_chip.py             # Fast smoke test
+│   └── test_reconciliation.py         # 38-case exhaustive hardware regression suite
 │
-└── experiments/                   # Special exploratory ablations & prototypes
-    ├── compare_algos.py           # SA vs PPO diagnostic comparator
-    ├── run_compact_state_experiment.py # Compact state representation ablation
-    ├── run_consistent_bn_experiment.py # Consistent BatchNorm mode ablation
-    └── run_multi_chip_fast.py     # Unvalidated fast prototype
+├── scripts/                           # Production Kaggle & bash experiment pipelines
+├── legacy/single_chip/                # Archived upstream single-chip GCN PPO framework
+└── docs/                              # Research guides, architectural manuals, and historical archive
 ```
 
 ---

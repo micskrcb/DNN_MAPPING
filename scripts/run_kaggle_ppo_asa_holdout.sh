@@ -100,7 +100,7 @@ for seed in $(seq 1 "${seed_count}"); do
   echo "Completed holdout seed ${seed}."
 done
 
-python src/analyze_ppo_asa_holdout.py "${output_dir}" \
+python src/analysis/analyze_ppo_asa_holdout.py "${output_dir}" \
   | tee "${output_dir}/analysis.txt"
 archive_results
 trap - EXIT

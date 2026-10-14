@@ -153,7 +153,7 @@ run_planted_pair shared shared_gae
 run_planted_pair split reference_separate
 
 echo "Analyzing E0 and E1. The real-reward pilot runs only if split PPO passes."
-python src/analyze_ppo_asa_diagnostic_gate.py \
+python src/analysis/analyze_ppo_asa_diagnostic_gate.py \
   "${output_dir}" --require-split-pass \
   | tee "${output_dir}/diagnostic-gate-analysis.txt"
 archive_results
@@ -195,7 +195,7 @@ bash scripts/run_kaggle_ppo_asa_holdout.sh \
   4100 "${output_dir}/real-holdout" \
   "${output_dir}/real-split-trained.pt" 5 reference_separate
 
-python src/analyze_ppo_asa_diagnostic_gate.py "${output_dir}" \
+python src/analysis/analyze_ppo_asa_diagnostic_gate.py "${output_dir}" \
   | tee "${output_dir}/final-analysis.txt"
 archive_results
 trap - EXIT

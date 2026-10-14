@@ -1,63 +1,101 @@
-# DNN Mapping with Reinforcement Learning
+# DNN Mapping with Reinforcement Learning & Heuristics
 
-If you are starting work on the current branch, read
-[`docs/IMP_README.md`](docs/IMP_README.md) and [`docs/CODEBASE_GUIDE.md`](docs/CODEBASE_GUIDE.md) first. They contain the branch rules, setup,
-codebase architecture, tests, current RL+SA method, evidence, and theory summary.
+> Optimizes the placement of partitioned Deep Neural Network (DNN) workloads (AlexNet, VGG16, ResNet50) onto multi-chip many-core hardware accelerators (4×4 chips, 4,096 cores) to minimize bottleneck pipeline stage execution latency.
+> Implements and evaluates contextual-bandit-guided simulated annealing, classical simulated annealing (SA), adaptive simulated annealing (ASA), masked categorical PPO, and DDPG based on Wu et al. (ACM TODAES 2020, [DOI 10.1145/3418498](https://doi.org/10.1145/3418498)).
 
-This repository maps DNN computation tasks onto a multi-chip many-core accelerator using DDPG, guided DDPG, masked categorical PPO, PPO-guided adaptive simulated annealing, random search, fixed simulated annealing, adaptive simulated annealing (ASA), a DDPG→ASA hybrid, or the sequential baseline (BS). Its reproduction target is Wu et al., **Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning**, ACM TODAES 2020 ([DOI 10.1145/3418498](https://doi.org/10.1145/3418498)).
+---
 
-The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented continuation of the reconciled paper implementation. It is runnable and tested on CPU, explicitly controls PyTorch thread use, supports concurrent independent experiments, reduces diagnostic overhead, and uses exact affected-stage reevaluation for ASA. The paper does not publish its simulator or every parameter, so the code records reconstruction assumptions instead of claiming exact numerical reproduction.
+## Quickstart: Setup & Run from Scratch
+
+### 1. Prerequisites & Environment Setup
+Requires Python 3.8+ on Linux (Ubuntu/Debian recommended).
+
+```bash
+# Clone the repository
+git clone https://github.com/micskrcb/DNN_MAPPING.git
+cd DNN_MAPPING
+
+# Create and activate a clean virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies (CPU PyTorch)
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install numpy
+python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+```
+
+### 2. Verify Installation
+Run the test suites to ensure hardware modeling, topologies, and routing models are functional:
+
+```bash
+# Run all smoke and regression tests (38 tests)
+python tests/run_all_tests.py
+```
+
+### 3. Run Your First Placement
+Run a quick placement optimization using the primary active method (Contextual-Bandit Fixed SA) on the AlexNet workload:
+
+```bash
+python src/run_multi_chip.py \
+  --algo ppo_asa \
+  --ppo_asa_learner bandit \
+  --ppo_asa_annealing fixed \
+  --ppo_asa_candidates 16 \
+  --ppo_asa_focus_fraction 0.5 \
+  --model alexnet \
+  --workload_region fc \
+  --partition_mode paper_targets \
+  --timing_model paper_pipeline \
+  --routing_model paper_xy \
+  --chips_x 4 --chips_y 4 \
+  --rows 16 --cols 16 \
+  --iters 500 \
+  --seed 0 \
+  --report runs/quickstart_report.json
+```
+
+---
+
+## Documentation Roadmap
+
+For in-depth explanations, refer to the documentation in `docs/`:
+
+- **[`docs/CODEBASE_GUIDE.md`](docs/CODEBASE_GUIDE.md)**: **The complete technical manual.** Detailed repository structure, file-by-file purpose, and an exhaustive reference of all CLI flags and operational modes.
+- **[`docs/IMP_README.md`](docs/IMP_README.md)**: Essential onboarding rules, branch hygiene, and recommended workflows.
+- **[`docs/PROJECT_STATE.md`](docs/PROJECT_STATE.md)**: Current verified benchmarks, statistical intervals, and hardware reconciliation details.
+- **[`docs/PROJECT_JOURNEY.md`](docs/PROJECT_JOURNEY.md)**: Full chronological research narrative from paper reproduction through DDPG failure analysis, PPO, and contextual-bandit SA.
+- **[`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md)**: Active 66-item reproduction checklist and experiment backlog.
+- **[`docs/RESEARCH_FINDINGS.md`](docs/RESEARCH_FINDINGS.md)**: Theoretical insights, VVA throughput sensitivity, and literature review.
+- **[`docs/archive/`](docs/archive/)**: Indexed archive of historical decision memos, audit logs, and previous README iterations.
+
+---
+
+## Repository Structure Overview
+
+```
+DNN_MAPPING/
+├── src/                           # Active multi-chip placement engine & algorithms
+│   ├── run_multi_chip.py          # Primary placement engine (CLI, models, evaluators)
+│   ├── multi_chip_topology.py     # NoC mesh/torus topology & XY routing
+│   ├── multi_chip_environment.py  # Pipeline DAG staging & bottleneck latency evaluator
+│   ├── compute_model.py           # VMM/VVA layer partitioning & MAC unit conversions
+│   ├── run_multiseed_experiment.py# Multi-seed concurrent runner
+│   ├── run_paper_experiment.py    # Paper reproduction suite orchestrator
+│   ├── train_oracle_candidate_ranker.py # Supervised candidate ranking trainer
+│   ├── validate_device.py         # Hardware profiling & sanity verification
+│   ├── analysis/                  # Statistical analysis & gate scripts (analyze_*.py)
+│   └── experiments/               # Exploratory ablations & historical comparators
+├── tests/                         # Unit and regression test suites (run_all_tests.py)
+├── scripts/                       # Automated Kaggle & SLURM experiment launcher scripts
+├── docs/                          # Guides, specifications, journey, and historical archive
+├── legacy/                        # Archived upstream single-chip GCN PPO framework
+└── runs/                          # Benchmark logs, study reports, and checkpoints
+```
+
+---
 
 ## Present state
-
-| Paper feature | Current status |
-| --- | --- |
-| 4×4 chips, 16×16 cores/chip | Implemented |
-| Figure 6 logic-core totals | Exact aggregate counts for AlexNet, VGG16, and ResNet50 |
-| Separate CONV and FC placement | Implemented with disjoint whole-chip masks |
-| Figure 9 actor/critic | Implemented as `--agent_arch paper_cnn` |
-| Sparse reward `sqrt(B) - sqrt(L(P))` | Implemented; zero before a complete placement |
-| BS, RS, SA, and DDPG | Implemented |
-| Adaptive SA and DDPG→ASA | Implemented as research extensions with matched-budget support |
-| Guided DDPG | Implemented as an experimental learning repair using legal actions, ASA demonstrations, complete-episode returns, prioritized replay, and twin critics |
-| Masked PPO | Implemented as an experimental exact legal-action policy with a paired frozen control |
-| PPO-guided ASA | Implemented as an experimental legal-neighbor proposal policy with fixed Metropolis acceptance, the existing ASA temperature controller, and a uniform frozen control |
-| Contextual-Bandit Fixed SA | Primary active method; shows positive matched-control evidence on tested workloads (further held-out and longer-budget confirmation is required) |
-| Objective sensitivity preflight | Implemented; flat paper-mode objectives stop before long optimization |
-| 30 placements/epoch and paper search budgets | Explicitly accounted for by the paper runner |
-| XY routing and link contention | Reconstructed and implemented |
-| 64 KB weight-buffer constraint | Enforced during paper partition reconstruction |
-| 64 KB activation-buffer stalls and exact GRS | Not published in enough detail; not implemented |
-| Paper-scale baseline calibration | Completed for AlexNet FC; evaluator failed quantitative calibration |
-| Full paper-scale RL results | Contextual-bandit RL+SA active |
-
-Paper-mode reports include routed mean hop counts and on/off-chip link-load summaries. Multi-seed summaries report the objective normalized to BS and its inverse ratio. The inverse ratio is useful for comparison, but it is not labeled as measured accelerator throughput.
-
-## Repository layout
-
-- `src/run_multi_chip.py`: Primary placement engine for BS, DDPG, guided-DDPG, masked-PPO, bandit-guided SA, SA, ASA, and DDPG→ASA.
-- `src/run_multiseed_experiment.py`: Schedules selected methods across seeds concurrently on independent CPU threads.
-- `src/run_paper_experiment.py`: Orchestrates separate CONV and FC paper-mode reproduction suites.
-- `src/compute_model.py`: Reconstructs layer partitions (VMM/VVA) and converts operations and activations to physical units.
-- `src/multi_chip_topology.py`: Implements physical IDs, NoC meshes, gateways, and dimension-ordered XY routing.
-- `src/multi_chip_environment.py`: Evaluator implementing Kahn DAG topological staging, contention, and bottleneck pipeline latency.
-- `src/validate_device.py`: Performs bounded CPU/CUDA functionality and component latency profiling.
-- `src/analysis/`: Post-hoc analysis scripts for experimental gates (`analyze_*.py`, `diagnose_checkpoint_normalization.py`).
-- `src/experiments/`: Standalone exploratory ablations (`run_compact_state_experiment.py`, `run_consistent_bn_experiment.py`, `run_multi_chip_fast.py`, `compare_algos.py`).
-- `tests/`: Smoke test suite (`test_multi_chip.py`) and 38-case regression suite (`test_reconciliation.py`). Runner: `tests/run_all_tests.py`.
-- `scripts/`: Production Kaggle/slurm automation scripts (`run_kaggle_*.sh`). Active: `run_kaggle_rl_fixed_sa_gate.sh`.
-- `docs/`: Active documentation:
-  - `docs/CODEBASE_GUIDE.md`: Comprehensive architecture, evaluator data flow, and contributor guide.
-  - `docs/IMP_README.md`: Essential developer onboarding rules, branch hygiene, and execution guide.
-  - `docs/PROJECT_STATE.md`: Detailed handoff state, empirical benchmark numbers, and statistical intervals.
-  - `docs/NEXT_STEPS.md`: Systematic 66-item reproduction checklist and active experimental backlog.
-  - `docs/RESEARCH_FINDINGS.md`: Literature review, failure mode audits, attribution analyses, and VVA throughput review.
-  - `docs/RECONCILIATION.md`: Model reconciliation history and hardware assumptions.
-  - `docs/PPO_REFERENCE_ADAPTER.md`: Decoupled actor-critic adapter specification.
-  - `docs/archive/`: Historical decision memos, reference audits, and previous README iterations (with `docs/archive/README.md` index).
-  - `docs/references/`: Original reference paper PDF.
-- `legacy/single_chip/`: Archived upstream single-chip GCN PPO placement framework on static netlists.
-- `runs/`: Empirical study results, logs, and summaries across local CPU and Kaggle runs.
 
 ## Complete CPU setup and DDPG→ASA workflow
 
