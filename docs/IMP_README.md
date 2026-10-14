@@ -4,7 +4,7 @@ The project has changed a lot from the older DDPG+ASA CPU version. The current
 main research method is **contextual-bandit-guided fixed simulated annealing**,
 referred to as RL+SA in the project notes.
 
-Use the `cpu` branch as the base. Do not push directly to `cpu`. Make a separate
+Use the `cleaned-up` branch as the base. Do not push directly to `cleaned-up`. Make a separate
 branch for every task so the current tested implementation stays reproducible.
 
 ## Get the current code
@@ -13,8 +13,8 @@ branch for every task so the current tested implementation stays reproducible.
 git clone https://github.com/micskrcb/DNN_MAPPING.git
 cd DNN_MAPPING
 git fetch origin
-git switch cpu
-git pull --ff-only origin cpu
+git switch cleaned-up
+git pull --ff-only origin cleaned-up
 git switch -c work-YOURNAME-TASK
 ```
 

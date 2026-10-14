@@ -6,7 +6,7 @@ Updated 2026-10-12.
 
 The goal is to reproduce, then improve upon Wu et al., *Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning* (ACM TODAES 2020, DOI 10.1145/3418498).
 
-The maintained development branch is `cpu` in `micskrcb/DNN_MAPPING`; it is a descendant of `codex/reconciled-paper-implementation` and still supports `--device cuda`. `main` remains historical. Code and tests are the source of truth for current behavior; old run logs use different objectives and cannot be compared numerically with paper mode.
+The maintained development branch is `cleaned-up` in `micskrcb/DNN_MAPPING` (continued from `cpu` and `codex/reconciled-paper-implementation`) and still supports `--device cuda`. `main` remains historical. Code and tests are the source of truth for current behavior; old run logs use different objectives and cannot be compared numerically with paper mode.
 
 ## What is implemented
 

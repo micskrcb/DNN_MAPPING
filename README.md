@@ -63,41 +63,41 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
 
 All commands in this section run from a terminal. The hybrid order is **DDPG first, then Adaptive Simulated Annealing**: DDPG constructs the warm-start placement and ASA refines the best placement found by DDPG.
 
-### 1. Clone the CPU branch
+### 1. Clone the cleaned-up branch
 
 For a new checkout:
 
 ```bash
-git clone --branch cpu https://github.com/micskrcb/DNN_MAPPING.git
+git clone --branch cleaned-up https://github.com/micskrcb/DNN_MAPPING.git
 cd DNN_MAPPING
 git branch --show-current
 git log -1 --oneline
 ```
 
-`git branch --show-current` must print `cpu`.
+`git branch --show-current` must print `cleaned-up`.
 
-If the repository is already cloned and the local `cpu` branch exists:
+If the repository is already cloned and the local `cleaned-up` branch exists:
 
 ```bash
 cd DNN_MAPPING
 git fetch origin
-git switch cpu
-git pull --ff-only origin cpu
+git switch cleaned-up
+git pull --ff-only origin cleaned-up
 ```
 
-If the repository is already cloned but the local `cpu` branch does not exist:
+If the repository is already cloned but the local `cleaned-up` branch does not exist:
 
 ```bash
 cd DNN_MAPPING
 git fetch origin
-git switch --track -c cpu origin/cpu
+git switch --track -c cleaned-up origin/cleaned-up
 ```
 
 Before pulling later updates, preserve or commit any local edits. Then update with:
 
 ```bash
-git switch cpu
-git pull --ff-only origin cpu
+git switch cleaned-up
+git pull --ff-only origin cleaned-up
 ```
 
 ### 2. Create the CPU Python environment
