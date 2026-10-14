@@ -1101,9 +1101,11 @@ On the frozen configuration, all three previously unused seeds 3--5 beat their
 matched controls. Mean improvement was 1.965%, with a paired 95% t interval of
 [1.008%, 2.922%]. RL+SA also beat ASA in all three held-out seeds by 9.288%
 on average. It beat fixed SA in two of three and by 0.669% on average, but that
-interval crosses zero. This is the first unbiased positive learning result for
-the method. The configuration is now frozen; the next test is transfer to
-additional workloads rather than more AlexNet-FC tuning.
+interval crosses zero. This is a positive descriptive held-out-seed result on
+one graph, not an unbiased confirmatory test: the method was developed on the
+same AlexNet-FC instance, and three seeds are too few for a robust inference.
+The configuration is now frozen; the next test is transfer to additional
+workloads rather than more AlexNet-FC tuning.
 
 The paired runner accepts `MODEL_OVERRIDE` and `WORKLOAD_REGION_OVERRIDE` for
 frozen transfer tests. These change only the workload; bandit architecture,
@@ -1136,8 +1138,10 @@ pair by 2.255% on average; the paired 95% t interval was [1.107%, 3.403%]. It
 also beat fixed SA in every seed by 0.908% on average, although that interval
 crossed zero, and beat ASA in every seed by 5.418% with a positive interval.
 All learned runs made 389 finite updates and reached epsilon 0.5026. This is a
-positive frozen-method transfer result on VGG16-FC. Random search was not part
-of this archive, so no random-search comparison is claimed.
+positive frozen-method transfer result against the focused-uniform control on
+VGG16-FC. It does not yet isolate learned scoring from the hand-built
+`proxy_gain` feature or bottleneck-focused candidate generation. Random search
+was not part of this archive, so no random-search comparison is claimed.
 
 For subsequent held-out runs, the paired runner also executes matched random
 search when context baselines are enabled. Its report appears as

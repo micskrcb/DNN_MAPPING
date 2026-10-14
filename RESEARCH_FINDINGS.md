@@ -531,6 +531,36 @@ The detailed source-code comparison with maintained public DDPG
 implementations and the remaining algorithmic differences are recorded in
 [`DDPG_REFERENCE_AUDIT.md`](DDPG_REFERENCE_AUDIT.md).
 
+## Learned-SA attribution audit (14 October 2026)
+
+An external audit of the frozen contextual-bandit method raised a valid
+causal-attribution issue. `--ppo_asa_disable_learning` gives a focused-uniform
+control with the same candidate pool and objective-call budget, so learned
+versus frozen measures the value of the trained non-uniform selector as a
+package. It does not distinguish learned relationships from direct use of the
+hand-built `proxy_gain` candidate feature. Plain fixed SA is also not an exact
+control because it uses a different proposal neighborhood and temperature
+calibration. Objective-call parity does not imply wall-clock parity because
+the learned method constructs and featurizes 16 candidates and performs model
+updates.
+
+The later VGG16-FC transfer result remains useful and was not available to the
+audit: the unchanged method beat focused-uniform control in all three seeds by
+2.255% on average, with a three-seed paired t interval [1.107%, 3.403%]. This
+answers the narrow concern that the effect appeared only on the tuned
+AlexNet-FC graph. It does not answer whether proxy-greedy selection, fixed
+random scoring, or focus changes explain the advantage. Three-seed t intervals
+are descriptive because their variance estimates are unstable and exact
+distribution-free tests have little power.
+
+Before confirmatory claims, run a matched control ladder: focused uniform,
+focus-zero uniform, proxy-greedy with the same exploration schedule, frozen
+random weights, learned without `proxy_gain`, and learned with focus zero.
+Then freeze the strongest non-learned comparator, precommit a fresh seed list,
+use full runs as the independent units, report log-cost ratios and wall-clock
+time, and verify saved best placements with the full evaluator. Raw reports
+must be retained with their archive hashes.
+
 ## Paired Kaggle short result (8 October 2026)
 
 The corrected one-seed trained/control run used commit `aa75b2d`, 300 online

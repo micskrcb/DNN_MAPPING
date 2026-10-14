@@ -139,11 +139,13 @@ control by 1.834%, fixed SA by 1.490%, and ASA by 2.739% at seed zero. It made
 77 finite updates. Treat this as a passed screening test, not a final result;
 the unchanged three-seed 100,000-evaluation VGG16-FC test is still required.
 
-The extended VGG16-FC test passed: RL+SA beat its frozen control in all three
+The extended VGG16-FC test passed its exploratory gate: RL+SA beat its frozen control in all three
 seeds by 2.255% on average, with paired 95% interval [1.107%, 3.403%]. It beat
 fixed SA in all three by 0.908% on average, but that interval crosses zero,
-and beat ASA in all three by 5.418%. The next confirmation should use held-out
-VGG16-FC seeds 3--5 without changing the method.
+and beat ASA in all three by 5.418%. A methodology audit found that the next
+step must first compare against non-learned proxy-greedy and focus-zero
+controls. Do not claim that learning itself is isolated until that ladder is
+complete.
 
 ## Main theory references
 

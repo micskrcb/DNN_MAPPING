@@ -686,8 +686,11 @@ approximately [-0.024%, 2.653%], narrowly including zero because seeds 0--2
 were more variable. RL+SA and fixed SA are effectively tied across the six
 seeds (RL+SA 0.161% worse by mean paired relative difference, interval crossing
 zero), while RL+SA beats ASA in all six by 8.572% on average. The held-out
-control result is the primary unbiased learning evidence. The next requirement
-is cross-workload validation, not more tuning on AlexNet-FC.
+control result is positive descriptive held-out-seed evidence. It is not an
+unbiased confirmatory test because the method was developed on the same graph,
+the seed unit does not create a new instance, and n=3 gives a fragile interval.
+The next requirement is cross-workload validation, not more tuning on
+AlexNet-FC.
 
 The first frozen cross-workload transfer gate completed on AlexNet-CONV at
 revision `cedf929` (archive SHA-256
@@ -745,6 +748,18 @@ in all three by 5.418% on average with interval [3.656%, 7.179%]. This passes
 the prespecified extended gate and is the first positive cross-workload final
 quality result for the frozen learned proposal method. Random search was not
 included in this archive and must not be inferred from these comparisons.
+
+An external methodology audit correctly identified a remaining attribution
+gap. The matched frozen control isolates the effect of selecting candidates
+non-uniformly with the trained scorer, but it does not show that learned
+scoring is better than directly exploiting the hand-built `proxy_gain`
+feature. Both learned and frozen runs also use a pool with 50% bottleneck-
+focused candidates, whereas plain fixed SA uses a different proposal
+neighborhood and temperature calibration. Therefore the supported claim is a
+2.255% VGG16-FC benefit over the focused-uniform control under equal true-
+objective calls. It is not yet a claim of superiority over the best
+non-learned heuristic, equal-wall-clock superiority, or broad RL
+generalization. A precommitted control ladder and more fresh seeds are required.
 
 The local 1,001-evaluation focused smoke produced 24.0627 microseconds trained,
 24.1598 for its focused uniform control, and 23.9629 for ordinary ASA. Trained
