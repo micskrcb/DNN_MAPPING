@@ -845,3 +845,12 @@ contain learnable structure, but the resulting ranking is inferior to direct
 use of the hand-built proxy. The next method must learn a residual improvement
 over proxy-greedy or control a different part of search, and proxy-greedy must
 remain a mandatory matched control.
+
+## Bounded proxy correction (15 October 2026)
+
+Implemented opt-in bounded proxy correction, relative-cost state inputs,
+selected-reward replay and shared candidate-pool caching. All 44 CPU tests
+passed with no skips. A 36-second four-method CLI smoke passed matching
+65-call budgets and archive checks. These validate mechanics, not real gains.
+Next: VGG16-CONV seeds 3--5 at 20,001 calls/method against proxy-greedy,
+fixed SA and random. See [RESIDUAL_BANDIT.md](RESIDUAL_BANDIT.md).

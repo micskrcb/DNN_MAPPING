@@ -113,6 +113,16 @@ def proposal_focus_label(focus_fraction, focus_stage_slack):
             f"slack_{focus_stage_slack:.3f}")
 
 
+def proposal_cost_state(initial_cost, current_cost, best_cost, encoding):
+    """Encode search progress without early clipping in the opt-in mode."""
+    if encoding == "relative_cost":
+        scale = max(abs(initial_cost), np.finfo(float).eps)
+        return current_cost / scale, best_cost / scale
+    scale = max(abs(initial_cost) * 0.05, np.finfo(float).eps)
+    return (np.clip((initial_cost - current_cost) / scale, -2.0, 2.0),
+            np.clip((initial_cost - best_cost) / scale, -2.0, 2.0))
+
+
 def reorder_extracted_tasks(task_graph, task_labels, operations, kinds,
                             logic_task_order):
     """Apply an explicit, reproducible logical-core numbering convention.
@@ -1598,8 +1608,11 @@ if HAS_TORCH:
         """
 
         def __init__(self, global_dim: int, candidate_dim: int,
-                     hidden_dim: int = 128):
+                     hidden_dim: int = 128, scoring: str = "direct",
+                     residual_limit: float = 0.25):
             super().__init__()
+            self.scoring = scoring
+            self.residual_limit = residual_limit
             self.global_encoder = nn.Sequential(
                 nn.Linear(global_dim, hidden_dim), nn.Tanh())
             self.candidate_encoder = nn.Sequential(
@@ -1616,7 +1629,13 @@ if HAS_TORCH:
             candidate_embedding = self.candidate_encoder(candidate_features)
             joint = torch.tanh(
                 candidate_embedding + global_embedding[:, None, :])
-            return self.score_head(joint).squeeze(-1)
+            scores = self.score_head(joint).squeeze(-1)
+            if self.scoring == "proxy_residual":
+                # The zero head starts exactly at the proxy ranking. Limit
+                # each correction so an uncalibrated learner cannot replace it.
+                return (candidate_features[..., 7] +
+                        self.residual_limit * torch.tanh(scores))
+            return scores
 
 
 def run_masked_ppo(env: MultiChipEnvironment, n_episodes: int = 500,
@@ -2723,6 +2742,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 bandit_global_epsilon: float = 0.05,
                 bandit_feature_set: str = "legacy9",
                 bandit_shuffle_labels: bool = False,
+                bandit_scoring: str = "direct",
+                bandit_residual_limit: float = 0.25,
+                state_encoding: str = "legacy_clipped",
                 update_style: str = "shared_gae",
                 reward_mode: str = "realized",
                 focus_bottleneck: bool = False,
@@ -2792,6 +2814,14 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("bandit global epsilon must be in [0, 1]")
     if bandit_feature_set not in {"legacy9", "contention12"}:
         raise ValueError("unknown bandit candidate feature set")
+    if bandit_scoring not in {"direct", "proxy_residual"}:
+        raise ValueError("unknown bandit scoring mode")
+    if not 0 < bandit_residual_limit <= 1:
+        raise ValueError("bandit residual limit must be in (0, 1]")
+    if bandit_scoring != "direct" and proposal_learner != "bandit":
+        raise ValueError("proxy residual scoring requires the bandit learner")
+    if state_encoding not in {"legacy_clipped", "relative_cost"}:
+        raise ValueError("unknown proposal state encoding")
     if bandit_shuffle_labels and (
             proposal_learner != "bandit" or disable_learning):
         raise ValueError(
@@ -2980,7 +3010,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         return (on_hops * topo.on_chip_latency +
                 chip_hops * topo.off_chip_latency)
 
-    def candidate_features(candidate, changed, relocation, expected_changes):
+    def candidate_features(candidate, changed, relocation, expected_changes,
+                           bottleneck_stage):
         changed = np.asarray(changed, dtype=np.int64)
         if len(changed):
             old_cores = placement[changed]
@@ -3017,7 +3048,6 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         else:
             proxy_gain = affected_volume = 0.0
         if evaluator is not None and len(changed):
-            bottleneck_stage = int(np.argmax(evaluator.stage_costs))
             bottleneck_fraction = float(np.mean(
                 evaluator.task_stage[changed] == bottleneck_stage))
         else:
@@ -3134,7 +3164,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     model = actor = critic = bandit = None
     if proposal_learner == "bandit":
         bandit = ProposalBanditRegressor(
-            global_dim, candidate_dim, hidden_dim=hidden_dim).to(torch_device)
+            global_dim, candidate_dim, hidden_dim=hidden_dim,
+            scoring=bandit_scoring,
+            residual_limit=bandit_residual_limit).to(torch_device)
     elif update_style == "reference_separate":
         actor = ProposalPPOActor(
             global_dim, candidate_dim, hidden_dim=hidden_dim).to(torch_device)
@@ -3160,6 +3192,14 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         if loaded_checkpoint.get("candidate_count") != candidate_count:
             raise ValueError(
                 "checkpoint candidate count does not match this run")
+        if loaded_checkpoint.get("state_encoding", "legacy_clipped") != state_encoding:
+            raise ValueError("checkpoint state encoding does not match this run")
+        if proposal_learner == "bandit":
+            if loaded_checkpoint.get("bandit_scoring", "direct") != bandit_scoring:
+                raise ValueError("checkpoint bandit scoring does not match this run")
+            if (bandit_scoring == "proxy_residual" and
+                    loaded_checkpoint.get("bandit_residual_limit") != bandit_residual_limit):
+                raise ValueError("checkpoint residual limit does not match this run")
         if loaded_checkpoint.get("annealing_schedule", "adaptive") != \
                 annealing_schedule:
             raise ValueError(
@@ -3208,15 +3248,12 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         temperature_log = math.log(max(temperature, np.finfo(float).eps) /
                                    initial_temperature)
         span = max(max_perturb_frac - min_perturb_frac, np.finfo(float).eps)
+        cost_state = proposal_cost_state(
+            chain_initial_cost, current_cost, chain_best_cost, state_encoding)
         return np.asarray([
             progress,
             np.clip(temperature_log / 14.0, -1.0, 1.0),
-            np.clip((chain_initial_cost - current_cost) /
-                    max(abs(chain_initial_cost) * 0.05,
-                        np.finfo(float).eps), -2.0, 2.0),
-            np.clip((chain_initial_cost - chain_best_cost) /
-                    max(abs(chain_initial_cost) * 0.05,
-                        np.finfo(float).eps), -2.0, 2.0),
+            *cost_state,
             np.clip(last_delta / reward_scale, -10.0, 10.0) / 10.0,
             float(last_accepted),
             float(recent_acceptance),
@@ -3232,16 +3269,19 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
 
     def make_proposal_pool(n_perturb):
         candidates, changed_sets, relocations, features = [], [], [], []
+        focused_tasks = bottleneck_tasks(focused_candidate_count > 0)
+        bottleneck_stage = (int(np.argmax(evaluator.stage_costs))
+                            if evaluator is not None else None)
         for candidate_index in range(candidate_count):
             candidate, changed, relocation = _placement_neighbor(
                 placement, n_perturb, free_pool, rng=proposal_rng,
-                anchor_tasks=bottleneck_tasks(
-                    candidate_index < focused_candidate_count))
+                anchor_tasks=(focused_tasks
+                              if candidate_index < focused_candidate_count else None))
             candidates.append(candidate)
             changed_sets.append(changed)
             relocations.append(relocation)
             features.append(candidate_features(
-                candidate, changed, relocation, n_perturb))
+                candidate, changed, relocation, n_perturb, bottleneck_stage))
         return candidates, changed_sets, relocations, np.stack(features)
 
     latest_metrics = None
@@ -3277,6 +3317,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 bandit_rng.shuffle(target_values)
             targets = torch.as_tensor(
                 target_values, dtype=torch.float32, device=torch_device)
+            if bandit_scoring == "proxy_residual":
+                # Match the bounded proxy scale, preserving reward sign/order.
+                # This is an explicit heuristic normalization, not a calibrated
+                # claim that byte-hop reduction equals true latency reduction.
+                targets = torch.tanh(targets)
             predictions = bandit(global_states, candidate_rows).squeeze(1)
             loss = F.smooth_l1_loss(predictions, targets)
             bandit_optimizer.zero_grad()
@@ -3491,6 +3536,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             if proposal_learner == "bandit":
                 if disable_learning and bandit_control == "proxy_greedy":
                     normalized_logits = feature_tensor[:, :, 7]
+                elif disable_learning:
+                    normalized_logits = torch.zeros_like(feature_tensor[:, :, 7])
                 else:
                     normalized_logits = bandit(global_tensor, feature_tensor)
                 if disable_learning and bandit_control == "uniform":
@@ -3641,7 +3688,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             bandit_observations += 1
             bandit_replay.append((
                 global_state.copy(), features[selected].copy(),
-                proposed_reward))
+                training_reward))
             if len(bandit_replay) > bandit_replay_capacity:
                 del bandit_replay[:len(bandit_replay) -
                                   bandit_replay_capacity]
@@ -3996,6 +4043,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "bandit_top_m": bandit_top_m,
             "bandit_global_epsilon": bandit_global_epsilon,
             "bandit_shuffle_labels": bandit_shuffle_labels,
+            "bandit_scoring": bandit_scoring,
+            "bandit_residual_limit": bandit_residual_limit,
+            "state_encoding": state_encoding,
             "reward_mode": reward_mode,
             "annealing_schedule": annealing_schedule,
         }
@@ -4056,7 +4106,15 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "learning_enabled": not disable_learning,
             "model_initialization": (
                 "loaded_checkpoint" if loaded_checkpoint is not None
+                else "proxy_prior_zero_residual"
+                if proposal_learner == "bandit" and bandit_scoring == "proxy_residual"
                 else "zero_score_uniform"),
+            "bandit_scoring": bandit_scoring,
+            "bandit_residual_limit": bandit_residual_limit,
+            "state_encoding": state_encoding,
+            "bandit_target_transform": (
+                "tanh_selected_reward" if bandit_scoring == "proxy_residual"
+                else "selected_reward"),
             "loaded_checkpoint_path": load_checkpoint,
             "initialization": "seeded_random",
             "initial_cost": initial_cost,
@@ -4963,6 +5021,15 @@ def main():
     parser.add_argument(
         "--ppo_asa_bandit_shuffle_labels", action="store_true",
         help="Shuffle bandit targets within each update as a learning control")
+    parser.add_argument(
+        "--ppo_asa_bandit_scoring", choices=["direct", "proxy_residual"],
+        default="direct", help="Direct gain regression or bounded proxy correction")
+    parser.add_argument(
+        "--ppo_asa_bandit_residual_limit", type=float, default=0.25,
+        help="Maximum absolute learned score correction in proxy_residual mode")
+    parser.add_argument(
+        "--ppo_asa_state_encoding", choices=["legacy_clipped", "relative_cost"],
+        default="legacy_clipped", help="Historical clipped progress or cost ratios")
     parser.add_argument("--ppo_asa_rollout_steps", type=int, default=256,
                         help="Accepted/rejected proposal transitions per PPO-ASA update")
     parser.add_argument("--ppo_asa_weight_decay", type=float, default=0.0,
@@ -5512,6 +5579,9 @@ def main():
             bandit_global_epsilon=args.ppo_asa_bandit_global_epsilon,
             bandit_feature_set=args.ppo_asa_bandit_feature_set,
             bandit_shuffle_labels=args.ppo_asa_bandit_shuffle_labels,
+            bandit_scoring=args.ppo_asa_bandit_scoring,
+            bandit_residual_limit=args.ppo_asa_bandit_residual_limit,
+            state_encoding=args.ppo_asa_state_encoding,
             update_style=args.ppo_asa_update_style,
             reward_mode=args.ppo_asa_reward_mode,
             focus_bottleneck=args.ppo_asa_focus_bottleneck,
@@ -5621,7 +5691,7 @@ def main():
                                 else algorithm_metadata["total_candidate_evaluations"]
                                 if args.algo in ("ddpg_guided", "ppo_masked")
                                 else algorithm_metadata["total_objective_evaluations"]
-                                if args.algo == "ppo_asa"
+                                if args.algo in ("ppo_asa", "sa", "asa")
                                 else complete_placements + args.iters
                                 if args.algo == "ddpg_asa"
                                 else 1 if args.algo == "bs" else args.iters)

@@ -10,6 +10,12 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
+**Latest experiment:** the VGG16-CONV contention bandit lost to proxy-greedy
+and fixed SA on all three tested seeds. The next opt-in experiment starts at
+proxy-greedy and learns a bounded correction, with unclipped cost-ratio state
+inputs. It is implemented, not yet demonstrated to improve real placements.
+See [the residual-bandit protocol and run commands](docs/RESIDUAL_BANDIT.md).
+
 | Paper feature | Current status |
 | --- | --- |
 | 4×4 chips, 16×16 cores/chip | Implemented |

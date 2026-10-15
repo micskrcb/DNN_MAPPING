@@ -115,6 +115,8 @@ Current paper targets:
 68. [x] Run the three-seed 20,000-evaluation VGG16-CONV contention-bandit gate. The learner beat shuffled labels in two seeds, bottleneck-random in all three, and random search in all three, but lost to proxy-greedy and fixed SA in all three. The prespecified extension gate failed, so do not run the unchanged 100,000-evaluation version. This rejects the `contention12` plus soft-focus plus top-four exploration package, not every RL+SA formulation.
 69. Retain proxy-greedy as a required strong non-learned control. The next learned proposal experiment must add value beyond that proxy, preferably by learning a residual correction to the proxy score or by selecting among qualitatively different move operators. Require a short paired gate against proxy-greedy and fixed SA before scaling.
 70. Do not tune further on VGG16-CONV seeds 0--2. After a new mechanism passes its mechanics and planted-signal tests, use fresh seeds or another workload for the decision gate.
+71. [x] Implement opt-in bounded proxy correction and relative-cost state, selected-reward replay, checkpoint compatibility checks, and cached shared pool lookups. Add synthetic-learning and paired initial-proxy tests. See `RESIDUAL_BANDIT.md`; real performance is not yet established.
+72. Run `scripts/run_kaggle_residual_bandit_gate.sh short` on VGG16-CONV seeds 3--5. Compare learned residual, proxy-greedy, fixed SA and random at 20,001 calls each. Advance only on the declared directional rule; do not retune using these held-out results and continue calling them held out.
 
 ## Gate 4: improvements after reproduction
 

@@ -15,6 +15,112 @@ import run_multi_chip as rm
 
 
 class TimingTests(unittest.TestCase):
+    def test_relative_cost_state_keeps_late_progress_distinct(self):
+        self.assertEqual(rm.proposal_cost_state(100, 80, 70, "legacy_clipped"),
+                         rm.proposal_cost_state(100, 40, 30, "legacy_clipped"))
+        self.assertEqual(rm.proposal_cost_state(100, 80, 70, "relative_cost"),
+                         (0.8, 0.7))
+        self.assertEqual(rm.proposal_cost_state(100, 40, 30, "relative_cost"),
+                         (0.4, 0.3))
+
+    @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
+    def test_residual_bandit_starts_at_proxy_and_learns_planted_correction(self):
+        import torch
+        torch.set_num_threads(2)
+        torch.manual_seed(81)
+        model = rm.ProposalBanditRegressor(
+            8, 9, hidden_dim=16, scoring="proxy_residual", residual_limit=0.25)
+        state = torch.zeros((64, 8))
+        features = torch.zeros((64, 4, 9))
+        features[..., 0] = torch.rand((64, 4)) * 2 - 1
+        features[..., 7] = torch.rand((64, 4)) * 0.1
+        proxy = features[..., 7]
+        torch.testing.assert_close(model(state, features), proxy, rtol=0, atol=0)
+        target = proxy + 0.15 * features[..., 0]
+        initial_loss = float(((proxy - target) ** 2).mean())
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+        for _ in range(80):
+            loss = ((model(state, features) - target) ** 2).mean()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        with torch.no_grad():
+            fresh = features.clone()
+            fresh[..., 0] = torch.rand((64, 4)) * 2 - 1
+            prediction = model(state, fresh)
+            error = ((prediction - (proxy + 0.15 * fresh[..., 0])) ** 2).mean()
+            self.assertLess(float(error), initial_loss * 0.2)
+            self.assertLessEqual(float((prediction - proxy).abs().max()), 0.25)
+
+    @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
+    def test_bandit_uses_selected_reward_and_checks_checkpoint_semantics(self):
+        import torch
+        torch.set_num_threads(2)
+        graph = np.zeros((4, 4), dtype=np.float32)
+        graph[0, 1] = graph[1, 2] = graph[2, 3] = 1.0
+        def environment():
+            return MultiChipEnvironment(1, 1, 2, 3, task_graph=graph, num_tasks=4)
+        options = dict(
+            n_iter=24, candidate_count=4, rollout_steps=4, device="cpu",
+            update_epochs=1, minibatch_size=4, hidden_dim=16,
+            calibration_trials=4, adapt_window=4, seed=13,
+            proposal_learner="bandit", bandit_warmup=4,
+            annealing_schedule="fixed", reward_mode="positive_delta")
+        with tempfile.TemporaryDirectory() as directory, \
+                contextlib.redirect_stdout(io.StringIO()), \
+                patch.object(rm, "proposal_training_reward", return_value=0.125):
+            for scoring, expected in [("direct", 0.125),
+                                      ("proxy_residual", np.tanh(0.125))]:
+                metadata = {}
+                checkpoint = f"{directory}/{scoring}.pt"
+                rm.run_ppo_asa(environment(), **options, metadata=metadata,
+                              bandit_scoring=scoring, state_encoding="relative_cost",
+                              save_checkpoint=checkpoint)
+                self.assertEqual(metadata["total_objective_evaluations"], 25)
+                self.assertGreater(metadata["update_count"], 0)
+                self.assertAlmostEqual(
+                    metadata["final_update_metrics"]["mean_target"], expected, places=6)
+                with self.assertRaisesRegex(ValueError, "state encoding"):
+                    rm.run_ppo_asa(environment(), **options, disable_learning=True,
+                                  bandit_scoring=scoring, load_checkpoint=checkpoint)
+                loaded = {}
+                rm.run_ppo_asa(environment(), **options, disable_learning=True,
+                              state_encoding="relative_cost", bandit_scoring=scoring,
+                              load_checkpoint=checkpoint, metadata=loaded)
+                self.assertEqual(loaded["model_initialization"], "loaded_checkpoint")
+            with self.assertRaisesRegex(ValueError, "bandit scoring"):
+                rm.run_ppo_asa(environment(), **options, disable_learning=True,
+                              state_encoding="relative_cost", load_checkpoint=checkpoint)
+
+    @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
+    def test_zero_residual_matches_proxy_search_before_updates(self):
+        import torch
+        torch.set_num_threads(2)
+        graph = np.zeros((4, 4), dtype=np.float32)
+        graph[0, 1] = graph[1, 2] = graph[2, 3] = 1.0
+        results, placements, diagnostics = [], [], []
+        with tempfile.TemporaryDirectory() as directory, \
+                contextlib.redirect_stdout(io.StringIO()):
+            for control in (False, True):
+                env = MultiChipEnvironment(1, 1, 2, 3, task_graph=graph, num_tasks=4)
+                path = f"{directory}/{control}.jsonl"
+                results.append(rm.run_ppo_asa(
+                    env, n_iter=40, calibration_trials=4, candidate_count=4,
+                    bandit_warmup=4, rollout_steps=100, device="cpu", seed=17,
+                    proposal_learner="bandit", bandit_scoring="proxy_residual",
+                    state_encoding="relative_cost", bandit_exploration="epsilon_top_m",
+                    bandit_top_m=2, bandit_epsilon_final=0.25,
+                    disable_learning=control,
+                    bandit_control="proxy_greedy" if control else "uniform",
+                    annealing_schedule="fixed", diagnostics_path=path))
+                placements.append(env.placement.copy())
+                with open(path) as stream:
+                    diagnostics.append([json.loads(line) for line in stream])
+        self.assertEqual(results[0], results[1])
+        np.testing.assert_array_equal(*placements)
+        self.assertEqual([d["current_cost"] for d in diagnostics[0]],
+                         [d["current_cost"] for d in diagnostics[1]])
+
     def test_zero_discount_is_only_valid_for_proposal_ranking(self):
         self.assertTrue(rm.valid_ppo_gamma("ppo_asa", 0.0))
         self.assertTrue(rm.valid_ppo_gamma("ppo_asa", 1.0))
