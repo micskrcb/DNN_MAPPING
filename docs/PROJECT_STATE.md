@@ -818,3 +818,30 @@ excluded because each is hundreds of megabytes.
 The CNN target actor and critic previously calculated Bellman targets in training mode, so BatchNorm made target values depend on the composition of each replay minibatch. Target buffers also were not synchronized after the soft parameter update, and the critic accumulated unnecessary gradients while optimizing the actor. The code now evaluates targets in inference mode, copies BatchNorm buffers from the online networks, and freezes the critic for the actor-only step. A regression test checks fixed target outputs across minibatch companions, buffer synchronization, a single critic statistics update, and restored critic gradients.
 
 The same bounded five-seed DDPG diagnostic after this repair had mean best latency 38.09883 µs versus 38.24062 µs before (0.14180 µs, 0.37%, lower). The four strictly two-thread comparable seeds averaged 38.04920 µs versus 38.15555 µs (0.28% lower); three improved and one worsened. This is numerical-stability evidence only, not evidence that DDPG has converged. The architecture/training fingerprint was changed deliberately, so earlier DDPG checkpoints cannot resume. See `runs/local-cpu-batchnorm-2026-09-30/STUDY.md`.
+
+## VGG16-CONV contention-bandit gate (15 October 2026)
+
+The three-seed short gate completed at revision `a00784a` with 20,001 true
+objective evaluations for each learned and matched-control run. The archive
+SHA-256 is
+`187fa7c1b1628583318d9f7c6c477dd283c8989ff7a6b216838d3f6376238843`.
+Mean best latency was 728.898 microseconds for the learned contention bandit,
+966.531 for shuffled-label learning, 558.921 for proxy-greedy, 1,701.868 for
+bottleneck-random, 609.994 for fixed SA, and 2,158.185 for random search.
+
+The learned method beat shuffled labels in two of three seeds, bottleneck-
+random in all three by 57.172% on average, and random search in all three by
+66.218%. It lost to proxy-greedy in every seed by 31.208% on average and to
+fixed SA in every seed by 19.668%. It therefore failed the prespecified gate
+requiring wins over shuffled labels, proxy-greedy, and fixed SA in at least
+two seeds. Do not run the unchanged 100,000-evaluation extension.
+
+This was a valid learning run rather than a frozen or random policy: each
+learner made 77 finite updates, final learned score-head norms were
+0.526--0.612, and final logit standard deviations were 0.638--0.793. The
+shuffled-label heads remained much smaller (0.052--0.095) with logit standard
+deviations near 0.004--0.005. Those diagnostics show that the real labels
+contain learnable structure, but the resulting ranking is inferior to direct
+use of the hand-built proxy. The next method must learn a residual improvement
+over proxy-greedy or control a different part of search, and proxy-greedy must
+remain a mandatory matched control.

@@ -634,3 +634,31 @@ matched no-learning control, permanent demonstration retention, legal-random
 warm-up, and separated random streams. Its deterministic diagnostics did not
 show a clean sustained improvement. It is useful for choosing a 3,000-placement
 follow-up horizon but cannot be used as proof that policy training helped.
+
+## Contention-feature attribution result (15 October 2026)
+
+The VGG16-CONV three-seed gate tested the opt-in `contention12` feature set,
+5% soft bottleneck focus, and epsilon top-four exploration at 20,001 true
+objective evaluations per method. Mean learned cost was 728.898 microseconds.
+This was 66.218% better than random search and 57.172% better than the matched
+bottleneck-random selector. Against shuffled-label training it won two of
+three seeds, with a mean paired improvement of 19.835%, but the third pair
+reversed direction.
+
+The decisive controls were negative. Proxy-greedy reached 558.921
+microseconds on average and beat learning in all three pairs; fixed SA reached
+609.994 microseconds and also beat learning in all three. Proxy-greedy found
+619, 880, and 800 improving moves, compared with 391, 489, and 471 for the
+learner. The unchanged 100,000-evaluation extension is therefore not
+justified.
+
+Nonzero weights alone are insufficient evidence, but the real-versus-shuffled
+diagnostics support the narrower conclusion that training extracted label
+structure: learned score-head norms ended at 0.526--0.612 versus 0.052--0.095
+for shuffled labels, and learned logit dispersion was two orders of magnitude
+larger. The useful research question has shifted from whether the bandit can
+update to whether it can add information beyond `proxy_gain`. A residual
+ranker with proxy score as an explicit prior, or a bandit choosing among
+distinct move operators, is a better next hypothesis than more epochs for the
+rejected package. Any such method must be paired against proxy-greedy and
+fixed SA under the same objective-call budget.
