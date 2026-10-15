@@ -33,6 +33,17 @@ class TimingTests(unittest.TestCase):
             rm.proposal_training_reward("proposed_delta", -2.5, 1.0, 9.0),
             -2.5)
 
+    def test_proposal_focus_labels_preserve_legacy_zero_slack(self):
+        self.assertEqual(
+            rm.proposal_focus_label(0.5, 0.0),
+            "mixed_bottleneck_0.500")
+        self.assertEqual(
+            rm.proposal_focus_label(1.0, 0.0),
+            "current_bottleneck_stage")
+        self.assertEqual(
+            rm.proposal_focus_label(0.5, 0.2),
+            "mixed_near_bottleneck_0.500_slack_0.200")
+
     def test_masked_mapper_exposes_only_unused_allowed_cores(self):
         graph = np.zeros((3, 3), dtype=np.float32)
         graph[0, 1] = graph[1, 2] = 1.0

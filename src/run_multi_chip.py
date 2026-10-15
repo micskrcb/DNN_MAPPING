@@ -99,6 +99,20 @@ def proposal_training_reward(mode, proposed_reward, realized_reward,
     raise ValueError(f"unknown PPO-ASA reward mode: {mode}")
 
 
+def proposal_focus_label(focus_fraction, focus_stage_slack):
+    """Describe task focusing while preserving legacy zero-slack metadata."""
+    if focus_fraction <= 0:
+        return "uniform_tasks"
+    if focus_stage_slack <= 0:
+        if focus_fraction == 1.0:
+            return "current_bottleneck_stage"
+        return f"mixed_bottleneck_{focus_fraction:.3f}"
+    if focus_fraction == 1.0:
+        return f"stages_within_{focus_stage_slack:.3f}_of_bottleneck"
+    return (f"mixed_near_bottleneck_{focus_fraction:.3f}_"
+            f"slack_{focus_stage_slack:.3f}")
+
+
 def reorder_extracted_tasks(task_graph, task_labels, operations, kinds,
                             logic_task_order):
     """Apply an explicit, reproducible logical-core numbering convention.
@@ -4020,13 +4034,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 if (proposal_learner == "bandit" and disable_learning)
                 else "epsilon_greedy_contextual_bandit"
                 if proposal_learner == "bandit" else "candidate_set_ppo"),
-            "proposal_focus": (
-                (f"stages_within_{focus_stage_slack:.3f}_of_bottleneck"
-                 if focus_stage_slack > 0 else
-                 "current_bottleneck_stage") if focus_fraction == 1.0
-                else (f"mixed_near_bottleneck_{focus_fraction:.3f}_"
-                      f"slack_{focus_stage_slack:.3f}")
-                if focus_fraction > 0 else "uniform_tasks"),
+            "proposal_focus": proposal_focus_label(
+                focus_fraction, focus_stage_slack),
             "acceptance_rule": "fixed_metropolis",
             "temperature_controller": (
                 "paper_style_fixed_schedule"
