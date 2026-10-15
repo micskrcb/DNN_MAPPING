@@ -2745,6 +2745,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 bandit_scoring: str = "direct",
                 bandit_residual_limit: float = 0.25,
                 state_encoding: str = "legacy_clipped",
+                bandit_pool_supervision_stride: int = 0,
                 update_style: str = "shared_gae",
                 reward_mode: str = "realized",
                 focus_bottleneck: bool = False,
@@ -2822,6 +2823,18 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("proxy residual scoring requires the bandit learner")
     if state_encoding not in {"legacy_clipped", "relative_cost"}:
         raise ValueError("unknown proposal state encoding")
+    if bandit_pool_supervision_stride < 0:
+        raise ValueError("bandit pool-supervision stride cannot be negative")
+    if bandit_pool_supervision_stride and (
+            proposal_learner != "bandit" or disable_learning):
+        raise ValueError("pool supervision requires an enabled bandit learner")
+    if bandit_pool_supervision_stride and reward_mode not in {
+            "proposed_delta", "positive_delta", "planted_proxy"}:
+        raise ValueError(
+            "pool supervision requires a proposal-local reward mode")
+    if bandit_pool_supervision_stride and oracle_pools:
+        raise ValueError(
+            "pool supervision and oracle diagnostics cannot share one run")
     if bandit_shuffle_labels and (
             proposal_learner != "bandit" or disable_learning):
         raise ValueError(
@@ -3200,6 +3213,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             if (bandit_scoring == "proxy_residual" and
                     loaded_checkpoint.get("bandit_residual_limit") != bandit_residual_limit):
                 raise ValueError("checkpoint residual limit does not match this run")
+            if loaded_checkpoint.get(
+                    "bandit_pool_supervision_stride", 0) != \
+                    bandit_pool_supervision_stride:
+                raise ValueError(
+                    "checkpoint pool-supervision stride does not match this run")
         if loaded_checkpoint.get("annealing_schedule", "adaptive") != \
                 annealing_schedule:
             raise ValueError(
@@ -3509,12 +3527,15 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     last_delta = 0.0
     last_accepted = False
     recent_acceptance = target_acceptance
-    policy_steps = max(0, n_iter - calibration)
+    policy_budget = max(0, n_iter - calibration)
+    proposal_steps = 0
+    supervised_pools = 0
+    supervised_candidate_evaluations = 0
     chain_evaluations = calibration
     progress_interval = max(adapt_window, max(1, n_iter // 50))
     next_progress = progress_interval
 
-    if policy_steps:
+    if policy_budget:
         n_perturb = max(2 if n > 1 else 1,
                         min(n, round(perturb_fraction * n)))
         pool = make_proposal_pool(n_perturb)
@@ -3558,7 +3579,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                         epsilon = 1.0
                     else:
                         decay_steps = max(
-                            1, round(policy_steps *
+                            1, round(policy_budget *
                                      bandit_epsilon_decay_fraction))
                         # Use total observations, not replay length: replay is
                         # capped and must not freeze the exploration schedule.
@@ -3636,41 +3657,52 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         audit_pool = (
             len(oracle_pool_rows) < oracle_pools and
             policy_index % oracle_stride == 0)
+        supervise_pool = bool(
+            bandit_pool_supervision_stride and
+            proposal_steps % bandit_pool_supervision_stride == 0 and
+            evaluations + candidate_count <= n_iter)
         oracle_costs = oracle_pending = None
-        if audit_pool:
+        if audit_pool or supervise_pool:
             oracle_costs, oracle_pending = evaluate_oracle_pool(
                 candidates, changed_sets)
-            oracle_candidate_evaluations += candidate_count
             true_gains = before_cost - oracle_costs
-            uniform_gain = float(np.mean(true_gains))
-            oracle_gain = float(np.max(true_gains))
-            selected_gain = float(true_gains[selected])
-            oracle_feature_rows.append(np.asarray(features, dtype=np.float64))
-            oracle_global_rows.append(np.asarray(global_state, dtype=np.float64))
-            oracle_gain_rows.append(true_gains)
-            oracle_chain_rows.append(chain_count)
-            oracle_pool_rows.append({
-                "before_cost": before_cost,
-                "uniform_gain": uniform_gain,
-                "oracle_gain": oracle_gain,
-                "selected_gain": selected_gain,
-                "candidate_neutral_fraction": float(np.mean(true_gains == 0)),
-                "has_improving_candidate": bool(np.any(true_gains > 0)),
-                "proxy_argmax_matches_oracle": bool(
-                    int(np.argmax(features[:, 7])) == int(np.argmax(true_gains))),
-            })
+            if audit_pool:
+                oracle_candidate_evaluations += candidate_count
+                uniform_gain = float(np.mean(true_gains))
+                oracle_gain = float(np.max(true_gains))
+                selected_gain = float(true_gains[selected])
+                oracle_feature_rows.append(np.asarray(features, dtype=np.float64))
+                oracle_global_rows.append(np.asarray(global_state, dtype=np.float64))
+                oracle_gain_rows.append(true_gains)
+                oracle_chain_rows.append(chain_count)
+                oracle_pool_rows.append({
+                    "before_cost": before_cost,
+                    "uniform_gain": uniform_gain,
+                    "oracle_gain": oracle_gain,
+                    "selected_gain": selected_gain,
+                    "candidate_neutral_fraction": float(np.mean(true_gains == 0)),
+                    "has_improving_candidate": bool(np.any(true_gains > 0)),
+                    "proxy_argmax_matches_oracle": bool(
+                        int(np.argmax(features[:, 7])) ==
+                        int(np.argmax(true_gains))),
+                })
+                window_selected_true_gains.append(selected_gain)
+                window_uniform_true_gains.append(uniform_gain)
+                window_oracle_true_gains.append(oracle_gain)
+            if supervise_pool:
+                supervised_pools += 1
+                supervised_candidate_evaluations += candidate_count
             env.place(candidate)
             if evaluator is not None:
                 (evaluator.pending,
                  evaluator.pending_details) = oracle_pending[selected]
             new_cost = float(oracle_costs[selected])
-            window_selected_true_gains.append(selected_gain)
-            window_uniform_true_gains.append(uniform_gain)
-            window_oracle_true_gains.append(oracle_gain)
         else:
             new_cost = evaluate(candidate, changed)
-        evaluations += 1
-        chain_evaluations += 1
+        charged_evaluations = candidate_count if supervise_pool else 1
+        evaluations += charged_evaluations
+        chain_evaluations += charged_evaluations
+        proposal_steps += 1
         delta = new_cost - before_cost
         if delta == 0:
             neutral_proposals += 1
@@ -3685,14 +3717,27 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             reward_mode, proposed_reward, realized_reward,
             features[selected, 7])
         if proposal_learner == "bandit":
-            bandit_observations += 1
-            bandit_replay.append((
-                global_state.copy(), features[selected].copy(),
-                training_reward))
+            if supervise_pool:
+                pool_rewards = np.clip(
+                    true_gains / reward_scale, -10.0, 10.0)
+                if reward_mode == "positive_delta":
+                    pool_rewards = np.maximum(pool_rewards, 0.0)
+                elif reward_mode == "planted_proxy":
+                    pool_rewards = features[:, 7]
+                for row, reward in zip(features, pool_rewards):
+                    bandit_replay.append((
+                        global_state.copy(), row.copy(), float(reward)))
+                added_observations = candidate_count
+            else:
+                bandit_replay.append((
+                    global_state.copy(), features[selected].copy(),
+                    training_reward))
+                added_observations = 1
+            bandit_observations += added_observations
             if len(bandit_replay) > bandit_replay_capacity:
                 del bandit_replay[:len(bandit_replay) -
                                   bandit_replay_capacity]
-            bandit_steps_since_update += 1
+            bandit_steps_since_update += added_observations
             bandit_metrics = update_bandit()
             if bandit_metrics is not None:
                 latest_metrics = bandit_metrics
@@ -4046,6 +4091,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "bandit_scoring": bandit_scoring,
             "bandit_residual_limit": bandit_residual_limit,
             "state_encoding": state_encoding,
+            "bandit_pool_supervision_stride": (
+                bandit_pool_supervision_stride),
             "reward_mode": reward_mode,
             "annealing_schedule": annealing_schedule,
         }
@@ -4115,6 +4162,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "bandit_target_transform": (
                 "tanh_selected_reward" if bandit_scoring == "proxy_residual"
                 else "selected_reward"),
+            "bandit_pool_supervision_stride": (
+                bandit_pool_supervision_stride),
+            "supervised_pools": supervised_pools,
+            "supervised_candidate_evaluations": (
+                supervised_candidate_evaluations),
             "loaded_checkpoint_path": load_checkpoint,
             "initialization": "seeded_random",
             "initial_cost": initial_cost,
@@ -4173,12 +4225,13 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "proposal_candidates_per_step": candidate_count,
             "candidate_feature_names": oracle_feature_names,
             "generated_proposal_candidates": (
-                calibration + max(0, n_iter - calibration) * candidate_count),
+                calibration + proposal_steps * candidate_count),
             "unevaluated_proposal_candidates": (
-                max(0, policy_steps - len(oracle_pool_rows)) *
-                (candidate_count - 1)),
+                proposal_steps * candidate_count -
+                supervised_candidate_evaluations -
+                (proposal_steps - supervised_pools)),
             "calibration_evaluations": calibration,
-            "policy_steps": policy_steps,
+            "policy_steps": proposal_steps,
             "accepted_moves": accepted,
             "improving_moves": improving,
             "neutral_proposals": neutral_proposals,
@@ -5030,6 +5083,9 @@ def main():
     parser.add_argument(
         "--ppo_asa_state_encoding", choices=["legacy_clipped", "relative_cost"],
         default="legacy_clipped", help="Historical clipped progress or cost ratios")
+    parser.add_argument(
+        "--ppo_asa_bandit_pool_supervision_stride", type=int, default=0,
+        help="Evaluate and train on a whole candidate pool every N proposal steps")
     parser.add_argument("--ppo_asa_rollout_steps", type=int, default=256,
                         help="Accepted/rejected proposal transitions per PPO-ASA update")
     parser.add_argument("--ppo_asa_weight_decay", type=float, default=0.0,
@@ -5582,6 +5638,8 @@ def main():
             bandit_scoring=args.ppo_asa_bandit_scoring,
             bandit_residual_limit=args.ppo_asa_bandit_residual_limit,
             state_encoding=args.ppo_asa_state_encoding,
+            bandit_pool_supervision_stride=(
+                args.ppo_asa_bandit_pool_supervision_stride),
             update_style=args.ppo_asa_update_style,
             reward_mode=args.ppo_asa_reward_mode,
             focus_bottleneck=args.ppo_asa_focus_bottleneck,

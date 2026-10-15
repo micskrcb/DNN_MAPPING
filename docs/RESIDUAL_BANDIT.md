@@ -103,3 +103,19 @@ The CPU suite tests exact initial proxy equivalence, a held-out synthetic
 correction signal, bounded scores, selected-reward routing, checkpoint
 compatibility, and preservation of progress after a 10% improvement.
 Real VGG16-CONV performance is pending the next uploaded archive.
+
+## Selected-only result and pool-supervised follow-up
+
+The seed 3--5 run completed cleanly but failed its directional gate. Learned
+residual SA averaged 541.885 us versus 507.021 us for proxy-greedy, a 6.907%
+mean loss with only one win. It beat fixed SA in all three seeds by 23.788%.
+The model updated, but selected-only feedback did not add reliable value over
+the proxy.
+
+The opt-in `--ppo_asa_bandit_pool_supervision_stride N` evaluates every legal
+candidate before applying the already-selected move every N proposal steps.
+Selection occurs before exact pool costs are available. All candidate calls
+are charged to the same optimization budget, and all exact proposed gains are
+added to replay. Thus supervision buys better labels by taking fewer SA moves;
+it receives no free oracle calls. The next frozen screen uses stride 32 and
+fresh seeds 6--8. This is still online contextual-bandit supervision, not PPO.

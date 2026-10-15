@@ -13,6 +13,7 @@ archive="${output_dir}.zip"
 model="${MODEL_OVERRIDE:-vgg16}"
 region="${WORKLOAD_REGION_OVERRIDE:-conv}"
 device="${DEVICE_OVERRIDE:-cuda}"
+pool_stride="${POOL_SUPERVISION_STRIDE_OVERRIDE:-0}"
 seeds=(3 4 5)
 
 case "${mode}" in
@@ -39,6 +40,10 @@ if [[ -n "${SEEDS_OVERRIDE:-}" ]]; then
 fi
 if [[ "${device}" != cuda && "${device}" != cpu ]]; then
   echo "DEVICE_OVERRIDE must be cuda or cpu." >&2
+  exit 2
+fi
+if [[ ! "${pool_stride}" =~ ^[0-9]+$ ]]; then
+  echo "POOL_SUPERVISION_STRIDE_OVERRIDE must be a nonnegative integer." >&2
   exit 2
 fi
 if [[ -e "${output_dir}" || -e "${archive}" ]]; then
@@ -146,7 +151,7 @@ bandit_common=(
 )
 
 python - "${output_dir}" "${mode}" "${budget}" "${seeds[*]}" \
-  "${model}" "${region}" "${device}" "${smoke_test}" \
+  "${model}" "${region}" "${device}" "${smoke_test}" "${pool_stride}" \
   "${common[@]}" "${bandit_common[@]}" <<'PY'
 import hashlib
 import json
@@ -155,7 +160,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-directory, mode, budget, seeds, model, region, device, smoke = sys.argv[1:9]
+directory, mode, budget, seeds, model, region, device, smoke, pool_stride = sys.argv[1:10]
 root = Path(directory)
 seeds = [int(value) for value in seeds.split()]
 if not seeds or len(set(seeds)) != len(seeds) or any(seed < 0 for seed in seeds):
@@ -177,7 +182,7 @@ if tracked.returncode:
 (root / "repository.diff").write_bytes(diff)
 (root / "repository-status.txt").write_text(status)
 manifest = {
-    "experiment": "proxy-residual contextual-bandit fixed-SA directional gate",
+    "experiment": "pool-supervised proxy-residual fixed-SA directional gate",
     "started_at_utc": datetime.now(timezone.utc).isoformat(),
     "repository_commit": subprocess.check_output(
         ["git", "rev-parse", "HEAD"], text=True).strip(),
@@ -201,8 +206,9 @@ manifest = {
     "model": model,
     "region": region,
     "bandit_device": device,
+    "pool_supervision_stride": int(pool_stride),
     "baseline_device": "cpu",
-    "common_and_bandit_arguments": sys.argv[9:],
+    "common_and_bandit_arguments": sys.argv[10:],
     "proxy_extra_arguments": [
         "--ppo_asa_disable_learning", "--ppo_asa_bandit_control", "proxy_greedy"
     ],
@@ -241,6 +247,9 @@ run_bandit() {
     extra=(--ppo_asa_disable_learning --ppo_asa_bandit_control proxy_greedy)
   else
     extra=(--save_checkpoint "${seed_dir}/learned.pt" --checkpoint_every "${budget}")
+    if (( pool_stride > 0 )); then
+      extra+=(--ppo_asa_bandit_pool_supervision_stride "${pool_stride}")
+    fi
   fi
   CUDA_VISIBLE_DEVICES="${gpu}" PYTHONUNBUFFERED=1 python src/run_multi_chip.py \
     "${common[@]}" "${bandit_common[@]}" "${extra[@]}" --device "${device}" \

@@ -117,6 +117,9 @@ Current paper targets:
 70. Do not tune further on VGG16-CONV seeds 0--2. After a new mechanism passes its mechanics and planted-signal tests, use fresh seeds or another workload for the decision gate.
 71. [x] Implement opt-in bounded proxy correction and relative-cost state, selected-reward replay, checkpoint compatibility checks, and cached shared pool lookups. Add synthetic-learning and paired initial-proxy tests. See `RESIDUAL_BANDIT.md`; real performance is not yet established.
 72. Run `scripts/run_kaggle_residual_bandit_gate.sh short` on VGG16-CONV seeds 3--5. Compare learned residual, proxy-greedy, fixed SA and random at 20,001 calls each. Advance only on the declared directional rule; do not retune using these held-out results and continue calling them held out.
+73. [x] The seed 3--5 residual gate failed against proxy-greedy: one win, two losses, and -6.907% mean improvement. It beat fixed SA 3/3 by 23.788%. Do not extend this selected-only learner unchanged.
+74. [x] Add opt-in whole-pool labels with exact objective accounting. A supervised pool charges all 16 candidates to the fixed budget, is selected before their costs are known, and adds every exact gain to replay. The 45-test suite and a four-method 65-call smoke pass.
+75. Run the pool-supervised residual gate on fresh VGG16-CONV seeds 6--8 with stride 32 and 20,001 calls/method. Require positive mean and at least 2/3 wins against both proxy-greedy and fixed SA before any extension.
 
 ## Gate 4: improvements after reproduction
 

@@ -121,6 +121,30 @@ class TimingTests(unittest.TestCase):
         self.assertEqual([d["current_cost"] for d in diagnostics[0]],
                          [d["current_cost"] for d in diagnostics[1]])
 
+    @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
+    def test_pool_supervision_counts_every_candidate_in_fixed_budget(self):
+        import torch
+        torch.set_num_threads(2)
+        graph = np.zeros((4, 4), dtype=np.float32)
+        graph[0, 1] = graph[1, 2] = graph[2, 3] = 1.0
+        env = MultiChipEnvironment(1, 1, 2, 3, task_graph=graph, num_tasks=4)
+        metadata = {}
+        with contextlib.redirect_stdout(io.StringIO()):
+            rm.run_ppo_asa(
+                env, n_iter=40, calibration_trials=4, candidate_count=4,
+                bandit_warmup=4, rollout_steps=4, update_epochs=1,
+                minibatch_size=4, device="cpu", seed=31,
+                proposal_learner="bandit", bandit_scoring="proxy_residual",
+                state_encoding="relative_cost", reward_mode="proposed_delta",
+                bandit_pool_supervision_stride=2,
+                annealing_schedule="fixed", metadata=metadata)
+        self.assertEqual(metadata["total_objective_evaluations"], 41)
+        self.assertGreater(metadata["supervised_pools"], 0)
+        self.assertEqual(metadata["supervised_candidate_evaluations"],
+                         metadata["supervised_pools"] * 4)
+        self.assertGreater(metadata["bandit_observations"],
+                           metadata["policy_steps"])
+
     def test_zero_discount_is_only_valid_for_proposal_ranking(self):
         self.assertTrue(rm.valid_ppo_gamma("ppo_asa", 0.0))
         self.assertTrue(rm.valid_ppo_gamma("ppo_asa", 1.0))
