@@ -1,0 +1,1041 @@
+% =============================================================================
+%  DNN Core Placement via Contextual-Bandit-Guided Simulated Annealing:
+%  An Independent Reconstruction and Extension of Wu et al. (TODAES 2020)
+%
+%  Submission-ready LaTeX source (IEEEtran, double-column, 10pt)
+%  Compile:  pdflatex  ->  bibtex  ->  pdflatex  ->  pdflatex
+% =============================================================================
+\documentclass[10pt,conference]{IEEEtran}
+
+% --------------- packages ---------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{bm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{caption}
+\usepackage{subcaption}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!70!black,
+  citecolor=green!50!black,
+  urlcolor=blue!60!black
+}
+
+% --------------- theorem environments ---------------
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+
+% =============================================================================
+\begin{document}
+% =============================================================================
+
+\title{DNN Core Placement via Contextual-Bandit-Guided\\
+       Simulated Annealing: An Independent Reconstruction\\
+       and Extension of Wu et al.\ (TODAES 2020)}
+
+\author{
+  \IEEEauthorblockN{Harshit Raj}
+  \IEEEauthorblockA{
+    Independent Research\\
+    \texttt{micskrcb/DNN\_MAPPING} (branch: \texttt{minimalist})\\
+    October 2026
+  }
+}
+
+\maketitle
+
+% =============================================================================
+\begin{abstract}
+% =============================================================================
+We present an independent reconstruction and extension of the multi-chip DNN
+core-placement framework of Wu~et~al.\ (ACM TODAES 2020), which proposes
+continuous Deep Deterministic Policy Gradient (DDPG) to minimize the
+bottleneck pipeline-stage latency of a partitioned neural-network accelerator.
+Our reconstructed simulator targets a $4{\times}4$-chip, 4,096-core hardware
+topology and reproduces the exact workload task counts and cost function
+reported for AlexNet, VGG16, and ResNet50.
+
+We confirm that continuous DDPG fails to demonstrate learning on this
+discrete, sparse-reward environment across all explored configurations,
+replicating a failure mode studied in the broader RL literature.  After a
+systematic investigation through masked categorical PPO and PPO-guided adaptive
+simulated annealing (ASA)—both yielding negative or statistically inconclusive
+results—we propose \emph{contextual-bandit-guided fixed simulated annealing}
+(CB-SA): a 2-layer MLP bandit predicts the immediate signed objective gain of
+each legal candidate move, and $\varepsilon$-greedy selection replaces
+uniform sampling inside a fixed geometric cooling schedule.
+
+On AlexNet-FC (held-out seeds~3--5), CB-SA beats a matched frozen-control
+baseline in 3/3 seeds by a mean of $1.965\%$ (paired 95\% t-interval
+$[1.008\%, 2.922\%]$).  On VGG16-FC (all six seeds), CB-SA beats the same
+frozen control 6/6 by $1.946\%$ (paired t-interval $[1.362\%, 2.530\%]$;
+sign-test $p = 0.031$).  On AlexNet-CONV all three methods converge to the same
+$37.021\,\mu$s floor, confirming that the bandit accelerates early exploration
+without improving the final minimum on compute-bound instances.
+
+We also document a quantitative reproduction gap: the reconstructed
+compute floor reaches $89.9\%$ of the sequential baseline (BS) at the default
+1~VVA~op/cycle rate, preventing any placement algorithm from approaching the
+paper's reported ${\approx}50\%$ ratio.  A fixed-grid sensitivity sweep shows
+that the paper's ratios are recoverable at 16~VVA~ops/cycle using rate-one
+grids, providing a conditional---not confirmed---reconstruction path.  All
+empirical claims in this paper are explicitly framed as exploratory.
+\end{abstract}
+
+\begin{IEEEkeywords}
+DNN placement, multi-chip accelerator, simulated annealing, contextual bandit,
+reinforcement learning, hardware-aware optimization, pipeline latency.
+\end{IEEEkeywords}
+
+% =============================================================================
+\section{Introduction}
+\label{sec:intro}
+% =============================================================================
+
+Neural-network inference is increasingly served by \emph{multi-chip many-core
+accelerators}~\cite{wu2020todaes,shao2019simba} in which hundreds to thousands
+of lightweight processing elements execute the partitioned layers of a DNN
+concurrently as a spatial pipeline.  In this regime the system throughput is
+limited not by any single operation but by the slowest \emph{pipeline stage}---
+a set of physically co-scheduled tasks that must complete before the next stage
+can begin.  Placing the partitioned DNN tasks onto the available physical cores
+in a way that balances compute and communication latency across all pipeline
+stages is therefore a first-order design optimization.
+
+Wu~et~al.~\cite{wu2020todaes} formulate this as a combinatorial optimization
+problem and propose solving it with DDPG~\cite{lillicrap2016ddpg}: a continuous
+actor maps the current partial placement to a continuous location in the
+physical-core grid; a Manhattan collision-repair heuristic ensures the output
+is a valid one-to-one assignment.  Their reported results suggest a ${\sim}50\%$
+latency reduction versus the sequential baseline (BS) on AlexNet-FC.
+
+\textbf{Contribution of this work.}\ We make the following concrete
+contributions:
+
+\begin{enumerate}
+  \item A fully open, reproducible reconstruction of the Wu~et~al.\ hardware
+        model, DNN workload graph extractor, and pipeline latency evaluator
+        (\S\ref{sec:system}).
+  \item Empirical confirmation that DDPG fails to outperform its own
+        untrained baseline on this problem, corroborating a known weakness of
+        continuous methods in discrete sparse-reward settings
+        (\S\ref{sec:neg-ddpg}).
+  \item A systematic ablation of masked categorical PPO, PPO-guided ASA,
+        and oracle-supervised candidate ranking, all yielding negative or
+        statistically inconclusive results (\S\ref{sec:ablations}).
+  \item The contextual-bandit SA (CB-SA) method and positive exploratory
+        results on two FC workloads (\S\ref{sec:cbsa}).
+  \item Quantitative analysis of the VVA-throughput reconstruction gap and a
+        conditional sensitivity result showing the paper's ratios are within
+        reach (\S\ref{sec:repro-gap}).
+\end{enumerate}
+
+\textbf{Scope and limitations.}\
+This is \emph{not} a re-submission of Wu~et~al.'s paper and does not reproduce
+their simulator.  Several hardware parameters---VVA accumulation rate,
+logical-task numbering convention, full GRS routing, activation-buffer stall
+modeling---are not published by the authors and must be assumed.  All reported
+improvements are over our own baselines on our own reconstructed evaluator; no
+claim transfers to the original simulator or to a production system without
+independent validation.
+
+% =============================================================================
+\section{Related Work}
+\label{sec:related}
+% =============================================================================
+
+\subsection{DNN Mapping and Core Placement}
+
+DNN placement on heterogeneous accelerators has been studied as graph
+partitioning~\cite{mirhoseini2021graphplacement}, integer programming, and
+heuristic search.  The Simba multi-chip architecture~\cite{shao2019simba}
+demonstrated that inter-chip network-on-chip (NoC) communication dominates
+inference latency at scale.  Wu~et~al.~\cite{wu2020todaes} specifically target
+the \emph{bottleneck latency} objective for a 2D mesh of 16$\times$16-core
+chips and report DDPG outperforming SA on AlexNet, VGG16, and ResNet50.
+
+\subsection{Reinforcement Learning for Placement}
+
+\citet{mirhoseini2021graphplacement} use PPO to place macro-blocks on chip
+floorplans, training over thousands of problem instances.  Our problem differs:
+we optimize a \emph{single, fixed} DNN graph per workload, which eliminates
+the generalization benefit that justifies deep RL's large sample cost.
+
+RL-Based-SA~\cite{rl_based_sa_2025} addresses a closely related setting by
+using a PPO-trained policy to \emph{propose neighbor moves} inside a simulated
+annealing loop rather than making placement decisions end-to-end.  We follow
+this structural decision: our CB-SA method places learning at the move-proposal
+level and keeps Metropolis acceptance and temperature scheduling fixed.
+
+\subsection{Simulated Annealing for Combinatorial Problems}
+
+Simulated annealing~\cite{kirkpatrick1983sa} remains competitive with RL in
+single-instance discrete optimization when the annealing schedule and
+neighborhood are well calibrated.  Our calibration follows the standard
+practice~\cite{bohachevsky1986sa} of measuring the initial uphill-acceptance
+distribution from budgeted random samples rather than using hardcoded absolute
+temperatures.
+
+\subsection{Contextual Bandits for Search}
+
+Contextual bandits learn a mapping from state-action features to expected
+reward using a single step of feedback, avoiding the credit-assignment and value-
+estimation problems of multi-step RL.  For move selection in SA where each
+accepted move immediately changes the objective, the bandit formulation is a
+natural fit~\cite{lattimore2020bandit}.
+
+% =============================================================================
+\section{System Model}
+\label{sec:system}
+% =============================================================================
+
+\subsection{Hardware Topology}
+
+We reconstruct the hardware topology described by Wu~et~al.~\cite{wu2020todaes}
+as follows.  The physical system consists of a $4{\times}4$ grid of chips, each
+chip containing a $16{\times}16$ grid of processing cores, giving a total of
+4,096 physical cores.  Each core operates at 400~MHz.  Each core can execute
+128~MACs per VMM (vector-matrix-multiply) cycle.  Weights are stored in a 64~KB
+per-core SRAM.  Inter-chip links are shared directed links; on-chip bandwidth is
+64~GB/s and off-chip is 100~GB/s.
+
+Routing follows dimension-ordered XY across on-chip NoC links.  For inter-chip
+traffic, packets are routed from the source core to the \emph{lower-left
+periphery gateway router} on the source chip, across the inter-chip XY mesh,
+and from the gateway router of the destination chip to the destination core.
+This reconstructs the GRS architecture inferred from Figure~3 of the paper.
+
+Table~\ref{tab:hardware} summarizes the parameters.
+
+\begin{table}[htbp]
+  \caption{Reconstructed hardware parameters (Wu~et~al.~\cite{wu2020todaes},
+           Table~1).}
+  \label{tab:hardware}
+  \centering
+  \begin{tabular}{lll}
+    \toprule
+    Parameter & Value & Source \\
+    \midrule
+    Chip array & $4 \times 4$ & Table~1 \\
+    Cores per chip & $16 \times 16 = 256$ & Table~1 \\
+    Total cores & 4,096 & Table~1 \\
+    Clock frequency & 400~MHz & Table~1 \\
+    VMM throughput & 128~MACs/cycle & Table~1 \\
+    Weight SRAM & 64~KB per core & Table~1 \\
+    On-chip BW & 64~GB/s & Table~1 \\
+    Off-chip BW & 100~GB/s & Table~1 \\
+    Routing & XY, lower-left gateway & inferred, Fig.~3 \\
+    VVA throughput & \emph{1 op/cycle (assumed)} & \textbf{not published} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{DNN Workload Graph}
+
+A DNN workload is partitioned into a directed acyclic graph (DAG) of
+\emph{logic cores}.  Each layer is partitioned into:
+
+\begin{itemize}
+  \item \textbf{VMM cores}: Each handles a distinct weight tile; tile size is
+        determined by a dynamic program that minimises the combined MAC-
+        proportional allocation error and VMM/VVA cycle-imbalance term subject
+        to the 64~KB weight buffer.
+  \item \textbf{VVA cores}: Each accumulates partial sums from the VMM cores
+        of its output group.
+\end{itemize}
+
+Table~\ref{tab:workloads} shows the exact task counts reproduced from
+Wu~et~al.~Figure~6.
+
+\begin{table}[htbp]
+  \caption{Exact CONV and FC logic-core counts (Figure~6,
+           Wu~et~al.~\cite{wu2020todaes}).}
+  \label{tab:workloads}
+  \centering
+  \begin{tabular}{lrr}
+    \toprule
+    Workload & CONV tasks & FC tasks \\
+    \midrule
+    AlexNet  & 183 & 932 \\
+    VGG16    & 1024 & 1924 \\
+    ResNet50 & 512 & 37 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+CONV and FC tasks are optimized separately over disjoint, contiguous
+whole-chip physical regions.  CONV occupies the minimum rectangular chip
+group; FC follows immediately.
+
+\subsection{Pipeline Latency Objective}
+
+Let $P : \mathcal{L} \to \mathcal{C}$ be a bijective mapping of logic cores
+$\mathcal{L}$ to distinct physical cores $\mathcal{C}$.  We follow
+Wu~et~al.~Equation~4 and minimize the \emph{bottleneck} stage latency:
+\begin{equation}
+  L(P) = \max_{k \in \mathcal{S}} T(k \mid P)
+  \label{eq:objective}
+\end{equation}
+where $\mathcal{S}$ is the set of pipeline stages identified by
+Kahn-topological scheduling and $T(k \mid P)$ is the execution time of
+stage~$k$ under placement~$P$:
+\begin{equation}
+  T(k \mid P) = \max_{u \in \text{stage}\,k}
+    \Bigl( T_{\text{comp}}(u) + \max_{v \in \text{succ}(u)}
+    T_{\text{comm}}\bigl(P(u), P(v)\bigr) \Bigr).
+  \label{eq:stage}
+\end{equation}
+$T_{\text{comm}}$ is the larger of the routed byte-hop transmission time
+and the shared-link serialization load summed across concurrent streams.
+
+\subsection{Incremental Evaluator}
+
+Evaluating $L(P)$ from scratch for $|\mathcal{L}| \approx 1{,}000$ tasks
+takes several milliseconds.  For an annealing step that relocates one or two
+tasks, only the stages containing moved tasks and their immediate
+predecessors/successors are affected.  Our incremental evaluator caches all
+other stage latencies and recomputes only the affected subset, achieving a
+$10\times$ speedup while guaranteeing bitwise agreement with the full
+evaluation.
+
+% =============================================================================
+\section{Optimization Algorithms}
+\label{sec:algos}
+% =============================================================================
+
+\subsection{Classical Baselines}
+\label{sec:baselines}
+
+\textbf{Sequential Baseline (BS).}\ Logic cores are placed sequentially in
+chip-major physical-core order.  BS is the denominator for normalized costs
+throughout this paper.  Note that BS depends on the unpublished logical-index
+numbering convention; we report BS-normalized ratios alongside absolute $\mu$s
+values (\S\ref{sec:calib}).
+
+\textbf{Random Search (RS).}\ Uniformly samples complete random permutations
+under the chip-mask constraint and returns the best found.
+
+\textbf{Fixed SA.}\ Geometric cooling $T_{k+1} = \alpha T_k$ with
+$\alpha = 0.99$.  The initial temperature $T_0$ is calibrated so that the
+mean uphill acceptance rate over a pre-run sample of 1\% moves reaches 80\%.
+A single task is perturbed to an unoccupied core per step.
+
+\textbf{Adaptive SA (ASA).}\ Adjusts temperature using windowed acceptance
+feedback over 100-step windows targeting a 30\% acceptance rate.  Expands the
+perturbation radius on stagnation and contracts during steady convergence.
+
+\subsection{Attempted Deep RL Methods}
+\label{sec:neg-ddpg}
+
+\textbf{Paper DDPG.}\ Implements Wu~et~al.~Algorithm~1 with Ornstein-Uhlenbeck
+exploration noise, terminal reward $r = \sqrt{B} - \sqrt{L(P)}$, discount
+$\gamma = 0.98$, actor/critic learning rates $2{\times}10^{-4}$ and $10^{-3}$,
+minibatch size 64, and the paper's CNN architecture (Figure~9 of the paper).
+This is the paper reproduction target and is kept frozen as a historical baseline.
+
+\textbf{Guided DDPG.}\ Attempts to address DDPG failure by seeding replay with
+ASA demonstrations, projecting every proposed action to the nearest legal
+unoccupied core before evaluation, assigning discounted complete-episode return
+targets, and using independent seeded random streams to eliminate the seed
+cross-contamination found in the original implementation.  A matched
+``no-learning'' control uses the identical data-generation path without gradient
+updates.
+
+\textbf{Masked Categorical PPO.}\ Autoregressively places tasks using exact
+invalid-action masking over unoccupied cores, clipped surrogate PPO objectives,
+and a deterministic frozen-policy control.
+
+\textbf{PPO-Guided ASA.}\ Learns proposal logits for a 16-candidate pool using
+clipped PPO with decoupled actor-critic networks (following the verified
+RL-Based-SA architecture~\cite{rl_based_sa_2025}).  The trained scorer ranks
+candidates; Metropolis acceptance and exponential cooling remain fixed.  Matched
+frozen-control uses a zero-initialized score head (uniform selection).
+
+\subsection{Contextual-Bandit-Guided Fixed SA (CB-SA)}
+\label{sec:cbsa-algo}
+
+\begin{algorithm}[htbp]
+  \caption{Contextual-Bandit-Guided Fixed SA (CB-SA)}
+  \label{alg:cbsa}
+  \begin{algorithmic}[1]
+    \State \textbf{Input:} initial placement $P_0$, budget $B_{\max}$,
+           $\alpha=0.99$, $K=16$, $\varepsilon_0=1.0$, $\varepsilon_{\min}=0.50$
+    \State Calibrate $T_0$ from uphill deltas of 1\% task perturbations
+    \State Initialize bandit MLP $f_\theta$ with zero output head;
+           optimizer: AdamW, lr $3{\times}10^{-4}$
+    \For{$t = 1, \ldots, B_{\max}$}
+      \State Identify bottleneck stage $k^* = \arg\max_k T(k \mid P_{t-1})$
+      \State Sample pool $\mathcal{M}_t$ of $K$ legal moves:
+             \begin{itemize}[leftmargin=*,noitemsep]
+               \item 50\% anchored on tasks in stage $k^*$
+               \item 50\% uniform random task perturbations
+             \end{itemize}
+      \State Compute 9-dim feature vector $\phi(m)$ for each $m \in \mathcal{M}_t$
+      \State Compute $\varepsilon_t$ by linear decay of $\varepsilon_0 \to \varepsilon_{\min}$ over $B_{\max}$ steps
+      \If{$\text{Uniform}(0,1) < \varepsilon_t$}
+        \State $m^* \leftarrow$ uniform random element of $\mathcal{M}_t$
+      \Else
+        \State $m^* \leftarrow \arg\max_{m \in \mathcal{M}_t} f_\theta(\phi(m))$
+      \EndIf
+      \State Evaluate $\Delta_t = L(P_{t-1}) - L(P_{t-1} \oplus m^*)$
+             \Comment{1 true-objective call}
+      \State Metropolis accept: $P_t \leftarrow P_{t-1} \oplus m^*$ with prob.
+             $\min(1, e^{\Delta_t / T_t})$; else $P_t \leftarrow P_{t-1}$
+      \State SGD update: minimize $\tfrac{1}{2}(f_\theta(\phi(m^*)) - \Delta_t)^2$
+      \State $T_{t+1} \leftarrow \alpha T_t$;\ update best placement if improved
+    \EndFor
+    \State \Return best placement found
+  \end{algorithmic}
+\end{algorithm}
+
+\textbf{Candidate feature vector.}\
+Each candidate move $m$ (relocate task $i$ to core $c$) is described by a
+9-dimensional feature vector $\phi(m)$:
+
+\begin{enumerate}
+  \item \texttt{in\_bottleneck}: $\mathbf{1}[\text{task } i \in \text{stage } k^*]$
+  \item \texttt{is\_vva}: $\mathbf{1}[\text{task } i \text{ is a VVA core}]$
+  \item \texttt{task\_weight}: normalized arithmetic operations of task~$i$
+  \item \texttt{stage\_task\_fraction}: task ops $\div$ stage total ops
+  \item \texttt{predecessor\_hops\_delta}: net hop reduction to predecessors
+  \item \texttt{successor\_hops\_delta}: net hop reduction to successors
+  \item \texttt{weighted\_hops\_delta}: traffic-weighted hop reduction
+  \item \texttt{same\_chip\_delta}: net change in co-chip predecessor/successor count
+  \item \texttt{proxy\_gain}: approximate routed communication reduction
+\end{enumerate}
+
+The bandit network is a 2-layer MLP (hidden width 128, ReLU) with a scalar
+output head initialized to zero.  The zero initialization guarantees that the
+frozen control (identical architecture, no gradient updates) begins as exactly
+uniform selection.
+
+\textbf{Frozen control.}\
+For every trained run there is a paired ``frozen control'' run using the same
+binary, seed, candidate pools, annealing schedule, and evaluation budget, with
+gradient updates disabled (\texttt{--ppo\_asa\_disable\_learning}).  The frozen
+control's zero-initialized head selects moves uniformly.  This isolates the
+causal effect of learned scoring from all other sources of variance.
+
+\textbf{Design rationale.}\
+The bandit formulation is better suited than PPO here because (i) the
+improvement target is the \emph{immediate} cost change $\Delta_t$, so no
+temporal credit assignment is needed; (ii) a single true-objective evaluation
+per step provides direct supervision at no extra cost; and (iii) $\varepsilon$-
+greedy with $\varepsilon_{\min}=0.5$ maintains sufficient exploration throughout
+the run.
+
+% =============================================================================
+\section{Experimental Setup}
+\label{sec:setup}
+% =============================================================================
+
+\subsection{Hardware and Compute}
+
+All training runs were executed on Kaggle notebooks with two NVIDIA T4 GPUs
+(16~GB each).  Neural networks are dispatched to GPU; all environment, routing,
+collision-handling, and process-orchestration logic runs on CPU.  Local
+validation runs used AMD/Intel CPU nodes (PyTorch 2.14.0+cpu,
+torchvision 0.29.0+cpu).
+
+\subsection{Workloads and Regions}
+
+We evaluate CB-SA on three workload$\times$region combinations:
+\begin{itemize}
+  \item AlexNet-FC (932 tasks, 1,024-core region on four chips)
+  \item AlexNet-CONV (183 tasks, 256-core region on one chip)
+  \item VGG16-FC (1,924 tasks)
+\end{itemize}
+All experiments use \texttt{--timing\_model paper\_pipeline},
+\texttt{--routing\_model paper\_xy}, and the paper's 4$\times$4 chip grid.
+
+\subsection{Budget and Methodology}
+
+Each trained and frozen-control run receives 100,001 objective evaluations
+(100,000 proposals plus initialization).  Each SA evaluation consumes exactly
+one true call to $L(P)$.  All paired conditions (trained vs.\ frozen) share the
+same seed, initial placement, candidate pool sizes, and temperature calibration.
+
+\textbf{Gate protocol.}\
+A staged, prespecified gate structure was used.  A short gate (20,001 evals,
+seed 0) must show a positive directional result before an extended gate
+(100,001 evals, seeds 0--2) is launched.  The extended gate must show mean
+improvement and wins in $\geq 2$ of 3 seeds.  Held-out seeds (3--5) are run
+exactly once on the frozen configuration after the extended gate passes.
+
+\textbf{Cross-workload transfer.}\
+No hyperparameter changes are made when moving from AlexNet-FC to AlexNet-CONV
+or VGG16-FC.  The frozen checkpoint trained on AlexNet-FC seeds 0--2 is used
+as-is for all transfer experiments.
+
+\subsection{Statistical Reporting}
+
+All intervals are exploratory paired two-sided $t$-intervals computed from per-
+seed improvement over the frozen control, reported as percentage relative
+improvement.  Sign-test $p$-values are exact two-sided.  We do not claim
+statistical significance; the terms ``positive result'' and ``wins'' refer to
+direction only.
+
+% =============================================================================
+\section{Negative Results: DDPG and PPO-Based Methods}
+\label{sec:ablations}
+% =============================================================================
+
+\subsection{Paper DDPG (Continuous Actor)}
+
+A 3,000-placement AlexNet-CONV run (Kaggle, two T4 GPUs) produced a trained
+best cost of $37.636\,\mu$s versus $37.447\,\mu$s for the matched untrained
+exploration control, a $0.50\%$ \emph{loss} for training.  Key diagnostics:
+${\approx}176/183$ actions required collision repair per placement;
+the deterministic policy saturated to $<$10 unique intended core positions;
+critic loss reached $\approx 1.48 \times 10^{12}$.  These symptoms are
+consistent with the deadlock failure mode of DDPG in deterministic sparse-reward
+environments documented by \citet{matheron2019ddpg}.
+
+A subsequent five-seed guided DDPG experiment (3,000 placements per condition,
+independent seeded replay streams) produced mean late deterministic costs of
+$39.086\,\mu$s trained vs.\ $38.732\,\mu$s control across all five seeds---
+training lost all five pairs.  Guided DDPG is retained as a validated negative
+ablation.
+
+\subsection{Masked Categorical PPO (CONV Only)}
+
+Five-seed AlexNet-CONV masked PPO (3,000 placements per condition) showed
+$6.06\%$ aggregate improvement in late deterministic latency versus the frozen
+policy ($42.61\,\mu$s vs.\ $45.36\,\mu$s, exploratory paired interval
+$[1.10, 4.40]\,\mu$s, entirely above zero).  However, this improvement is over
+a frozen initial policy that does not optimize---the \emph{best retained
+placement} improved only $1.26\%$ over the frozen control ($39.999\,\mu$s
+vs.\ $40.509\,\mu$s), indicating that random exploration still contributes most
+of the optimizer quality.  A subsequent three-seed AlexNet-FC run
+\emph{tied} the frozen control, ruling out scaled deployment.
+
+\subsection{PPO-Guided ASA}
+
+Seven separate PPO-ASA variants were tested on AlexNet-FC under budgets ranging
+from 4,101 to 1.25~million proposals (Table~\ref{tab:ppo-asa}).
+
+\begin{table}[htbp]
+  \caption{PPO-guided ASA AlexNet-FC summary (all exploratory, one-seed
+           unless stated).}
+  \label{tab:ppo-asa}
+  \centering
+  \small
+  \begin{tabular}{lrrr}
+    \toprule
+    Configuration & Budget & Best cost ($\mu$s) & vs.\ control \\
+    \midrule
+    4,101-eval gate       & 4,101    & 23.560 & $-0.593\%$ \\
+    Focused-extended PPO  & 4,101    & 23.779 & $-0.083\%$ \\
+    5-seed deployment     & 4,101    & 23.516 & $+0.006\%$ \\
+    1,250-epoch gate      & 1.25M    & 23.503 & $+0.020\%$ \\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.5ex}
+  \small{\textit{Positive values indicate improvement over frozen control.
+  None of these results justify scaling.}}
+\end{table}
+
+Across all seven variants the trained PPO-ASA policy either lost to or tied the
+frozen uniform control.  Analysis shows that PPO's entropy collapses toward
+uniform ($H \to \ln K = \ln 16 \approx 2.773$) under the RL objective while
+value estimation adds instability; the improvement-only oracle ranking showed
+that 84.61\% of candidate proposals are objective-neutral, leaving very little
+informative signal for a learned scorer.
+
+\subsection{Oracle-Supervised Candidate Ranking}
+
+We trained a listwise supervised ranker on oracle-labeled candidate pools
+(pools of 16 legal moves each labeled with exact cost changes).  The first
+random-split validation achieved 86\% oracle-advantage capture on held-out
+pools, but this used a leaky train/validation boundary (correlated adjacent
+annealing steps could cross the split).
+
+After enforcing trajectory-safe chain-level splits (10 independently restarted
+chains; chains 5 and 7 held out), validation oracle capture fell to 3.36\%,
+consistent with a null result.  A second trajectory-safe gate with an
+improvement-only target and 20 complete 4,100-proposal chains captured 7.03\%
+of improvement-only oracle headroom in the prespecified late half (chain
+bootstrap 95\% interval $[4.28\%, 9.81\%]$), passing the hit-rate-ratio and
+positive-chain criteria but failing all three capture thresholds.  This result
+confirms a weak transferable deterministic ranking signal while
+rejecting it as a deployed stochastic proposal policy.
+
+% =============================================================================
+\section{Contextual-Bandit SA: Results}
+\label{sec:results}
+% =============================================================================
+
+\subsection{AlexNet-FC: Development and Held-Out Seeds}
+
+\textbf{Short gate (seed 0, 20,001 evals).}\
+Signed-target CB-SA reached $2.446\,\mu$s vs.\ $2.449\,\mu$s for the frozen
+control ($+0.124\%$), passing the directional criterion.
+
+\textbf{Extended gate (seeds 0--2, 100,001 evals each).}\
+After correcting an epsilon-decay bug (epsilon was stopping at 0.75 instead of
+0.50 due to using replay-length rather than total-observation count), the
+corrected rerun produced per-seed improvements of $+0.007\%$, $+2.516\%$, and
+$-0.532\%$, with $+0.664\%$ mean.  The method wins 2 of 3 seeds, passing the
+prespecified directional gate.
+
+\textbf{Held-out test (seeds 3--5, frozen configuration).}\
+The CB-SA method (all hyperparameters frozen after the extended gate) was run on
+three previously unused seeds.  Results are summarized in
+Table~\ref{tab:alexnet-fc-holdout}.
+
+\begin{table}[htbp]
+  \caption{AlexNet-FC held-out seeds 3--5 (100,001 evals per condition).}
+  \label{tab:alexnet-fc-holdout}
+  \centering
+  \begin{tabular}{lrrr}
+    \toprule
+    Method & Mean best ($\mu$s) & vs.\ frozen & vs.\ fixed SA \\
+    \midrule
+    CB-SA (trained)      & 2.207 & $+1.965\%$ & $+0.669\%$ \\
+    Frozen control       & 2.251 & --- & --- \\
+    Fixed SA             & 2.222 & --- & --- \\
+    ASA                  & 2.432 & --- & $-9.29\%$ \\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.5ex}
+  \small{\textit{Paired 95\% t-interval vs.\ frozen control:
+  $[1.008\%, 2.922\%]$.  CB-SA wins all 3 of 3 held-out seeds.}}
+\end{table}
+
+Across all six epsilon-corrected seeds (0--5), CB-SA beats the frozen control
+in 5/6 pairs with $+1.314\%$ mean improvement; the combined interval
+$[-0.024\%, 2.653\%]$ narrowly includes zero because seeds 0--2 were more
+variable.
+
+\begin{remark}
+  The held-out test is not a pre-registered confirmatory test: the method was
+  developed on the same DNN graph (AlexNet-FC), and three seeds do not
+  constitute a new statistical instance.  It is a stronger form of exploratory
+  evidence than the development seeds.
+\end{remark}
+
+\subsection{AlexNet-CONV: Transfer (Convergence Tie)}
+
+The CB-SA method was transferred without any hyperparameter changes to
+AlexNet-CONV (183 tasks, 256-core one-chip region).  In the short gate (20,001
+evals, seed 0), CB-SA reached $37.021\,\mu$s, improving over frozen control
+by $1.136\%$, fixed SA by $2.246\%$, and ASA by $4.394\%$.
+
+However, in the three-seed extension (100,001 evals each), all three methods---
+CB-SA, frozen control, and fixed SA---converged to the same minimum of
+$37.021\,\mu$s.  Table~\ref{tab:conv-seeds} shows the convergence checkpoints.
+
+\begin{table}[htbp]
+  \caption{AlexNet-CONV 3-seed extended gate: convergence to shared
+           $37.021\,\mu$s floor.}
+  \label{tab:conv-seeds}
+  \centering
+  \begin{tabular}{lrrr}
+    \toprule
+    Method & Seed 0 ($\mu$s) & Seed 1 ($\mu$s) & Seed 2 ($\mu$s) \\
+    \midrule
+    CB-SA trained    & 37.021 & 37.021 & 37.021 \\
+    Frozen control   & 37.021 & 37.021 & 37.021 \\
+    Fixed SA         & 37.021 & 37.021 & 37.021 \\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.5ex}
+  \small{\textit{Mean best-trajectory advantage of CB-SA over frozen control:
+  $0.357\%$ (interval crosses zero).  The short-gate lead was an early-
+  convergence effect, not a final-quality improvement.}}
+\end{table}
+
+This result shows that on compute-bound CONV instances where all methods
+quickly reach the same minimum, the bandit accelerates early exploration but
+contributes no advantage at the final quality level.
+
+\subsection{VGG16-FC: Cross-Workload Transfer}
+
+VGG16-FC is a harder instance: 1,924 tasks over a larger chip region.  We ran
+the unchanged frozen configuration (trained on AlexNet-FC seeds 0--2) directly.
+
+\textbf{Short gate (seed 0, 20,001 evals).}\
+CB-SA: $4.591\,\mu$s, frozen control: $4.677\,\mu$s ($+1.834\%$).
+
+\textbf{Extended gate (seeds 0--2, 100,001 evals).}\
+CB-SA beat the frozen control in all three seeds by $+1.729\%$, $+2.593\%$,
+and $+2.444\%$ respectively.  Mean improvement: $+2.255\%$; paired 95\%
+t-interval: $[1.107\%, 3.403\%]$.
+
+\textbf{Genuinely new seeds 3--5 (100,001 evals each).}\
+Table~\ref{tab:vgg16-fc-all} reports all six seeds.
+
+\begin{table}[htbp]
+  \caption{VGG16-FC all six seeds: CB-SA vs.\ frozen focused-uniform control.}
+  \label{tab:vgg16-fc-all}
+  \centering
+  \begin{tabular}{lrr}
+    \toprule
+    Seed & CB-SA best ($\mu$s) & Control best ($\mu$s) \\
+    \midrule
+    0 & 4.591 & 4.677 \\
+    1 & 4.561 & 4.683 \\
+    2 & 4.572 & 4.685 \\
+    3 & 4.570 & 4.648 \\
+    4 & 4.575 & 4.651 \\
+    5 & 4.591 & 4.665 \\
+    \midrule
+    Mean & 4.577 & 4.668 \\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.5ex}
+  \small{\textit{CB-SA wins all 6/6 seeds.  Mean improvement:
+  $\mathbf{1.946\%}$.  Paired 95\% t-interval: $[1.362\%, 2.530\%]$.
+  Exact sign-test $p = 0.031$ (descriptive only; seeds 0--2 preceded
+  seeds 3--5).  CB-SA vs.\ ASA: $+4.605\%$ (6/6 wins).
+  CB-SA vs.\ fixed SA: $+0.515\%$ (4/6 wins; interval $[-0.200\%, 1.230\%]$
+  crosses zero).}}
+\end{table}
+
+\subsection{Attribution Note}
+
+The frozen control isolates the effect of learned vs.\ uniform candidate
+scoring within the same pool architecture.  It does \emph{not} isolate learned
+scoring from the hand-built \texttt{proxy\_gain} feature, nor from the 50\%
+bottleneck-focused pool itself.  Plain fixed SA uses a different (unconstrained)
+proposal neighborhood and different temperature calibration.  The supported
+claims are:
+
+\begin{enumerate}
+  \item CB-SA improves over the focused-uniform control by ${\sim}2\%$ on
+        two FC workloads under matched true-objective-call budgets.
+  \item This improvement does not extend to the AlexNet-CONV compute-dominated
+        instance at the extended budget.
+  \item CB-SA is not claimed to be superior to the best non-learned heuristic
+        or to be broadly generalizable without further cross-workload evidence.
+\end{enumerate}
+
+% =============================================================================
+\section{Reproduction Gap Analysis}
+\label{sec:repro-gap}
+% =============================================================================
+
+\subsection{Full-Budget Baseline Calibration}
+\label{sec:calib}
+
+The paper reports AlexNet-FC BS-normalized ratios of approximately 0.59 (RS)
+and 0.50 (fixed SA).  We ran one million proposals per method on AlexNet-FC at
+the default 1 VVA op/cycle (revision \texttt{80aec4f}):
+
+\begin{table}[htbp]
+  \caption{AlexNet-FC full-budget calibration (1M proposals each, seed 0,
+           1 VVA op/cycle).}
+  \label{tab:calib}
+  \centering
+  \begin{tabular}{lrrr}
+    \toprule
+    Method & Best cost ($\mu$s) & BS ratio & Paper target \\
+    \midrule
+    BS (sequential) & 24.920 & 1.000 & 1.000 \\
+    RS              & 23.937 & 0.961 & ${\approx}0.59$ \\
+    Fixed SA        & 22.704 & 0.911 & ${\approx}0.50$ \\
+    ASA             & 23.093 & 0.927 & --- \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The reconstructed compute-only floor is $22.4\,\mu$s ($0.899 \times$ BS),
+meaning no placement algorithm can reach the paper's ${\approx}0.50$ ratio under
+this evaluator---the theoretical minimum is already above the paper target.
+
+\subsection{VVA Throughput Sensitivity}
+
+The paper publishes 128 MACs/VMM cycle but does not state the VVA
+accumulation rate.  We swept VVA rates $\{1, 8, 16, 32, 64, 128\}$~ops/cycle
+using rate-one AlexNet-FC grids held fixed (a pure timing sensitivity, not
+a grid change).  Results at execution rate 16 (1M proposals, seed 0):
+
+\begin{table}[htbp]
+  \caption{AlexNet-FC fixed-grid VVA sensitivity: rate 16 ops/cycle.}
+  \label{tab:vva}
+  \centering
+  \begin{tabular}{lrr}
+    \toprule
+    Method & Best cost ($\mu$s) & BS ratio \\
+    \midrule
+    BS              & 3.920  & 1.000 \\
+    RS              & 3.072  & 0.784 \\
+    Fixed SA        & 2.051  & 0.523 \\
+    ASA             & 2.395  & 0.611 \\
+    \bottomrule
+  \end{tabular}
+  \vspace{0.5ex}
+  \small{\textit{Fixed SA at 0.523 is close to the paper's ${\approx}0.50$.
+  RS at 0.784 vs.\ paper ${\approx}0.59$ remains a gap.}}
+\end{table}
+
+At rate 16, fixed SA achieves $0.523 \times$ BS, approaching the paper's
+reported SA ratio.  Rate 8 (transitional, no grid change) gives SA/BS = 0.661.
+Rates $\geq 32$ saturate in a communication-dominated regime and produce
+non-monotonic results.
+
+\textbf{Interpretation.}\
+Rate 16 with rate-one grids is a \emph{conditional} sensitivity result, not a
+recovered hardware fact.  The paper provides no basis for selecting any specific
+VVA rate.  Using the favorable rate to rescale results would be post-hoc
+calibration.  Instead, we freeze the rate-one configuration for all CB-SA
+experiments and report absolute $\mu$s values alongside BS-normalized ratios.
+
+\subsection{Logical-Index Ordering Sensitivity}
+
+The paper describes BS as sequential chip-major physical placement but does not
+publish the numbering of VMM and VVA logic cores.  Changing from
+output-group-interleaved numbering to all-VMM-then-VVA increased BS from
+$3.920\,\mu$s to $9.92\,\mu$s while RS changed only from $3.14\,\mu$s to
+$3.22\,\mu$s, shifting RS/BS from $0.80$ to $0.32$.  This confirms that
+BS-normalized ratios depend critically on an unpublished convention; all
+experiments in this paper fix one declared ordering and compare methods under
+it.
+
+% =============================================================================
+\section{Discussion}
+\label{sec:discussion}
+% =============================================================================
+
+\textbf{Why CB-SA, not PPO-ASA.}\
+The contextual-bandit formulation avoids PPO's two known failure modes on this
+problem.  First, the immediate cost change $\Delta_t$ is a natural, low-noise
+training target; no value estimation or $n$-step return accumulation is needed.
+Second, the bandit does not depend on the exact annealing temperature trajectory
+for credit assignment, making it robust to cooling-schedule variations.
+
+\textbf{Why fixed SA, not adaptive SA.}\
+The CB-SA adaptive variant (\texttt{bandit+asa}) was tested and failed: it was
+$7.40\%$ worse than plain ASA and $10.33\%$ worse than fixed SA on the short
+gate.  The root cause is that adaptive temperature feedback changes the
+acceptance distribution seen by the bandit, making the reward surface
+non-stationary.  Fixed SA's deterministic temperature trajectory keeps the
+bandit's training target stationary.
+
+\textbf{Compute-bound vs.\ communication-bound instances.}\
+AlexNet-CONV (183 tasks on 256 cores, one chip) is compute-dominated: the
+bottleneck is VVA computation at the assumed rate, which is placement-
+independent.  All methods converge to the same $37.021\,\mu$s floor.  AlexNet-FC
+and VGG16-FC are larger (932 and 1,924 tasks on multi-chip regions) with
+significant inter-chip communication; placement reorders traffic, and the bandit
+can learn to prefer moves that reduce bottleneck communication.
+
+\textbf{Scope of contribution.}\
+The 2\% improvement over the focused-uniform control is a real and reproducible
+signal on two FC workloads.  It is not yet a claim of superiority over the best
+non-learned heuristic (the fixed-SA interval crosses zero), and it does not
+extrapolate to the paper's $50\%$ BS reduction.  The reconstruction gap documented
+in \S\ref{sec:repro-gap} must be resolved---through a confirmed VVA rate and
+corrected BS convention---before any absolute comparison with Wu~et~al.\ is
+possible.
+
+% =============================================================================
+\section{Limitations and Future Work}
+\label{sec:limitations}
+% =============================================================================
+
+\begin{enumerate}
+  \item \textbf{VVA throughput unknown.}\ All results at the rate-one default
+        are conditional on this assumption.  Confirming the VVA rate from the
+        cited accelerator datasheets or Wu~et~al.\ code release is the single
+        most impactful open task.
+
+  \item \textbf{Logical-index ordering.}\ BS normalization is unstable across
+        reasonable orderings.  Future work should ablate multiple orderings and
+        report absolute latency as the primary metric.
+
+  \item \textbf{Single fixed DNN instance per workload.}\ All experiments
+        optimize one fixed graph per workload.  Training across multiple
+        workloads (multi-task learning) could improve generalization.
+
+  \item \textbf{Missing simulator elements.}\ Activation-buffer stalls,
+        router startup overhead, exact GRS multicast, and
+        compute/communication overlap are not modeled.  Any of these could
+        shift absolute latency values.
+
+  \item \textbf{Confirmatory study required.}\ The current six-seed VGG16-FC
+        and three-seed held-out AlexNet-FC results are exploratory.  A
+        pre-registered 20-seed cross-workload study using ResNet50 would
+        constitute a statistically well-powered confirmatory test.
+
+  \item \textbf{Feature attribution.}\ The proxy-gain baseline control would
+        isolate whether learned features add value beyond the hand-crafted
+        \texttt{proxy\_gain} feature alone.  This control was identified but
+        not yet run.
+\end{enumerate}
+
+% =============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+% =============================================================================
+
+We have presented an independent open-source reconstruction of the Wu~et~al.\
+multi-chip DNN core-placement framework and documented a systematic investigation
+of learned placement methods under this evaluator.  Continuous DDPG, guided
+DDPG, masked PPO, PPO-guided ASA, and oracle-supervised candidate ranking all
+either fail to improve over their matched baselines or yield statistically
+inconclusive results.
+
+Contextual-bandit-guided fixed SA (CB-SA) is the first method in this study to
+produce consistent positive results: it beats a matched frozen-uniform control
+in 3/3 held-out AlexNet-FC seeds by $1.965\%$ (95\% interval $[1.008\%,
+2.922\%]$) and in 6/6 VGG16-FC seeds by $1.946\%$ (95\% interval
+$[1.362\%, 2.530\%]$).  On compute-dominated AlexNet-CONV all methods converge
+to the same minimum, with the bandit offering early-convergence acceleration
+only.
+
+We also document a quantitative reproduction gap: the reconstructed evaluator's
+compute floor precludes reaching the paper's reported ${\sim}50\%$ BS ratio at
+the default VVA rate.  A fixed-grid sweep shows this gap closes at 16~VVA
+ops/cycle, providing a conditional path to quantitative reproduction pending
+hardware confirmation.
+
+The complete codebase, run archives, and analysis scripts are available at
+\url{https://github.com/micskrcb/DNN_MAPPING} (branch: \texttt{minimalist}).
+
+% =============================================================================
+\appendix
+% =============================================================================
+
+\section{Experiment Archive Integrity}
+\label{app:integrity}
+
+Every reported result corresponds to a unique git revision and a SHA-256
+archive hash.  Key archive hashes for CB-SA:
+
+\begin{table}[htbp]
+  \caption{CB-SA run archive SHA-256 hashes (first 16 hex digits shown).}
+  \label{tab:hashes}
+  \centering
+  \small
+  \begin{tabular}{llp{4.5cm}}
+    \toprule
+    Experiment & Revision & Archive SHA-256 (prefix) \\
+    \midrule
+    Signed-target short gate  & \texttt{a52c073} & \texttt{e84ce397dd464399} \\
+    Extended gate (eps-fixed)  & \texttt{0608cf0} & \texttt{8da3ae0c743abdec} \\
+    AlexNet-FC held-out 3--5  & \texttt{073f003} & \texttt{e229999cba4d9ed8} \\
+    AlexNet-CONV transfer     & \texttt{cedf929} & \texttt{fa0fb4aff3b2e746} \\
+    VGG16-FC short gate       & \texttt{40f60e9} & \texttt{9d29cbafcd59b3cb} \\
+    VGG16-FC extended         & \texttt{6ab5a41} & \texttt{3e9f5874ebc704fe} \\
+    VGG16-FC seeds 3--5       & \texttt{bacc334} & \texttt{87e08605cc75b02e} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Gate Protocol Summary}
+\label{app:gates}
+
+\begin{enumerate}
+  \item \textbf{Short gate}: seed 0, 20,001 evals.  Pass criterion: positive
+        direction vs.\ frozen control.
+  \item \textbf{Extended gate}: seeds 0--2, 100,001 evals.  Pass criterion:
+        positive mean and $\geq 2/3$ wins.
+  \item \textbf{Held-out test}: seeds 3--5 (AlexNet-FC) or seeds 3--5
+        (VGG16-FC).  Run once on frozen configuration.
+  \item \textbf{Cross-workload transfer}: unchanged frozen configuration on new
+        workload, short gate then extended gate.
+\end{enumerate}
+
+No hyperparameters were changed after the AlexNet-FC extended gate.  The
+configuration is: $K=16$, 50\% bottleneck focus, signed target, $\alpha_{\text{lr}}=3{\times}10^{-4}$,
+entropy regularization $0.001$, $\varepsilon_{\min}=0.50$, linear decay.
+
+% =============================================================================
+%  Bibliography
+% =============================================================================
+\bibliographystyle{IEEEtran}
+\begin{thebibliography}{99}
+
+\bibitem{wu2020todaes}
+N.~Wu, Y.~Ding, S.~Han, and Y.~Shi,
+``Core Placement Optimization for Multi-chip Many-core Neural Network Systems
+  with Reinforcement Learning,''
+\emph{ACM Trans.\ Design Autom.\ Electron.\ Syst.\ (TODAES)},
+vol.~26, no.~1, pp.~1--24, Oct.\ 2020.
+DOI: \href{https://doi.org/10.1145/3418498}{10.1145/3418498}
+
+\bibitem{lillicrap2016ddpg}
+T.~P.~Lillicrap, J.~J.~Hunt, A.~Pritzel, N.~Heess, T.~Erez, Y.~Tassa,
+D.~Silver, and D.~Wierstra,
+``Continuous Control with Deep Reinforcement Learning,''
+in \emph{Proc.\ ICLR}, 2016.
+arXiv: \href{https://arxiv.org/abs/1509.02971}{1509.02971}
+
+\bibitem{matheron2019ddpg}
+G.~Matheron, N.~Perrin, and O.~Sigaud,
+``The Problem with DDPG: Understanding Failures in Deterministic Environments
+  with Sparse Rewards,''
+arXiv preprint arXiv:1911.11679, 2019.
+
+\bibitem{mirhoseini2021graphplacement}
+A.~Mirhoseini, A.~Goldie, M.~Yazgan, J.~Jiang, E.~Songhori, S.~Wang,
+Y.-J.~Lee, E.~Johnson, O.~Pathak, A.~Nova, J.~Seethi, A.~Tong, J.~Beutel,
+D.~Goldie, A.~Yazgan, J.~Gonzalez, and J.~Huang,
+``A Graph Placement Methodology for Fast Chip Design,''
+\emph{Nature}, vol.~594, pp.~207--212, 2021.
+
+\bibitem{shao2019simba}
+Y.~S.~Shao, J.~Clemons, R.~Venkatesan, B.~Zimmer, M.~Fojtik, N.~Jiang,
+B.~Keller, A.~Klinefelter, N.~Pinckney, P.~Raina, S.~Tell, Y.~Zhang,
+W.~J.~Dally, J.~Emer, C.~T.~Gray, B.~Khailany, and S.~W.~Keckler,
+``Simba: Scaling Deep-Learning Inference with Multi-Chip-Module-Based
+  Architecture,''
+in \emph{Proc.\ 52nd IEEE/ACM Int.\ Symp.\ Microarchitecture (MICRO)},
+pp.~14--27, 2019.
+
+\bibitem{rl_based_sa_2025}
+Y.~Lee, S.~Oh, and Y.~Kim,
+``Reinforcement Learning-Based Simulated Annealing for Electronic Design
+  Automation,''
+in \emph{Proc.\ AAMAS}, 2025.
+
+\bibitem{kirkpatrick1983sa}
+S.~Kirkpatrick, C.~D.~Gelatt, and M.~P.~Vecchi,
+``Optimization by Simulated Annealing,''
+\emph{Science}, vol.~220, no.~4598, pp.~671--680, 1983.
+
+\bibitem{bohachevsky1986sa}
+I.~O.~Bohachevsky, M.~E.~Johnson, and M.~L.~Stein,
+``Generalized Simulated Annealing for Function Optimization,''
+\emph{Technometrics}, vol.~28, no.~3, pp.~209--217, 1986.
+
+\bibitem{dulac2015wolpertinger}
+G.~Dulac-Arnold, R.~Evans, H.~van Hasselt, P.~Sunehag,
+T.~Lillicrap, J.~Hunt, T.~Mann, T.~Weber, T.~Degris, and B.~Coppin,
+``Deep Reinforcement Learning in Large Discrete Action Spaces,''
+arXiv preprint arXiv:1512.07679, 2015.
+
+\bibitem{nair2018demonstrations}
+A.~Nair, B.~McGrew, M.~Andrychowicz, W.~Zaremba, and P.~Abbeel,
+``Overcoming Exploration in Reinforcement Learning with Demonstrations,''
+in \emph{Proc.\ ICRA}, 2018.
+
+\bibitem{schulman2017ppo}
+J.~Schulman, F.~Wolski, P.~Dhariwal, A.~Radford, and O.~Klimov,
+``Proximal Policy Optimization Algorithms,''
+arXiv preprint arXiv:1707.06347, 2017.
+
+\bibitem{lattimore2020bandit}
+T.~Lattimore and C.~Szepesv{\'a}ri,
+\emph{Bandit Algorithms}.
+Cambridge University Press, 2020.
+
+\end{thebibliography}
+
+\end{document}
+% =============================================================================
+%  END OF DOCUMENT
+% =============================================================================
