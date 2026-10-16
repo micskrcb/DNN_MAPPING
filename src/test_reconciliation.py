@@ -15,6 +15,27 @@ import run_multi_chip as rm
 
 
 class TimingTests(unittest.TestCase):
+    @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
+    def test_proxy_guided_sa_is_training_free_across_supported_topologies(self):
+        graph = np.zeros((4, 4), dtype=np.float32)
+        graph[0, 1] = graph[0, 2] = graph[1, 3] = graph[2, 3] = 1.0
+        for topology in ("mesh", "torus"):
+            env = MultiChipEnvironment(
+                2, 1, 2, 2, task_graph=graph, num_tasks=4,
+                topology=topology)
+            metadata = {}
+            with contextlib.redirect_stdout(io.StringIO()):
+                result = rm.run_proxy_guided_sa(
+                    env, n_iter=40, candidate_count=4,
+                    focus_fraction=0.5, seed=17, metadata=metadata)
+            self.assertTrue(np.isfinite(result))
+            self.assertEqual(metadata["method"],
+                             "training_free_proxy_guided_fixed_sa")
+            self.assertTrue(metadata["unsupervised"])
+            self.assertFalse(metadata["requires_training_data"])
+            self.assertEqual(metadata["update_count"], 0)
+            self.assertEqual(metadata["total_objective_evaluations"], 41)
+
     def test_relative_cost_state_keeps_late_progress_distinct(self):
         self.assertEqual(rm.proposal_cost_state(100, 80, 70, "legacy_clipped"),
                          rm.proposal_cost_state(100, 40, 30, "legacy_clipped"))

@@ -1,5 +1,15 @@
 # Project state: paper-faithful DNN core placement
 
+## 2026-10-16: training-free portable Proxy-SA mode
+
+The tested proxy-greedy control is now exposed directly as `--algo proxy_sa`.
+It requires no labels, checkpoint, or gradient updates. A bounded portability
+runner compares it with matched-budget fixed SA and random search on AlexNet-FC
+paper mode, ResNet18 full-frame mode, and a custom CNN on torus hardware. Local
+validation passed all 46 tests and all three portability/accounting cases.
+See `PROXY_GUIDED_SA.md`; Kaggle results remain required before making a
+performance or generalization claim.
+
 Updated 2026-10-12.
 
 ## Goal and branch

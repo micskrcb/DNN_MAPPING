@@ -29,6 +29,7 @@ See [the residual-bandit protocol and run commands](docs/RESIDUAL_BANDIT.md).
 | Masked PPO | Implemented as an experimental exact legal-action policy with a paired frozen control |
 | PPO-guided ASA | Implemented as an experimental legal-neighbor proposal policy with fixed Metropolis acceptance, the existing ASA temperature controller, and a uniform frozen control |
 | Contextual-Bandit Fixed SA | Primary active method; shows positive matched-control evidence on tested workloads (further held-out and longer-budget confirmation is required) |
+| Proxy-guided fixed SA | Training-free first-class `--algo proxy_sa`; ranks legal neighbors by a communication-distance proxy and keeps exact SA acceptance |
 | Objective sensitivity preflight | Implemented; flat paper-mode objectives stop before long optimization |
 | 30 placements/epoch and paper search budgets | Explicitly accounted for by the paper runner |
 | XY routing and link contention | Reconstructed and implemented |
@@ -52,6 +53,7 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
 - `src/experiments/`: Standalone exploratory ablations (`run_compact_state_experiment.py`, `run_consistent_bn_experiment.py`, `run_multi_chip_fast.py`, `compare_algos.py`).
 - `tests/`: Smoke test suite (`test_multi_chip.py`) and 38-case regression suite (`test_reconciliation.py`). Runner: `tests/run_all_tests.py`.
 - `scripts/`: Production Kaggle/slurm automation scripts (`run_kaggle_*.sh`). Active: `run_kaggle_rl_fixed_sa_gate.sh`.
+- `docs/PROXY_GUIDED_SA.md`: Proxy-SA definition, portability contract, limitations, and test command.
 - `docs/`: Active documentation:
   - `docs/CODEBASE_GUIDE.md`: Comprehensive architecture, evaluator data flow, and contributor guide.
   - `docs/IMP_README.md`: Essential developer onboarding rules, branch hygiene, and execution guide.

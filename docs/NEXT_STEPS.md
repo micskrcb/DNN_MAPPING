@@ -1,5 +1,14 @@
 # Paper-reproduction execution plan
 
+## Immediate Proxy-SA portability gate
+
+1. Run `scripts/run_kaggle_proxy_sa_portability.sh` at its default 2,000-move
+   budget and inspect the ZIP summary.
+2. Continue with held-out seeds at a larger matched budget only on workloads
+   where Proxy-SA beats both fixed SA and random.
+3. Keep Proxy-SA as the strong training-free control for future learned
+   operator-selection work.
+
 The primary objective is an honest reproduction of Wu et al., *Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning*. Experimental improvements remain separate from paper-mode runs.
 
 The paper does not publish its simulator or every implementation parameter. Exact numerical reproduction therefore cannot be promised. Reports and the experiment manifest record all reconstructed choices.

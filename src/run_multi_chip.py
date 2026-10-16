@@ -4269,6 +4269,42 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     return best_cost
 
 
+def run_proxy_guided_sa(env: MultiChipEnvironment, n_iter: int = 100000,
+                        candidate_count: int = 16,
+                        focus_fraction: float = 0.5,
+                        focus_stage_slack: float = 0.05,
+                        epsilon_final: float = 0.25,
+                        seed: int = None, metadata: dict = None) -> float:
+    """Training-free proxy-ranked fixed SA.
+
+    Each step creates legal neighbors, ranks them by local communication
+    byte-hop reduction, samples with a decaying epsilon schedule, and applies
+    the ordinary fixed Metropolis rule to the exact configured objective.
+    No labels, checkpoint, pretrained weights, or gradient updates are used.
+    """
+    result = run_ppo_asa(
+        env, n_iter=n_iter, candidate_count=candidate_count,
+        rollout_steps=256, device="cpu", learning_rate=3e-4,
+        update_epochs=1, minibatch_size=1, hidden_dim=16,
+        disable_learning=True, proposal_learner="bandit",
+        bandit_control="proxy_greedy", bandit_epsilon_final=epsilon_final,
+        bandit_epsilon_decay_fraction=1.0,
+        bandit_exploration="epsilon_top_m",
+        bandit_top_m=min(4, candidate_count),
+        bandit_global_epsilon=0.05, bandit_feature_set="legacy9",
+        reward_mode="proposed_delta", focus_fraction=focus_fraction,
+        focus_stage_slack=focus_stage_slack, annealing_schedule="fixed",
+        seed=seed, metadata=metadata)
+    if metadata is not None:
+        metadata.update({
+            "method": "training_free_proxy_guided_fixed_sa",
+            "unsupervised": True,
+            "requires_training_data": False,
+            "proxy_definition": "local_communication_byte_hop_reduction",
+        })
+    return result
+
+
 def run_ddpg_guided(env: MultiChipEnvironment, n_episodes: int = 3000,
                     batch_size: int = 64, baseline_trials: int = 1000,
                     batch_z: int = 3, train_every: int = 1,
@@ -4922,15 +4958,24 @@ def run_sequential(env: MultiChipEnvironment) -> float:
 def main():
     parser = argparse.ArgumentParser(description="Multi-chip core placement")
     parser.add_argument("--algo", choices=["ddpg", "ddpg_guided", "ppo_masked",
-                                            "ppo_asa", "sa", "asa", "ddpg_asa",
+                                            "ppo_asa", "proxy_sa", "sa", "asa", "ddpg_asa",
                                             "random", "bs"],
                         default="ddpg",
                         help="Placement method; ddpg_guided uses ASA demonstrations, "
                              "legal top-k actions, episode-return replay and stable twin "
                              "critics; ppo_masked is an experimental exact legal-action "
                              "baseline; ppo_asa learns legal local proposals while keeping "
-                             "ASA acceptance and temperature control; ddpg remains the "
+                             "ASA acceptance and temperature control; proxy_sa is a "
+                             "training-free communication-guided fixed SA; ddpg remains the "
                              "paper-faithful baseline")
+    parser.add_argument("--proxy_sa_candidates", type=int, default=16,
+                        help="Legal neighbors ranked per proxy-guided SA step")
+    parser.add_argument("--proxy_sa_focus_fraction", type=float, default=0.5,
+                        help="Fraction of proxy-SA neighbors anchored near bottleneck stages")
+    parser.add_argument("--proxy_sa_focus_stage_slack", type=float, default=0.05,
+                        help="Relative stage-cost slack included in proxy-SA focus")
+    parser.add_argument("--proxy_sa_epsilon_final", type=float, default=0.25,
+                        help="Final exploration probability for proxy-guided SA")
     parser.add_argument("--chips_x", type=int, default=2)
     parser.add_argument("--chips_y", type=int, default=2)
     parser.add_argument("--rows", type=int, default=4, help="Rows per chip")
@@ -5293,6 +5338,14 @@ def main():
         parser.error("masked PPO sizes and update budgets must be positive")
     if args.ppo_asa_candidates < 2 or args.ppo_asa_rollout_steps <= 0:
         parser.error("PPO-ASA requires at least two candidates and a positive rollout")
+    if args.proxy_sa_candidates < 2:
+        parser.error("--proxy_sa_candidates must be at least 2")
+    if not 0 <= args.proxy_sa_focus_fraction <= 1:
+        parser.error("--proxy_sa_focus_fraction must be in [0,1]")
+    if not 0 <= args.proxy_sa_focus_stage_slack < 1:
+        parser.error("--proxy_sa_focus_stage_slack must be in [0,1)")
+    if not 0 <= args.proxy_sa_epsilon_final <= 1:
+        parser.error("--proxy_sa_epsilon_final must be in [0,1]")
     if not 0.0 <= args.ppo_asa_focus_fraction <= 1.0:
         parser.error("--ppo_asa_focus_fraction must be in [0, 1]")
     if not 0.0 <= args.ppo_asa_focus_stage_slack < 1.0:
@@ -5670,6 +5723,17 @@ def main():
             oracle_stride=args.ppo_asa_oracle_stride,
             oracle_dataset_path=args.ppo_asa_oracle_dataset,
             allow_finetune_loaded=args.ppo_asa_finetune_loaded)
+    elif args.algo == "proxy_sa":
+        algorithm_metadata = {}
+        print(f">> Proxy-SA budget: one initialization + {args.iters} "
+              f"evaluated proposals; {args.proxy_sa_candidates} legal candidates/step")
+        cost = run_proxy_guided_sa(
+            env, n_iter=args.iters,
+            candidate_count=args.proxy_sa_candidates,
+            focus_fraction=args.proxy_sa_focus_fraction,
+            focus_stage_slack=args.proxy_sa_focus_stage_slack,
+            epsilon_final=args.proxy_sa_epsilon_final,
+            seed=args.seed, metadata=algorithm_metadata)
     elif args.algo == "ddpg_asa":
         algorithm_metadata = {}
         print(f">> Hybrid budget: {complete_placements} DDPG placements + "
@@ -5719,6 +5783,10 @@ def main():
             limitations.append("ppo_masked is an experimental discrete policy, not the paper's original DDPG")
         if args.algo == "ppo_asa":
             limitations.append("ppo_asa is an experimental learned-neighbor extension, not the paper's original DDPG")
+        if args.algo == "proxy_sa":
+            limitations.append(
+                "proxy_sa is a training-free communication-proxy-guided fixed-SA "
+                "extension, not the paper's original SA or DDPG")
         if args.algo == "sa":
             limitations.append(
                 "the paper does not publish application-specific T0/Tend; "
@@ -5749,7 +5817,7 @@ def main():
                                 else algorithm_metadata["total_candidate_evaluations"]
                                 if args.algo in ("ddpg_guided", "ppo_masked")
                                 else algorithm_metadata["total_objective_evaluations"]
-                                if args.algo in ("ppo_asa", "sa", "asa")
+                                if args.algo in ("ppo_asa", "proxy_sa", "sa", "asa")
                                 else complete_placements + args.iters
                                 if args.algo == "ddpg_asa"
                                 else 1 if args.algo == "bs" else args.iters)
