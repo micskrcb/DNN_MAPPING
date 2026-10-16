@@ -35,6 +35,11 @@ seed. The next design should address this unstable/nonstationary credit signal,
 preferably with phase-conditioned or discounted operator values and explicit
 minimum exploration, while retaining Proxy-SA as the decisive control.
 
+That v2 design is now implemented: separate early/middle/late LinUCB models,
+0.995 evidence discount, 10% minimum exploration, and a confidence-bounded
+Proxy-SA fallback. All 47 tests and a 129-call CLI accounting smoke pass. Its
+real-placement performance has not yet been measured.
+
 Updated 2026-10-12.
 
 ## Goal and branch

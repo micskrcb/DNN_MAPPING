@@ -4281,6 +4281,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
 def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
                            proxy_candidates: int = 8,
                            ucb_alpha: float = 0.5,
+                           discount: float = 0.995,
+                           minimum_exploration: float = 0.10,
+                           phase_bins: int = 3,
                            disable_learning: bool = False,
                            seed: int = None, initial_acceptance: float = 0.8,
                            calibration_trials: int = 32,
@@ -4295,6 +4298,10 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     """
     if n_iter <= 0 or proxy_candidates < 2 or ucb_alpha < 0:
         raise ValueError("invalid operator-bandit SA configuration")
+    if not 0 < discount <= 1 or not 0 <= minimum_exploration <= 1:
+        raise ValueError("invalid operator-bandit discount/exploration")
+    if phase_bins <= 0:
+        raise ValueError("operator-bandit phase count must be positive")
     if not 0 < initial_acceptance < 1 or not 0 < final_temperature_ratio < 1:
         raise ValueError("invalid fixed-SA temperature configuration")
     rng = random.Random(0 if seed is None else int(seed))
@@ -4445,10 +4452,15 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
         -scale / math.log(initial_acceptance), np.finfo(float).eps)
     operators = ("proxy", "bottleneck", "swap", "relocation")
     dimension = 8
-    matrices = {name: np.eye(dimension) for name in operators}
-    targets = {name: np.zeros(dimension) for name in operators}
+    matrices = [{name: np.eye(dimension) for name in operators}
+                for _ in range(phase_bins)]
+    targets = [{name: np.zeros(dimension) for name in operators}
+               for _ in range(phase_bins)]
     counts = {name: 0 for name in operators}
+    phase_counts = [{name: 0 for name in operators}
+                    for _ in range(phase_bins)]
     reward_sums = {name: 0.0 for name in operators}
+    exploration_selections = proxy_fallback_selections = 0
     recent_acceptance = 0.0
     last_reward = 0.0
     stagnant = 0
@@ -4471,20 +4483,36 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             best_cost / max(current_cost, np.finfo(float).eps),
             last_reward, dominance,
         ], dtype=np.float64)
-        unseen = [name for name in operators if counts[name] == 0]
+        phase = min(phase_bins - 1, int(progress * phase_bins))
+        unseen = [name for name in operators if phase_counts[phase][name] == 0]
         if disable_learning:
             operator = operators[rng.randrange(len(operators))]
         elif unseen:
             operator = unseen[0]
+        elif rng.random() < minimum_exploration:
+            operator = operators[rng.randrange(len(operators))]
+            exploration_selections += 1
         else:
-            scores = {}
+            identity = np.eye(dimension)
+            scores, estimates, uncertainties = {}, {}, {}
             for name in operators:
-                inverse = np.linalg.inv(matrices[name])
-                estimate = targets[name] @ inverse @ context
+                matrices[phase][name] = (
+                    discount * matrices[phase][name] +
+                    (1.0 - discount) * identity)
+                targets[phase][name] *= discount
+                inverse = np.linalg.inv(matrices[phase][name])
+                estimate = targets[phase][name] @ inverse @ context
                 uncertainty = ucb_alpha * math.sqrt(
                     max(0.0, context @ inverse @ context))
+                estimates[name] = estimate
+                uncertainties[name] = uncertainty
                 scores[name] = estimate + uncertainty
             operator = max(scores, key=scores.get)
+            if (operator != "proxy" and
+                    estimates[operator] - uncertainties[operator] <=
+                    estimates["proxy"] + uncertainties["proxy"]):
+                operator = "proxy"
+                proxy_fallback_selections += 1
 
         candidate, changed, relocation = proposal(operator)
         old_cost = current_cost
@@ -4497,9 +4525,10 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
                   math.exp(-delta / max(temperature, np.finfo(float).eps)))
         finish(candidate, changed, relocation, new_cost, accept)
         if not disable_learning:
-            matrices[operator] += np.outer(context, context)
-            targets[operator] += reward * context
+            matrices[phase][operator] += np.outer(context, context)
+            targets[phase][operator] += reward * context
         counts[operator] += 1
+        phase_counts[phase][operator] += 1
         reward_sums[operator] += reward
         last_reward = reward
         stagnant = 0 if new_cost < old_best else stagnant + 1
@@ -4512,13 +4541,20 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     env.place(best_placement)
     if metadata is not None:
         metadata.update({
-            "method": "contextual_operator_bandit_fixed_sa",
+            "method": "phase_discounted_operator_bandit_fixed_sa_v2",
             "learning_enabled": not disable_learning,
             "unsupervised_online_learning": True,
             "operators": list(operators),
             "operator_selection_counts": counts,
+            "phase_operator_selection_counts": phase_counts,
             "operator_reward_sums": reward_sums,
             "ucb_alpha": ucb_alpha,
+            "discount": discount,
+            "minimum_exploration": minimum_exploration,
+            "phase_bins": phase_bins,
+            "exploration_selections": exploration_selections,
+            "proxy_fallback_selections": proxy_fallback_selections,
+            "proxy_fallback_rule": "nonproxy_lcb_exceeds_proxy_ucb",
             "proxy_candidates": proxy_candidates,
             "initial_cost": initial_cost,
             "best_cost": best_cost,
@@ -5245,6 +5281,12 @@ def main():
                         help="Cheap neighbors ranked by the proxy operator")
     parser.add_argument("--operator_sa_ucb_alpha", type=float, default=0.5,
                         help="LinUCB exploration strength for move-operator selection")
+    parser.add_argument("--operator_sa_discount", type=float, default=0.995,
+                        help="Recent-evidence discount for phase-specific operator models")
+    parser.add_argument("--operator_sa_minimum_exploration", type=float, default=0.10,
+                        help="Minimum uniform operator-exploration probability")
+    parser.add_argument("--operator_sa_phase_bins", type=int, default=3,
+                        help="Independent early/middle/late operator models")
     parser.add_argument("--operator_sa_disable_learning", action="store_true",
                         help="Select move operators uniformly as a matched control")
     parser.add_argument("--chips_x", type=int, default=2)
@@ -5621,6 +5663,12 @@ def main():
         parser.error("--operator_sa_proxy_candidates must be at least 2")
     if args.operator_sa_ucb_alpha < 0:
         parser.error("--operator_sa_ucb_alpha must be nonnegative")
+    if not 0 < args.operator_sa_discount <= 1:
+        parser.error("--operator_sa_discount must be in (0,1]")
+    if not 0 <= args.operator_sa_minimum_exploration <= 1:
+        parser.error("--operator_sa_minimum_exploration must be in [0,1]")
+    if args.operator_sa_phase_bins <= 0:
+        parser.error("--operator_sa_phase_bins must be positive")
     if not 0.0 <= args.ppo_asa_focus_fraction <= 1.0:
         parser.error("--ppo_asa_focus_fraction must be in [0, 1]")
     if not 0.0 <= args.ppo_asa_focus_stage_slack < 1.0:
@@ -6017,6 +6065,9 @@ def main():
             env, n_iter=args.iters,
             proxy_candidates=args.operator_sa_proxy_candidates,
             ucb_alpha=args.operator_sa_ucb_alpha,
+            discount=args.operator_sa_discount,
+            minimum_exploration=args.operator_sa_minimum_exploration,
+            phase_bins=args.operator_sa_phase_bins,
             disable_learning=args.operator_sa_disable_learning,
             seed=args.seed, metadata=algorithm_metadata)
     elif args.algo == "ddpg_asa":

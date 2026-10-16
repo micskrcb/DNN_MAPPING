@@ -7,9 +7,8 @@ and a custom torus CNN. Proxy-SA was competitive but not uniformly superior.
 
 1. The 20,000-evaluation gate is complete and failed advancement on both
    workloads; do not run unchanged seeds 3 and 4.
-2. Replace the unstable full-context LinUCB credit model with a bounded,
-   phase-aware/discounted operator learner that preserves minimum exploration
-   and treats Proxy-SA as the default arm. Re-run the same three-seed gate.
+2. The bounded phase-aware/discounted v2 learner is implemented. Re-run the
+   same three-seed gate at 20,000 evaluations without changing its criteria.
 3. Advance only a workload meeting the recorded 2/3-win and 1%-over-proxy
    criteria, then run untouched seeds 3 and 4.
 4. Scale a confirmed method to 100,000 evaluations before any paper-scale

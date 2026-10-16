@@ -15,6 +15,13 @@ SA still applies the Metropolis rule, so the search continues when the bandit
 chooses a poor move. This is online unsupervised learning: it needs no dataset,
 pretraining, or checkpoint.
 
+After the first 20,000-call gate exposed unstable global operator credit, the
+active v2 keeps separate early/middle/late models, discounts stale evidence by
+0.995, guarantees 10% uniform exploration, and defaults to the proxy operator
+unless another operator's lower confidence bound exceeds the proxy's upper
+confidence bound. These settings are configurable with `--operator_sa_discount`,
+`--operator_sa_minimum_exploration`, and `--operator_sa_phase_bins`.
+
 `--operator_sa_disable_learning` selects operators uniformly and is the matched
 control. Proxy-SA, fixed SA, and random search remain mandatory controls. Run
 the three-seed 20,000-evaluation gate with:
