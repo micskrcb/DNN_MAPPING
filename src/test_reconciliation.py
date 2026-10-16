@@ -15,6 +15,27 @@ import run_multi_chip as rm
 
 
 class TimingTests(unittest.TestCase):
+    def test_operator_bandit_sa_has_exact_budget_and_uniform_control(self):
+        graph = np.zeros((5, 5), dtype=np.float32)
+        graph[0, 1] = graph[0, 2] = graph[1, 3] = graph[2, 3] = 2.0
+        graph[3, 4] = 3.0
+        for disabled in (False, True):
+            env = MultiChipEnvironment(
+                2, 1, 2, 2, task_graph=graph, num_tasks=5)
+            metadata = {}
+            with contextlib.redirect_stdout(io.StringIO()):
+                result = rm.run_operator_bandit_sa(
+                    env, n_iter=48, proxy_candidates=4,
+                    disable_learning=disabled, seed=23, metadata=metadata)
+            self.assertTrue(np.isfinite(result))
+            self.assertEqual(metadata["total_objective_evaluations"], 49)
+            self.assertEqual(sum(metadata["operator_selection_counts"].values()),
+                             16)
+            self.assertEqual(set(metadata["operator_selection_counts"]),
+                             {"proxy", "bottleneck", "swap", "relocation"})
+            self.assertEqual(metadata["learning_enabled"], not disabled)
+            self.assertEqual(metadata["update_count"], 0 if disabled else 16)
+
     @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
     def test_proxy_guided_sa_is_training_free_across_supported_topologies(self):
         graph = np.zeros((4, 4), dtype=np.float32)

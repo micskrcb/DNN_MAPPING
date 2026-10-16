@@ -3016,10 +3016,19 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         topo.num_chips_x + topo.num_chips_y - 4)
 
     def proxy_latencies(source_cores, destination_cores):
-        on_hops = (np.abs(core_rows[source_cores] - core_rows[destination_cores]) +
-                   np.abs(core_cols[source_cores] - core_cols[destination_cores]))
-        chip_hops = (np.abs(chip_x[source_cores] - chip_x[destination_cores]) +
-                     np.abs(chip_y[source_cores] - chip_y[destination_cores]))
+        row_delta = np.abs(core_rows[source_cores] - core_rows[destination_cores])
+        col_delta = np.abs(core_cols[source_cores] - core_cols[destination_cores])
+        chip_x_delta = np.abs(chip_x[source_cores] - chip_x[destination_cores])
+        chip_y_delta = np.abs(chip_y[source_cores] - chip_y[destination_cores])
+        if topo.topology == "torus":
+            row_delta = np.minimum(row_delta, topo.rows_per_chip - row_delta)
+            col_delta = np.minimum(col_delta, topo.cols_per_chip - col_delta)
+            chip_x_delta = np.minimum(
+                chip_x_delta, topo.num_chips_x - chip_x_delta)
+            chip_y_delta = np.minimum(
+                chip_y_delta, topo.num_chips_y - chip_y_delta)
+        on_hops = row_delta + col_delta
+        chip_hops = chip_x_delta + chip_y_delta
         return (on_hops * topo.on_chip_latency +
                 chip_hops * topo.off_chip_latency)
 
@@ -4269,6 +4278,261 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     return best_cost
 
 
+def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
+                           proxy_candidates: int = 8,
+                           ucb_alpha: float = 0.5,
+                           disable_learning: bool = False,
+                           seed: int = None, initial_acceptance: float = 0.8,
+                           calibration_trials: int = 32,
+                           final_temperature_ratio: float = 1e-6,
+                           metadata: dict = None) -> float:
+    """Online contextual-bandit selection of fixed-SA move operators.
+
+    The bandit chooses among proxy-ranked, bottleneck-focused, random-swap,
+    and free-core relocation proposals.  Every step still makes exactly one
+    call to the real objective and uses the ordinary Metropolis rule.  Rewards
+    are signed proposed cost reductions, so rejected moves remain informative.
+    """
+    if n_iter <= 0 or proxy_candidates < 2 or ucb_alpha < 0:
+        raise ValueError("invalid operator-bandit SA configuration")
+    if not 0 < initial_acceptance < 1 or not 0 < final_temperature_ratio < 1:
+        raise ValueError("invalid fixed-SA temperature configuration")
+    rng = random.Random(0 if seed is None else int(seed))
+    n = env.num_tasks
+    placement = np.asarray(
+        rng.sample(env.allowed_cores.tolist(), n), dtype=np.int32)
+    env.place(placement)
+    current_cost = float(env.evaluate())
+    initial_cost = best_cost = current_cost
+    best_placement = placement.copy()
+    free_pool = _FreeCorePool(env.allowed_cores, placement)
+    try:
+        evaluator = IncrementalPipelineEvaluator(env)
+    except (TypeError, AttributeError):
+        evaluator = None
+
+    sources, destinations = np.nonzero(env.task_graph)
+    sources = sources.astype(np.int64, copy=False)
+    destinations = destinations.astype(np.int64, copy=False)
+    volumes = env.task_graph[sources, destinations].astype(np.float64, copy=False)
+    incident = [[] for _ in range(n)]
+    for edge, (source, destination) in enumerate(
+            zip(sources.tolist(), destinations.tolist())):
+        incident[source].append(edge)
+        incident[destination].append(edge)
+    topo = env.topo
+
+    def proxy_distance(left, right):
+        left, right = np.asarray(left), np.asarray(right)
+        left_chip = left // topo.cores_per_chip
+        right_chip = right // topo.cores_per_chip
+        left_local = left % topo.cores_per_chip
+        right_local = right % topo.cores_per_chip
+        row_delta = np.abs(left_local // topo.cols_per_chip -
+                           right_local // topo.cols_per_chip)
+        col_delta = np.abs(left_local % topo.cols_per_chip -
+                           right_local % topo.cols_per_chip)
+        chip_x_delta = np.abs(left_chip % topo.num_chips_x -
+                              right_chip % topo.num_chips_x)
+        chip_y_delta = np.abs(left_chip // topo.num_chips_x -
+                              right_chip // topo.num_chips_x)
+        if topo.topology == "torus":
+            row_delta = np.minimum(row_delta, topo.rows_per_chip - row_delta)
+            col_delta = np.minimum(col_delta, topo.cols_per_chip - col_delta)
+            chip_x_delta = np.minimum(
+                chip_x_delta, topo.num_chips_x - chip_x_delta)
+            chip_y_delta = np.minimum(
+                chip_y_delta, topo.num_chips_y - chip_y_delta)
+        return ((row_delta + col_delta) * topo.on_chip_latency +
+                (chip_x_delta + chip_y_delta) * topo.off_chip_latency)
+
+    def proxy_gain(candidate, changed):
+        edge_ids = sorted({edge for task in np.asarray(changed, dtype=int)
+                           for edge in incident[task]})
+        if not edge_ids:
+            return 0.0
+        edge_ids = np.asarray(edge_ids, dtype=np.int64)
+        src, dst, weight = (sources[edge_ids], destinations[edge_ids],
+                            volumes[edge_ids])
+        old = float(np.sum(weight * proxy_distance(
+            placement[src], placement[dst])))
+        new = float(np.sum(weight * proxy_distance(
+            candidate[src], candidate[dst])))
+        return (old - new) / max(abs(old), np.finfo(float).eps)
+
+    def bottleneck_tasks():
+        if evaluator is None:
+            return None
+        return evaluator.stages[int(np.argmax(evaluator.stage_costs))]
+
+    perturb = max(2 if n > 1 else 1, min(n, round(0.01 * n)))
+
+    def random_neighbor(anchor=None, allow_relocation=True):
+        return _placement_neighbor(
+            placement, perturb, free_pool if allow_relocation else None,
+            rng=rng, anchor_tasks=anchor)
+
+    def relocation_neighbor():
+        if not free_pool:
+            return random_neighbor()
+        anchors = bottleneck_tasks()
+        task = (int(anchors[rng.randrange(len(anchors))])
+                if anchors and rng.random() < 0.5 else rng.randrange(n))
+        candidate = placement.copy()
+        used_core = free_pool.choice(rng)
+        freed_core = int(candidate[task])
+        candidate[task] = used_core
+        return (candidate, np.asarray([task], dtype=np.int64),
+                (used_core, freed_core))
+
+    def proposal(operator):
+        if operator == "proxy":
+            choices = []
+            anchors = bottleneck_tasks()
+            for index in range(proxy_candidates):
+                item = random_neighbor(
+                    anchors if anchors and index < proxy_candidates // 2 else None)
+                choices.append((*item, proxy_gain(item[0], item[1])))
+            candidate, changed, relocation, _ = max(
+                choices, key=lambda item: item[3])
+            return candidate, changed, relocation
+        if operator == "bottleneck":
+            anchors = bottleneck_tasks()
+            return random_neighbor(anchors if anchors else None)
+        if operator == "swap":
+            return random_neighbor(allow_relocation=False)
+        return relocation_neighbor()
+
+    def evaluate(candidate, changed):
+        env.place(candidate)
+        return (evaluator.candidate_cost(changed) if evaluator is not None
+                else float(env.evaluate()))
+
+    accepted = improving = evaluations = 0
+    positive_deltas = []
+    calibration = min(n_iter, max(1, calibration_trials))
+
+    def finish(candidate, changed, relocation, new_cost, accept):
+        nonlocal placement, current_cost, best_cost, best_placement
+        nonlocal accepted, improving
+        if accept:
+            improving += int(new_cost < current_cost)
+            accepted += 1
+            placement, current_cost = candidate, new_cost
+            if evaluator is not None:
+                evaluator.accept()
+            if relocation is not None:
+                free_pool.accept_relocation(*relocation)
+            if new_cost < best_cost:
+                best_cost, best_placement = new_cost, candidate.copy()
+        else:
+            env.place(placement)
+            if evaluator is not None:
+                evaluator.reject()
+
+    for _ in range(calibration):
+        candidate, changed, relocation = random_neighbor()
+        new_cost = evaluate(candidate, changed)
+        evaluations += 1
+        delta = new_cost - current_cost
+        if delta > 0:
+            positive_deltas.append(delta)
+        finish(candidate, changed, relocation, new_cost, delta <= 0)
+
+    scale = (float(np.median(positive_deltas)) if positive_deltas else
+             max(abs(current_cost) * 1e-3, np.finfo(float).eps))
+    initial_temperature = max(
+        -scale / math.log(initial_acceptance), np.finfo(float).eps)
+    operators = ("proxy", "bottleneck", "swap", "relocation")
+    dimension = 8
+    matrices = {name: np.eye(dimension) for name in operators}
+    targets = {name: np.zeros(dimension) for name in operators}
+    counts = {name: 0 for name in operators}
+    reward_sums = {name: 0.0 for name in operators}
+    recent_acceptance = 0.0
+    last_reward = 0.0
+    stagnant = 0
+    remaining = max(1, n_iter - calibration)
+    progress_interval = max(1, n_iter // 50)
+
+    while evaluations < n_iter:
+        progress = (evaluations - calibration) / remaining
+        temperature = initial_temperature * (
+            final_temperature_ratio ** progress)
+        dominance = (float(evaluator.stage_costs.max()) /
+                     max(float(evaluator.stage_costs.sum()),
+                         np.finfo(float).eps)) if evaluator is not None else 0.0
+        context = np.asarray([
+            1.0, progress,
+            math.log(max(temperature / initial_temperature,
+                         np.finfo(float).eps)) /
+            math.log(final_temperature_ratio),
+            recent_acceptance, min(1.0, stagnant / 500.0),
+            best_cost / max(current_cost, np.finfo(float).eps),
+            last_reward, dominance,
+        ], dtype=np.float64)
+        unseen = [name for name in operators if counts[name] == 0]
+        if disable_learning:
+            operator = operators[rng.randrange(len(operators))]
+        elif unseen:
+            operator = unseen[0]
+        else:
+            scores = {}
+            for name in operators:
+                inverse = np.linalg.inv(matrices[name])
+                estimate = targets[name] @ inverse @ context
+                uncertainty = ucb_alpha * math.sqrt(
+                    max(0.0, context @ inverse @ context))
+                scores[name] = estimate + uncertainty
+            operator = max(scores, key=scores.get)
+
+        candidate, changed, relocation = proposal(operator)
+        old_cost = current_cost
+        old_best = best_cost
+        new_cost = evaluate(candidate, changed)
+        evaluations += 1
+        delta = new_cost - old_cost
+        reward = float(np.tanh(-delta / scale))
+        accept = (delta <= 0 or rng.random() <
+                  math.exp(-delta / max(temperature, np.finfo(float).eps)))
+        finish(candidate, changed, relocation, new_cost, accept)
+        if not disable_learning:
+            matrices[operator] += np.outer(context, context)
+            targets[operator] += reward * context
+        counts[operator] += 1
+        reward_sums[operator] += reward
+        last_reward = reward
+        stagnant = 0 if new_cost < old_best else stagnant + 1
+        recent_acceptance = 0.95 * recent_acceptance + 0.05 * float(accept)
+        if evaluations % progress_interval == 0 or evaluations == n_iter:
+            print(f"[OP-SA] proposals={evaluations}/{n_iter} "
+                  f"best_us={best_cost * 1e6:.6f} operator={operator}",
+                  flush=True)
+
+    env.place(best_placement)
+    if metadata is not None:
+        metadata.update({
+            "method": "contextual_operator_bandit_fixed_sa",
+            "learning_enabled": not disable_learning,
+            "unsupervised_online_learning": True,
+            "operators": list(operators),
+            "operator_selection_counts": counts,
+            "operator_reward_sums": reward_sums,
+            "ucb_alpha": ucb_alpha,
+            "proxy_candidates": proxy_candidates,
+            "initial_cost": initial_cost,
+            "best_cost": best_cost,
+            "accepted_moves": accepted,
+            "improving_moves": improving,
+            "update_count": sum(counts.values()) if not disable_learning else 0,
+            "initial_placement_evaluations": 1,
+            "total_objective_evaluations": n_iter + 1,
+            "acceptance_rule": "fixed_metropolis",
+            "reward": "signed_proposed_cost_reduction",
+        })
+    return best_cost
+
+
 def run_proxy_guided_sa(env: MultiChipEnvironment, n_iter: int = 100000,
                         candidate_count: int = 16,
                         focus_fraction: float = 0.5,
@@ -4958,7 +5222,8 @@ def run_sequential(env: MultiChipEnvironment) -> float:
 def main():
     parser = argparse.ArgumentParser(description="Multi-chip core placement")
     parser.add_argument("--algo", choices=["ddpg", "ddpg_guided", "ppo_masked",
-                                            "ppo_asa", "proxy_sa", "sa", "asa", "ddpg_asa",
+                                            "ppo_asa", "proxy_sa", "operator_sa",
+                                            "sa", "asa", "ddpg_asa",
                                             "random", "bs"],
                         default="ddpg",
                         help="Placement method; ddpg_guided uses ASA demonstrations, "
@@ -4976,6 +5241,12 @@ def main():
                         help="Relative stage-cost slack included in proxy-SA focus")
     parser.add_argument("--proxy_sa_epsilon_final", type=float, default=0.25,
                         help="Final exploration probability for proxy-guided SA")
+    parser.add_argument("--operator_sa_proxy_candidates", type=int, default=8,
+                        help="Cheap neighbors ranked by the proxy operator")
+    parser.add_argument("--operator_sa_ucb_alpha", type=float, default=0.5,
+                        help="LinUCB exploration strength for move-operator selection")
+    parser.add_argument("--operator_sa_disable_learning", action="store_true",
+                        help="Select move operators uniformly as a matched control")
     parser.add_argument("--chips_x", type=int, default=2)
     parser.add_argument("--chips_y", type=int, default=2)
     parser.add_argument("--rows", type=int, default=4, help="Rows per chip")
@@ -5346,6 +5617,10 @@ def main():
         parser.error("--proxy_sa_focus_stage_slack must be in [0,1)")
     if not 0 <= args.proxy_sa_epsilon_final <= 1:
         parser.error("--proxy_sa_epsilon_final must be in [0,1]")
+    if args.operator_sa_proxy_candidates < 2:
+        parser.error("--operator_sa_proxy_candidates must be at least 2")
+    if args.operator_sa_ucb_alpha < 0:
+        parser.error("--operator_sa_ucb_alpha must be nonnegative")
     if not 0.0 <= args.ppo_asa_focus_fraction <= 1.0:
         parser.error("--ppo_asa_focus_fraction must be in [0, 1]")
     if not 0.0 <= args.ppo_asa_focus_stage_slack < 1.0:
@@ -5734,6 +6009,16 @@ def main():
             focus_stage_slack=args.proxy_sa_focus_stage_slack,
             epsilon_final=args.proxy_sa_epsilon_final,
             seed=args.seed, metadata=algorithm_metadata)
+    elif args.algo == "operator_sa":
+        algorithm_metadata = {}
+        print(f">> Operator-bandit SA budget: one initialization + {args.iters} "
+              "evaluated proposals")
+        cost = run_operator_bandit_sa(
+            env, n_iter=args.iters,
+            proxy_candidates=args.operator_sa_proxy_candidates,
+            ucb_alpha=args.operator_sa_ucb_alpha,
+            disable_learning=args.operator_sa_disable_learning,
+            seed=args.seed, metadata=algorithm_metadata)
     elif args.algo == "ddpg_asa":
         algorithm_metadata = {}
         print(f">> Hybrid budget: {complete_placements} DDPG placements + "
@@ -5787,6 +6072,10 @@ def main():
             limitations.append(
                 "proxy_sa is a training-free communication-proxy-guided fixed-SA "
                 "extension, not the paper's original SA or DDPG")
+        if args.algo == "operator_sa":
+            limitations.append(
+                "operator_sa is an online contextual-bandit move-selector "
+                "extension, not the paper's original DDPG")
         if args.algo == "sa":
             limitations.append(
                 "the paper does not publish application-specific T0/Tend; "
@@ -5817,7 +6106,7 @@ def main():
                                 else algorithm_metadata["total_candidate_evaluations"]
                                 if args.algo in ("ddpg_guided", "ppo_masked")
                                 else algorithm_metadata["total_objective_evaluations"]
-                                if args.algo in ("ppo_asa", "proxy_sa", "sa", "asa")
+                                if args.algo in ("ppo_asa", "proxy_sa", "operator_sa", "sa", "asa")
                                 else complete_placements + args.iters
                                 if args.algo == "ddpg_asa"
                                 else 1 if args.algo == "bs" else args.iters)

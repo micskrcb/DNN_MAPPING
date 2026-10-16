@@ -10,6 +10,15 @@ validation passed all 46 tests and all three portability/accounting cases.
 See `PROXY_GUIDED_SA.md`; Kaggle results remain required before making a
 performance or generalization claim.
 
+## 2026-10-16: operator-selection RL+SA gate
+
+Implemented `--algo operator_sa`, an online LinUCB policy that selects among
+four legal SA move operators while fixed Metropolis acceptance remains active.
+It learns from exact proposed cost changes and includes a uniform-operator
+control. The three-seed, 20,000-call gate compares Operator-SA, its control,
+Proxy-SA, fixed SA, and random on AlexNet-FC and VGG16-CONV. All 47 tests and a
+reduced end-to-end archive smoke passed; performance is not yet established.
+
 Updated 2026-10-12.
 
 ## Goal and branch

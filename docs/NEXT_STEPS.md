@@ -2,12 +2,15 @@
 
 ## Immediate Proxy-SA portability gate
 
-1. Run `scripts/run_kaggle_proxy_sa_portability.sh` at its default 2,000-move
-   budget and inspect the ZIP summary.
-2. Continue with held-out seeds at a larger matched budget only on workloads
-   where Proxy-SA beats both fixed SA and random.
-3. Keep Proxy-SA as the strong training-free control for future learned
-   operator-selection work.
+The 2,000-move portability gate passed mechanically on AlexNet-FC, ResNet18,
+and a custom torus CNN. Proxy-SA was competitive but not uniformly superior.
+
+1. Run `scripts/run_kaggle_operator_sa_gate.sh` at 20,000 evaluations on
+   seeds 0--2 for AlexNet-FC and VGG16-CONV.
+2. Advance only a workload that passes the recorded 2/3-win and 1%-over-proxy
+   criteria, then run untouched seeds 3 and 4.
+3. Scale a confirmed method to 100,000 evaluations before any paper-scale
+   500,000--1,000,000 evaluation experiment.
 
 The primary objective is an honest reproduction of Wu et al., *Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning*. Experimental improvements remain separate from paper-mode runs.
 
