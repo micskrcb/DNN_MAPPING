@@ -5,11 +5,14 @@
 The 2,000-move portability gate passed mechanically on AlexNet-FC, ResNet18,
 and a custom torus CNN. Proxy-SA was competitive but not uniformly superior.
 
-1. Run `scripts/run_kaggle_operator_sa_gate.sh` at 20,000 evaluations on
-   seeds 0--2 for AlexNet-FC and VGG16-CONV.
-2. Advance only a workload that passes the recorded 2/3-win and 1%-over-proxy
+1. The 20,000-evaluation gate is complete and failed advancement on both
+   workloads; do not run unchanged seeds 3 and 4.
+2. Replace the unstable full-context LinUCB credit model with a bounded,
+   phase-aware/discounted operator learner that preserves minimum exploration
+   and treats Proxy-SA as the default arm. Re-run the same three-seed gate.
+3. Advance only a workload meeting the recorded 2/3-win and 1%-over-proxy
    criteria, then run untouched seeds 3 and 4.
-3. Scale a confirmed method to 100,000 evaluations before any paper-scale
+4. Scale a confirmed method to 100,000 evaluations before any paper-scale
    500,000--1,000,000 evaluation experiment.
 
 The primary objective is an honest reproduction of Wu et al., *Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning*. Experimental improvements remain separate from paper-mode runs.

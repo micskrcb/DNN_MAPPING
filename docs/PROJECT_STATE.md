@@ -19,6 +19,22 @@ control. The three-seed, 20,000-call gate compares Operator-SA, its control,
 Proxy-SA, fixed SA, and random on AlexNet-FC and VGG16-CONV. All 47 tests and a
 reduced end-to-end archive smoke passed; performance is not yet established.
 
+### Completed 20,000-evaluation result
+
+The three-seed gate completed at revision `b0a2c56` with exact 20,001-call
+accounting throughout. On AlexNet-FC, Operator-SA beat its uniform-operator
+control in 3/3 seeds by 0.521% on average and Proxy-SA in 2/3 by 0.174%, but
+finished 0.046% behind fixed SA on average. On VGG16-CONV it beat random by
+54.982% on average, but lost to Proxy-SA in 3/3 seeds by 2.589% and beat its
+uniform control and fixed SA in only 1/3 seeds. Neither workload passed the
+prespecified gate, so seeds 3--4 must not be run unchanged.
+
+The learner was active: every learned run made 19,968 updates. AlexNet policies
+collapsed mostly to swaps, while VGG16 operator proportions varied sharply by
+seed. The next design should address this unstable/nonstationary credit signal,
+preferably with phase-conditioned or discounted operator values and explicit
+minimum exploration, while retaining Proxy-SA as the decisive control.
+
 Updated 2026-10-12.
 
 ## Goal and branch
