@@ -7,10 +7,11 @@ and a custom torus CNN. Proxy-SA was competitive but not uniformly superior.
 
 1. The 20,000-evaluation gate is complete and failed advancement on both
    workloads; do not run unchanged seeds 3 and 4.
-2. The bounded phase-aware/discounted v2 learner is implemented. Re-run the
-   same three-seed gate at 20,000 evaluations without changing its criteria.
-3. Advance only a workload meeting the recorded 2/3-win and 1%-over-proxy
-   criteria, then run untouched seeds 3 and 4.
+2. The v2 learner passed the formal VGG16-CONV gate but acted mostly as its
+   embedded proxy operator. Run `scripts/run_kaggle_operator_sa_attribution.sh`
+   on seeds 0--2 against the exact proxy-only operator control.
+3. Advance to untouched seeds 3 and 4 only if learned selection beats that
+   exact control in at least 2/3 seeds by at least 1% on average.
 4. Scale a confirmed method to 100,000 evaluations before any paper-scale
    500,000--1,000,000 evaluation experiment.
 

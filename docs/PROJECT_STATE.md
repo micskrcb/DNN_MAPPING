@@ -38,7 +38,17 @@ minimum exploration, while retaining Proxy-SA as the decisive control.
 That v2 design is now implemented: separate early/middle/late LinUCB models,
 0.995 evidence discount, 10% minimum exploration, and a confidence-bounded
 Proxy-SA fallback. All 47 tests and a 129-call CLI accounting smoke pass. Its
-real-placement performance has not yet been measured.
+three-seed 20,000-call result passed the formal VGG16-CONV gate: 9.455% over
+uniform operator selection, 5.661% over the earlier Proxy-SA control, 9.307%
+over fixed SA, and 58.686% over random. It failed on AlexNet-FC.
+
+Attribution is not yet complete. VGG16 selected the proxy operator for roughly
+92% of post-calibration steps; nearly all non-proxy choices were forced
+exploration. The earlier Proxy-SA control also uses 16 candidates and a
+different epsilon rule, whereas the embedded proxy operator uses eight and a
+confidence fallback. An exact proxy-only operator control is now implemented
+with separated proposal, selection, and acceptance random streams. Run its
+three-seed attribution gate before held-out seeds or an RL improvement claim.
 
 Updated 2026-10-12.
 

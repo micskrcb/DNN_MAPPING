@@ -33,4 +33,7 @@ bash scripts/run_kaggle_operator_sa_gate.sh runs/kaggle-operator-sa-gate
 The prespecified per-workload gate requires Operator-SA to beat Proxy-SA and
 fixed SA in at least two of three seeds, beat random in at least two seeds, and
 improve on Proxy-SA by at least 1% on average. Passing this exploratory gate
-permits two held-out seeds; it is not publication evidence by itself.
+triggers the exact embedded-proxy attribution test. Because v2 selected proxy
+for roughly 92% of VGG16 steps, held-out seeds are permitted only if learned
+selection also beats `--operator_sa_control proxy` in at least two of three
+seeds and by at least 1% on average.

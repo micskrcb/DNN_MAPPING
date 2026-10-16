@@ -4284,6 +4284,7 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
                            discount: float = 0.995,
                            minimum_exploration: float = 0.10,
                            phase_bins: int = 3,
+                           control: str = "learned",
                            disable_learning: bool = False,
                            seed: int = None, initial_acceptance: float = 0.8,
                            calibration_trials: int = 32,
@@ -4302,12 +4303,19 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("invalid operator-bandit discount/exploration")
     if phase_bins <= 0:
         raise ValueError("operator-bandit phase count must be positive")
+    if control not in {"learned", "uniform", "proxy"}:
+        raise ValueError("unknown operator-SA control")
+    if disable_learning:
+        control = "uniform"
     if not 0 < initial_acceptance < 1 or not 0 < final_temperature_ratio < 1:
         raise ValueError("invalid fixed-SA temperature configuration")
-    rng = random.Random(0 if seed is None else int(seed))
+    seed_value = 0 if seed is None else int(seed)
+    proposal_rng = random.Random(seed_value)
+    selection_rng = random.Random(seed_value + 5_000_003)
+    acceptance_rng = random.Random(seed_value + 1_000_003)
     n = env.num_tasks
     placement = np.asarray(
-        rng.sample(env.allowed_cores.tolist(), n), dtype=np.int32)
+        proposal_rng.sample(env.allowed_cores.tolist(), n), dtype=np.int32)
     env.place(placement)
     current_cost = float(env.evaluate())
     initial_cost = best_cost = current_cost
@@ -4377,16 +4385,17 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     def random_neighbor(anchor=None, allow_relocation=True):
         return _placement_neighbor(
             placement, perturb, free_pool if allow_relocation else None,
-            rng=rng, anchor_tasks=anchor)
+            rng=proposal_rng, anchor_tasks=anchor)
 
     def relocation_neighbor():
         if not free_pool:
             return random_neighbor()
         anchors = bottleneck_tasks()
-        task = (int(anchors[rng.randrange(len(anchors))])
-                if anchors and rng.random() < 0.5 else rng.randrange(n))
+        task = (int(anchors[proposal_rng.randrange(len(anchors))])
+                if anchors and proposal_rng.random() < 0.5
+                else proposal_rng.randrange(n))
         candidate = placement.copy()
-        used_core = free_pool.choice(rng)
+        used_core = free_pool.choice(proposal_rng)
         freed_core = int(candidate[task])
         candidate[task] = used_core
         return (candidate, np.asarray([task], dtype=np.int64),
@@ -4485,12 +4494,14 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
         ], dtype=np.float64)
         phase = min(phase_bins - 1, int(progress * phase_bins))
         unseen = [name for name in operators if phase_counts[phase][name] == 0]
-        if disable_learning:
-            operator = operators[rng.randrange(len(operators))]
+        if control == "uniform":
+            operator = operators[selection_rng.randrange(len(operators))]
+        elif control == "proxy":
+            operator = "proxy"
         elif unseen:
             operator = unseen[0]
-        elif rng.random() < minimum_exploration:
-            operator = operators[rng.randrange(len(operators))]
+        elif selection_rng.random() < minimum_exploration:
+            operator = operators[selection_rng.randrange(len(operators))]
             exploration_selections += 1
         else:
             identity = np.eye(dimension)
@@ -4521,10 +4532,10 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
         evaluations += 1
         delta = new_cost - old_cost
         reward = float(np.tanh(-delta / scale))
-        accept = (delta <= 0 or rng.random() <
+        accept = (delta <= 0 or acceptance_rng.random() <
                   math.exp(-delta / max(temperature, np.finfo(float).eps)))
         finish(candidate, changed, relocation, new_cost, accept)
-        if not disable_learning:
+        if control == "learned":
             matrices[phase][operator] += np.outer(context, context)
             targets[phase][operator] += reward * context
         counts[operator] += 1
@@ -4542,7 +4553,8 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     if metadata is not None:
         metadata.update({
             "method": "phase_discounted_operator_bandit_fixed_sa_v2",
-            "learning_enabled": not disable_learning,
+            "learning_enabled": control == "learned",
+            "control": control,
             "unsupervised_online_learning": True,
             "operators": list(operators),
             "operator_selection_counts": counts,
@@ -4560,7 +4572,7 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             "best_cost": best_cost,
             "accepted_moves": accepted,
             "improving_moves": improving,
-            "update_count": sum(counts.values()) if not disable_learning else 0,
+            "update_count": sum(counts.values()) if control == "learned" else 0,
             "initial_placement_evaluations": 1,
             "total_objective_evaluations": n_iter + 1,
             "acceptance_rule": "fixed_metropolis",
@@ -5289,6 +5301,10 @@ def main():
                         help="Independent early/middle/late operator models")
     parser.add_argument("--operator_sa_disable_learning", action="store_true",
                         help="Select move operators uniformly as a matched control")
+    parser.add_argument("--operator_sa_control",
+                        choices=["learned", "uniform", "proxy"],
+                        default="learned",
+                        help="Learned selection or an exact uniform/proxy-only control")
     parser.add_argument("--chips_x", type=int, default=2)
     parser.add_argument("--chips_y", type=int, default=2)
     parser.add_argument("--rows", type=int, default=4, help="Rows per chip")
@@ -6068,6 +6084,7 @@ def main():
             discount=args.operator_sa_discount,
             minimum_exploration=args.operator_sa_minimum_exploration,
             phase_bins=args.operator_sa_phase_bins,
+            control=args.operator_sa_control,
             disable_learning=args.operator_sa_disable_learning,
             seed=args.seed, metadata=algorithm_metadata)
     elif args.algo == "ddpg_asa":
