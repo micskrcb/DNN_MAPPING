@@ -106,6 +106,18 @@ three controllers (frozen checkpoint, proxy-greedy, and uniform) ended at
 no transfer signal. It closes this particular two-source/one-target protocol;
 it does not establish that every possible amortized RL+SA design is impossible.
 
+### Independent audit action (2026-10-17)
+
+An external audit of the source and archived VGG16-FC runs agreed that the
+remaining issue is likely objective headroom and candidate-label information,
+not checkpoint plumbing. Its external repository and license claims were not
+treated as verified evidence. The actionable, testable recommendation has been
+adopted as a pre-registered protocol: compare 20,001-call Proxy-SA with a
+100,001-call reference across fixed CONV workloads, record floor and
+sensitivity diagnostics, and require at least 2% median unresolved headroom
+before running further RL. This is a screening criterion, not a claim that a
+workload failing it has a wrong simulator.
+
 ## Purpose
 
 This document records the investigation prompted by the 3,000-placement

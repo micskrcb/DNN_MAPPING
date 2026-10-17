@@ -157,6 +157,8 @@ Current paper targets:
 85. [x] Run `scripts/run_kaggle_amortized_bandit_gate.sh`: train on AlexNet-FC and AlexNet-CONV, then freeze and test on ResNet50-CONV seeds 20--22. All training and held-out call accounting passed, and the checkpoint was genuinely frozen at hold-out; nevertheless every method reached 588.784 microseconds in all three seeds. Zero wins and 0.000% mean improvement failed the two-win/+1% rule. Close this exact transfer protocol; do not add epochs merely to pursue this null result.
 86. [x] Add a matched Proxy-SA versus uniform headroom preflight to the amortized runner. It stops before training if the chosen target cannot distinguish its decisive controls at the preflight budget.
 87. Run the VGG16-CONV transfer gate: train sequentially on AlexNet-FC and AlexNet-CONV, then freeze the checkpoint on VGG16-CONV seeds 20--22. Advance only on at least two wins over both controls and +1% mean improvement over Proxy-SA. This target is chosen because prior tests showed proposal-selection headroom, not because of a result from this gate.
+88. [x] Add a preregistered Proxy-SA headroom-certification runner. It reports initial cost, sensitivity span, compute-floor gap, and short (20,001-call) versus long (100,001-call) Proxy-SA results on AlexNet-CONV, VGG16-CONV, and ResNet50-CONV. A workload is eligible for further RL only if the median short result remains at least 2% above the long reference.
+89. Run `scripts/run_kaggle_headroom_certification.sh` before the VGG16 transfer gate. Do not run RL on workloads that fail its 2% unresolved-headroom criterion.
 
 ## Gate 4: improvements after reproduction
 

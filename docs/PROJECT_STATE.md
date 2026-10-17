@@ -2,6 +2,14 @@
 
 ## 2026-10-17: amortized topology-aware RL+SA gate
 
+Following an independent code-and-results audit, the next prerequisite is a
+pre-registered headroom certification rather than another learned-policy run.
+The new runner compares short and long Proxy-SA budgets on AlexNet-CONV,
+VGG16-CONV, and ResNet50-CONV, records their random-placement sensitivity and
+distance to the compute-only floor, and permits later RL only where at least
+2% median short-to-reference headroom remains. This criterion prevents small,
+plateau-level differences from being misrepresented as learning progress.
+
 **Result: failed frozen-transfer gate.** The Kaggle run at revision `34c3101`
 completed with a clean worktree, 51 passing tests, and archive SHA-256
 `0b52220c8d9f81fab7a7c2e60e6d8f44d2c360469caa2be8d5d63f50f4466b20`.
