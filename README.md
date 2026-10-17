@@ -62,6 +62,7 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
   - `docs/PROJECT_STATE.md`: Detailed handoff state, empirical benchmark numbers, and statistical intervals.
   - `docs/NEXT_STEPS.md`: Systematic 66-item reproduction checklist and active experimental backlog.
   - `docs/RESEARCH_FINDINGS.md`: Literature review, failure mode audits, attribution analyses, and VVA throughput review.
+  - `docs/EXTERNAL_RESEARCH_REVIEW_2026-10-17.md`: Audited external code and literature review, corrections to the Gemini report, and the next bandit/RL decision path.
   - `docs/RECONCILIATION.md`: Model reconciliation history and hardware assumptions.
   - `docs/PPO_REFERENCE_ADAPTER.md`: Decoupled actor-critic adapter specification.
   - `docs/archive/`: Historical decision memos, reference audits, and previous README iterations (with `docs/archive/README.md` index).

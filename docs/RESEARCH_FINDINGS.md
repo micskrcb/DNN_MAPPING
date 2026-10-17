@@ -1,9 +1,23 @@
 # DDPG Learning Failure: Research Findings and Actions
 
-Updated: 8 October 2026
+Updated: 17 October 2026
+
+## External operator-selection review (17 October 2026)
+
+The current internet review and supplied Gemini Deep Research report are
+audited in
+[`EXTERNAL_RESEARCH_REVIEW_2026-10-17.md`](EXTERNAL_RESEARCH_REVIEW_2026-10-17.md).
+Accepted recommendations include an unthrottled Proxy-SA control,
+selected-action discounted LinTS, cheap two-proposal proxy screening,
+outcome-aware reward as a separate ablation, and anytime best-cost metrics.
+The report incorrectly describes the active selector as stationary
+infinite-memory LinUCB; the code already uses phase-specific models and 0.995
+discounting. It also overstates the cost and theoretical rejection of the
+stride-20 full-information diagnostic. The current gate remains useful, but a
+positive result must also beat ordinary unthrottled Proxy-SA.
 
 The direct public-code and training-scale comparison is recorded in
-[`GITHUB_IMPLEMENTATION_AUDIT.md`](GITHUB_IMPLEMENTATION_AUDIT.md). Its main
+[`GITHUB_IMPLEMENTATION_AUDIT.md`](archive/GITHUB_IMPLEMENTATION_AUDIT.md). Its main
 finding is that the official RL-Based-SA configuration uses 10.24 million
 transitions across 256 parallel problem instances, whereas the extended
 PPO-ASA gates use 4,068 policy transitions from one fixed instance. Public
@@ -529,7 +543,7 @@ but is not a target for RS or SA.
 
 The detailed source-code comparison with maintained public DDPG
 implementations and the remaining algorithmic differences are recorded in
-[`DDPG_REFERENCE_AUDIT.md`](DDPG_REFERENCE_AUDIT.md).
+[`DDPG_REFERENCE_AUDIT.md`](archive/DDPG_REFERENCE_AUDIT.md).
 
 ## Learned-SA attribution audit (14 October 2026)
 

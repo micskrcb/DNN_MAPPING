@@ -195,8 +195,9 @@ Each script:
 3. **[`docs/PROJECT_STATE.md`](PROJECT_STATE.md)**: Current empirical benchmark numbers, statistical intervals, and hardware reconciliation details.
 4. **[`docs/NEXT_STEPS.md`](NEXT_STEPS.md)**: The active 66-item experimental backlog and immediate pending tasks.
 5. **[`docs/RESEARCH_FINDINGS.md`](RESEARCH_FINDINGS.md)**: Theoretical grounding, DDPG failure analysis, and VVA throughput sensitivity review.
-6. **[`docs/RECONCILIATION.md`](RECONCILIATION.md)**: Model reconciliation history against paper equations and Table 1 parameters.
-7. **[`docs/archive/README.md`](archive/README.md)**: Reference guide to superseded research documents and historical READMEs.
+6. **[`docs/EXTERNAL_RESEARCH_REVIEW_2026-10-17.md`](EXTERNAL_RESEARCH_REVIEW_2026-10-17.md)**: Audited bandit/SA literature, reusable code, report corrections, and the next learning design.
+7. **[`docs/RECONCILIATION.md`](RECONCILIATION.md)**: Model reconciliation history against paper equations and Table 1 parameters.
+8. **[`docs/archive/README.md`](archive/README.md)**: Reference guide to superseded research documents and historical READMEs.
 
 ---
 

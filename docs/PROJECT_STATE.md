@@ -1,5 +1,16 @@
 # Project state: paper-faithful DNN core placement
 
+## 2026-10-17: external bandit and SA research audit
+
+The internet review and supplied Gemini report have been reconciled with the
+current code in
+[`EXTERNAL_RESEARCH_REVIEW_2026-10-17.md`](EXTERNAL_RESEARCH_REVIEW_2026-10-17.md).
+The full-information gate remains a diagnostic rather than the final proposed
+method. Its decisive missing baseline is ordinary unthrottled Proxy-SA. If it
+fails, the next bounded implementation is selected-action, proxy-gated,
+discounted Cholesky LinTS with one true evaluation per step; its reward design
+must be ablated separately. No external source code has been imported.
+
 ## 2026-10-17: full-information operator-learning gate
 
 The next bounded RL+SA experiment is implemented. Every twentieth operator

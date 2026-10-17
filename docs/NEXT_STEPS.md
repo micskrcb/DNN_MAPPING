@@ -18,6 +18,12 @@ and a custom torus CNN. Proxy-SA was competitive but not uniformly superior.
    1%.
 4. Scale a confirmed method to 100,000 evaluations before any paper-scale
    500,000--1,000,000 evaluation experiment.
+5. Treat the 17 October external review as a design audit, not an empirical
+   result. Add ordinary unthrottled Proxy-SA to the decision comparison. If
+   the full-information diagnostic fails, test selected-action proxy-gated
+   discounted LinTS with one true call per step. See
+   `EXTERNAL_RESEARCH_REVIEW_2026-10-17.md` for accepted findings, corrections,
+   controls, and the separate long-horizon RL path.
 
 The primary objective is an honest reproduction of Wu et al., *Core Placement Optimization for Multi-chip Many-core Neural Network Systems with Reinforcement Learning*. Experimental improvements remain separate from paper-mode runs.
 
