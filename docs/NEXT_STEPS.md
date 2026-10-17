@@ -149,7 +149,8 @@ Current paper targets:
 77. [x] Implement the prespecified selected-action follow-up: discounted Cholesky LinTS, top-two cheap proxy screening, one true evaluation per step, and separate signed/outcome-aware reward variants. Preserve ordinary unthrottled embedded Proxy-SA as the decisive control and add reproducibility/accounting tests.
 78. [x] Run `scripts/run_kaggle_proxy_gated_lints_gate.sh` on VGG16-CONV seeds 0--2 at 20,001 calls per method. Outcome reward lost all pairs and averaged -6.587% versus unthrottled proxy. Signed reward won two pairs but averaged -0.165%. Both failed the required +1% mean gate.
 79. [x] Close one-step contextual selection among the existing four operators. Do not tune discount, Thompson scale, proxy slate, or reward weights on these seeds. Preserve unthrottled embedded Proxy-SA as the strong training-free result and mandatory future control.
-80. Design the next RL+SA gate around genuinely different temporal credit: a policy selects a bounded multi-step search macro-action (operator mixture or neighborhood scale for a segment), receives segment-level best-cost improvement, and trains across independently initialized chains or workloads. Specify the action horizon, complete-placement budget, frozen control, and held-out workloads before implementation.
+80. [x] Implement the first delayed-credit RL+SA gate. The policy holds an operator strategy for 64 proposals, receives segment-level best-cost improvement, and is compared with a matched frozen uniform-macro control and unthrottled Proxy-SA at equal true-call budgets. Exact-budget and reproducibility tests pass.
+81. Run `scripts/run_kaggle_macro_operator_gate.sh` on fresh VGG16-CONV seeds 9--11. Advance only with at least two wins against both controls and at least 1% mean improvement over Proxy-SA. Passing permits shared training across chain restarts/workloads; failure closes this operator family.
 
 ## Gate 4: improvements after reproduction
 

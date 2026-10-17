@@ -101,6 +101,52 @@ class TimingTests(unittest.TestCase):
         self.assertEqual(rows[0][1]["operator_selection_counts"],
                          rows[1][1]["operator_selection_counts"])
 
+    def test_delayed_macro_operator_credit_is_budgeted_and_reproducible(self):
+        graph = np.zeros((5, 5), dtype=np.float32)
+        graph[0, 1] = graph[0, 2] = graph[1, 3] = graph[2, 3] = 2.0
+        graph[3, 4] = 3.0
+        rows = []
+        for _ in range(2):
+            env = MultiChipEnvironment(
+                2, 1, 2, 2, task_graph=graph, num_tasks=5)
+            metadata = {}
+            with contextlib.redirect_stdout(io.StringIO()):
+                result = rm.run_operator_bandit_sa(
+                    env, n_iter=96, proxy_candidates=4,
+                    selection_policy="lints", proxy_gate_slate=2,
+                    macro_horizon=8, thompson_scale=0.25,
+                    discount=0.98, minimum_exploration=0.03,
+                    seed=37, metadata=metadata)
+            rows.append((result, metadata))
+        result, metadata = rows[0]
+        self.assertTrue(np.isfinite(result))
+        self.assertEqual(metadata["method"],
+                         "delayed_macro_operator_lints_sa_v5")
+        self.assertEqual(metadata["total_objective_evaluations"], 97)
+        self.assertEqual(metadata["decision_steps"], 64)
+        self.assertEqual(metadata["macro_updates"], 8)
+        self.assertEqual(metadata["update_count"], 8)
+        self.assertEqual(sum(metadata["macro_action_counts"].values()), 8)
+        self.assertGreaterEqual(metadata["proxy_gate_candidate_proposals"], 64)
+        self.assertLessEqual(metadata["proxy_gate_candidate_proposals"], 128)
+        self.assertTrue(all(value >= 0 for value in
+                            metadata["macro_reward_sums"].values()))
+        self.assertEqual(rows[0][0], rows[1][0])
+        self.assertEqual(rows[0][1]["macro_action_counts"],
+                         rows[1][1]["macro_action_counts"])
+        control_env = MultiChipEnvironment(
+            2, 1, 2, 2, task_graph=graph, num_tasks=5)
+        control_metadata = {}
+        with contextlib.redirect_stdout(io.StringIO()):
+            rm.run_operator_bandit_sa(
+                control_env, n_iter=96, proxy_candidates=4,
+                control="uniform", macro_horizon=8,
+                seed=37, metadata=control_metadata)
+        self.assertEqual(control_metadata["total_objective_evaluations"], 97)
+        self.assertEqual(control_metadata["update_count"], 0)
+        self.assertEqual(sum(control_metadata["macro_action_counts"].values()),
+                         8)
+
     @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
     def test_proxy_guided_sa_is_training_free_across_supported_topologies(self):
         graph = np.zeros((4, 4), dtype=np.float32)

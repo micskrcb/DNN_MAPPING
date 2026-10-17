@@ -1,5 +1,21 @@
 # Project state: paper-faithful DNN core placement
 
+## 2026-10-17: delayed macro-action RL+SA implementation
+
+The next bounded method is implemented as an opt-in extension of
+`operator_sa`. Instead of updating from every immediate proposal, the policy
+holds a search strategy for 64 steps and receives the best-cost reduction over
+the complete segment. Non-proxy strategies are cheaply screened against a
+proxy proposal while spending exactly one true evaluation per step. A matched
+uniform-macro control has identical segment mechanics and no learning; ordinary
+unthrottled embedded Proxy-SA remains the decisive baseline.
+
+The implementation records macro choices, delayed reward, proxy overrides,
+true-call accounting, and update counts. Reproducibility, exact-budget, learned
+and frozen-control tests pass as part of the 50-test local suite. The frozen
+gate uses fresh VGG16-CONV seeds 9--11 and is documented in
+[`MACRO_OPERATOR_SA.md`](MACRO_OPERATOR_SA.md). Performance is not yet known.
+
 ## 2026-10-17: proxy-gated LinTS result
 
 The selected-action VGG16-CONV gate completed at revision `006d2bc` with a

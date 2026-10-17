@@ -4290,6 +4290,7 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
                            thompson_scale: float = 0.25,
                            reward_mode: str = "signed",
                            reward_window: int = 50,
+                           macro_horizon: int = 0,
                            control: str = "learned",
                            disable_learning: bool = False,
                            seed: int = None, initial_acceptance: float = 0.8,
@@ -4320,6 +4321,10 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("invalid Thompson scale/reward window")
     if reward_mode not in {"signed", "outcome"}:
         raise ValueError("unknown operator-SA reward mode")
+    if macro_horizon < 0:
+        raise ValueError("operator-SA macro horizon cannot be negative")
+    if macro_horizon and full_information_stride:
+        raise ValueError("macro actions and full-information labels are exclusive")
     if control not in {"learned", "uniform", "proxy"}:
         raise ValueError("unknown operator-SA control")
     if disable_learning:
@@ -4493,6 +4498,13 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     proxy_gate_overrides = proxy_gate_candidate_proposals = 0
     supervised_pools = supervised_operator_labels = 0
     positive_reward_deltas = []
+    macro_action_counts = {name: 0 for name in operators}
+    macro_phase_counts = [{name: 0 for name in operators}
+                          for _ in range(phase_bins)]
+    macro_reward_sums = {name: 0.0 for name in operators}
+    macro_operator = macro_context = macro_phase = None
+    macro_start_best = None
+    macro_steps = macro_updates = 0
     decision_steps = 0
     recent_acceptance = 0.0
     last_reward = 0.0
@@ -4554,79 +4566,135 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             supervised_pools += 1
             supervised_operator_labels += len(operators)
         else:
-            unseen = [name for name in operators
-                      if phase_counts[phase][name] == 0]
             ranked_operators = list(operators)
-            if control == "uniform":
-                operator = operators[selection_rng.randrange(len(operators))]
-            elif control == "proxy":
-                operator = "proxy"
-            elif unseen and not full_information_stride:
-                operator = unseen[0]
-                ranked_operators = unseen + [name for name in operators
-                                             if name not in unseen]
-            elif selection_rng.random() < minimum_exploration:
-                ranked_operators = list(operators)
-                selection_rng.shuffle(ranked_operators)
-                operator = ranked_operators[0]
-                exploration_selections += 1
-            else:
-                identity = np.eye(dimension)
-                scores, estimates, uncertainties = {}, {}, {}
-                for name in operators:
-                    matrices[phase][name] = (
-                        discount * matrices[phase][name] +
-                        (1.0 - discount) * identity)
-                    targets[phase][name] *= discount
-                    models_discounted = True
-                    cholesky = np.linalg.cholesky(matrices[phase][name])
-                    estimate_weights = np.linalg.solve(
-                        cholesky.T,
-                        np.linalg.solve(cholesky, targets[phase][name]))
-                    estimate = float(estimate_weights @ context)
-                    uncertainty_vector = np.linalg.solve(
-                        cholesky, context)
-                    uncertainty = ucb_alpha * float(np.linalg.norm(
-                        uncertainty_vector))
-                    estimates[name] = estimate
-                    uncertainties[name] = uncertainty
-                    if selection_policy == "lints":
-                        sample = (estimate_weights + thompson_scale *
-                                  np.linalg.solve(
-                                      cholesky.T,
-                                      thompson_rng.standard_normal(dimension)))
-                        scores[name] = float(sample @ context)
+            if macro_horizon and control != "proxy":
+                if macro_operator is None:
+                    macro_context = context.copy()
+                    macro_phase = phase
+                    macro_start_best = best_cost
+                    macro_steps = 0
+                    unseen = [name for name in operators
+                              if macro_phase_counts[phase][name] == 0]
+                    if control == "uniform":
+                        macro_operator = operators[
+                            selection_rng.randrange(len(operators))]
+                    elif unseen:
+                        macro_operator = unseen[0]
+                    elif selection_rng.random() < minimum_exploration:
+                        macro_operator = operators[
+                            selection_rng.randrange(len(operators))]
+                        exploration_selections += 1
                     else:
-                        scores[name] = estimate + uncertainty
-                ranked_operators = sorted(
-                    operators, key=lambda name: scores[name], reverse=True)
-                operator = ranked_operators[0]
-                if (selection_policy == "linucb" and operator != "proxy" and
-                        estimates[operator] - uncertainties[operator] <=
-                        estimates["proxy"] + uncertainties["proxy"]):
-                    operator = "proxy"
-                    ranked_operators.remove("proxy")
-                    ranked_operators.insert(0, "proxy")
-                    proxy_fallback_selections += 1
-            bandit_primary_counts[operator] += 1
-            if control == "learned" and proxy_gate_slate > 1:
-                slate = ranked_operators[:proxy_gate_slate]
-                if operator not in slate:
-                    slate[-1] = operator
-                if slate[0] != operator:
-                    slate.remove(operator)
-                    slate.insert(0, operator)
+                        identity = np.eye(dimension)
+                        scores = {}
+                        for name in operators:
+                            cholesky = np.linalg.cholesky(
+                                matrices[phase][name])
+                            estimate_weights = np.linalg.solve(
+                                cholesky.T, np.linalg.solve(
+                                    cholesky, targets[phase][name]))
+                            if selection_policy == "lints":
+                                sample = (estimate_weights + thompson_scale *
+                                          np.linalg.solve(
+                                              cholesky.T,
+                                              thompson_rng.standard_normal(
+                                                  dimension)))
+                                scores[name] = float(sample @ context)
+                            else:
+                                uncertainty = ucb_alpha * float(np.linalg.norm(
+                                    np.linalg.solve(cholesky, context)))
+                                scores[name] = float(
+                                    estimate_weights @ context + uncertainty)
+                        macro_operator = max(scores, key=scores.get)
+                    macro_action_counts[macro_operator] += 1
+                    macro_phase_counts[phase][macro_operator] += 1
+                    bandit_primary_counts[macro_operator] += 1
+                primary = macro_operator
+                slate = (["proxy"] if primary == "proxy" else
+                         [primary, "proxy"])
                 candidate_rows = [proposal(name) for name in slate]
                 proxy_scores = [proxy_gain(row[0], row[1])
                                 for row in candidate_rows]
                 selected = int(np.argmax(proxy_scores))
-                chosen = slate[selected]
-                proxy_gate_overrides += int(chosen != operator)
+                operator = slate[selected]
+                proxy_gate_overrides += int(operator != primary)
                 proxy_gate_candidate_proposals += len(slate)
-                operator = chosen
                 candidate, changed, relocation = candidate_rows[selected]
             else:
-                candidate, changed, relocation = proposal(operator)
+                unseen = [name for name in operators
+                          if phase_counts[phase][name] == 0]
+                if control == "uniform":
+                    operator = operators[
+                        selection_rng.randrange(len(operators))]
+                elif control == "proxy":
+                    operator = "proxy"
+                elif unseen and not full_information_stride:
+                    operator = unseen[0]
+                    ranked_operators = unseen + [name for name in operators
+                                                 if name not in unseen]
+                elif selection_rng.random() < minimum_exploration:
+                    selection_rng.shuffle(ranked_operators)
+                    operator = ranked_operators[0]
+                    exploration_selections += 1
+                else:
+                    identity = np.eye(dimension)
+                    scores, estimates, uncertainties = {}, {}, {}
+                    for name in operators:
+                        matrices[phase][name] = (
+                            discount * matrices[phase][name] +
+                            (1.0 - discount) * identity)
+                        targets[phase][name] *= discount
+                        models_discounted = True
+                        cholesky = np.linalg.cholesky(matrices[phase][name])
+                        estimate_weights = np.linalg.solve(
+                            cholesky.T,
+                            np.linalg.solve(cholesky, targets[phase][name]))
+                        estimate = float(estimate_weights @ context)
+                        uncertainty_vector = np.linalg.solve(
+                            cholesky, context)
+                        uncertainty = ucb_alpha * float(np.linalg.norm(
+                            uncertainty_vector))
+                        estimates[name] = estimate
+                        uncertainties[name] = uncertainty
+                        if selection_policy == "lints":
+                            sample = (estimate_weights + thompson_scale *
+                                      np.linalg.solve(
+                                          cholesky.T,
+                                          thompson_rng.standard_normal(
+                                              dimension)))
+                            scores[name] = float(sample @ context)
+                        else:
+                            scores[name] = estimate + uncertainty
+                    ranked_operators = sorted(
+                        operators, key=lambda name: scores[name], reverse=True)
+                    operator = ranked_operators[0]
+                    if (selection_policy == "linucb" and
+                            operator != "proxy" and
+                            estimates[operator] - uncertainties[operator] <=
+                            estimates["proxy"] + uncertainties["proxy"]):
+                        operator = "proxy"
+                        ranked_operators.remove("proxy")
+                        ranked_operators.insert(0, "proxy")
+                        proxy_fallback_selections += 1
+                bandit_primary_counts[operator] += 1
+                if control == "learned" and proxy_gate_slate > 1:
+                    slate = ranked_operators[:proxy_gate_slate]
+                    if operator not in slate:
+                        slate[-1] = operator
+                    if slate[0] != operator:
+                        slate.remove(operator)
+                        slate.insert(0, operator)
+                    candidate_rows = [proposal(name) for name in slate]
+                    proxy_scores = [proxy_gain(row[0], row[1])
+                                    for row in candidate_rows]
+                    selected = int(np.argmax(proxy_scores))
+                    chosen = slate[selected]
+                    proxy_gate_overrides += int(chosen != operator)
+                    proxy_gate_candidate_proposals += len(slate)
+                    operator = chosen
+                    candidate, changed, relocation = candidate_rows[selected]
+                else:
+                    candidate, changed, relocation = proposal(operator)
             new_cost = evaluate(candidate, changed)
             evaluations += 1
         old_cost = current_cost
@@ -4649,6 +4717,28 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
         else:
             reward = float(np.tanh(-delta / scale))
         finish(candidate, changed, relocation, new_cost, accept)
+        if macro_horizon and control != "proxy":
+            macro_steps += 1
+            if macro_steps >= macro_horizon or evaluations == n_iter:
+                macro_reward = float(np.tanh(
+                    max(0.0, macro_start_best - best_cost) / scale))
+                if control == "learned":
+                    identity = np.eye(dimension)
+                    for name in operators:
+                        matrices[macro_phase][name] = (
+                            discount * matrices[macro_phase][name] +
+                            (1.0 - discount) * identity)
+                        targets[macro_phase][name] *= discount
+                    matrices[macro_phase][macro_operator] += np.outer(
+                        macro_context, macro_context)
+                    targets[macro_phase][macro_operator] += (
+                        macro_reward * macro_context)
+                    macro_updates += 1
+                macro_reward_sums[macro_operator] += macro_reward
+                last_reward = macro_reward
+                macro_operator = macro_context = macro_phase = None
+                macro_start_best = None
+                macro_steps = 0
         if control == "learned" and supervised_rewards is not None:
             identity = np.eye(dimension)
             for name in operators:
@@ -4659,7 +4749,8 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
                 matrices[phase][name] += np.outer(context, context)
                 targets[phase][name] += supervised_rewards[name] * context
                 supervised_reward_sums[name] += supervised_rewards[name]
-        elif control == "learned" and not full_information_stride:
+        elif (control == "learned" and not full_information_stride and
+              not macro_horizon):
             if selection_policy == "lints" and not models_discounted:
                 identity = np.eye(dimension)
                 for name in operators:
@@ -4672,7 +4763,8 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
         counts[operator] += 1
         phase_counts[phase][operator] += 1
         reward_sums[operator] += reward
-        last_reward = reward
+        if not macro_horizon:
+            last_reward = reward
         stagnant = 0 if new_cost < old_best else stagnant + 1
         recent_acceptance = 0.95 * recent_acceptance + 0.05 * float(accept)
         if evaluations % progress_interval == 0 or evaluations == n_iter:
@@ -4683,7 +4775,9 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     env.place(best_placement)
     if metadata is not None:
         metadata.update({
-            "method": ("full_information_operator_gate_sa_v3"
+            "method": ("delayed_macro_operator_lints_sa_v5"
+                       if macro_horizon else
+                       "full_information_operator_gate_sa_v3"
                        if full_information_stride else
                        f"proxy_gated_discounted_{selection_policy}_sa_v4"
                        if proxy_gate_slate > 1 else
@@ -4695,6 +4789,11 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             "operator_selection_counts": counts,
             "phase_operator_selection_counts": phase_counts,
             "operator_reward_sums": reward_sums,
+            "macro_action_counts": macro_action_counts,
+            "macro_phase_action_counts": macro_phase_counts,
+            "macro_reward_sums": macro_reward_sums,
+            "macro_horizon": macro_horizon,
+            "macro_updates": macro_updates,
             "bandit_primary_selection_counts": bandit_primary_counts,
             "supervised_operator_reward_sums": supervised_reward_sums,
             "ucb_alpha": ucb_alpha,
@@ -4719,13 +4818,16 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             "accepted_moves": accepted,
             "improving_moves": improving,
             "update_count": (
+                macro_updates if control == "learned" and macro_horizon else
                 supervised_operator_labels if control == "learned" and
                 full_information_stride else
                 sum(counts.values()) if control == "learned" else 0),
             "initial_placement_evaluations": 1,
             "total_objective_evaluations": n_iter + 1,
             "acceptance_rule": "fixed_metropolis",
-            "reward": ("alns_outcome_plus_window_normalized_improvement"
+            "reward": ("delayed_segment_best_cost_improvement"
+                       if macro_horizon else
+                       "alns_outcome_plus_window_normalized_improvement"
                        if reward_mode == "outcome" else
                        "signed_proposed_cost_reduction"),
             "reward_window": reward_window,
@@ -5466,6 +5568,8 @@ def main():
                         help="Selected-action operator credit")
     parser.add_argument("--operator_sa_reward_window", type=int, default=50,
                         help="Recent improvement window for outcome reward normalization")
+    parser.add_argument("--operator_sa_macro_horizon", type=int, default=0,
+                        help="Hold an operator strategy for N steps and learn from delayed best-cost gain")
     parser.add_argument("--operator_sa_disable_learning", action="store_true",
                         help="Select move operators uniformly as a matched control")
     parser.add_argument("--operator_sa_control",
@@ -5860,6 +5964,11 @@ def main():
         parser.error("--operator_sa_thompson_scale must be nonnegative")
     if args.operator_sa_reward_window <= 0:
         parser.error("--operator_sa_reward_window must be positive")
+    if args.operator_sa_macro_horizon < 0:
+        parser.error("--operator_sa_macro_horizon cannot be negative")
+    if (args.operator_sa_macro_horizon and
+            args.operator_sa_full_information_stride):
+        parser.error("macro actions and full-information labels are exclusive")
     if (args.operator_sa_full_information_stride and
             args.operator_sa_reward != "signed"):
         parser.error("full-information operator labels require signed reward")
@@ -6268,6 +6377,7 @@ def main():
             thompson_scale=args.operator_sa_thompson_scale,
             reward_mode=args.operator_sa_reward,
             reward_window=args.operator_sa_reward_window,
+            macro_horizon=args.operator_sa_macro_horizon,
             control=args.operator_sa_control,
             disable_learning=args.operator_sa_disable_learning,
             seed=args.seed, metadata=algorithm_metadata)
