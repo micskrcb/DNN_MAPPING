@@ -50,6 +50,22 @@ confidence fallback. An exact proxy-only operator control is now implemented
 with separated proposal, selection, and acceptance random streams. Run its
 three-seed attribution gate before held-out seeds or an RL improvement claim.
 
+### Exact proxy attribution result
+
+The attribution gate completed at revision `7132c9b` with exact 20,001-call
+accounting. Learned Operator-SA costs were 1170.504, 1165.447, and 1121.771
+microseconds; the exact embedded-proxy control reached 1105.252, 1112.386, and
+1165.565 microseconds. Learning won only seed 2 and was 2.306% worse on average.
+The control made zero updates and selected the identical proxy operator for all
+19,968 post-calibration steps. Learned runs made 19,968 updates but selected
+proxy for 91--92% of steps; most alternatives were forced exploration.
+
+Therefore the earlier VGG16-CONV improvement is attributable to the improved
+eight-candidate embedded proxy search, not to RL operator selection. The
+unchanged learned method must not advance to held-out seeds. The exact proxy
+heuristic is a valid positive optimization result and strong future baseline,
+but it is training-free rather than an RL contribution.
+
 Updated 2026-10-12.
 
 ## Goal and branch

@@ -7,11 +7,13 @@ and a custom torus CNN. Proxy-SA was competitive but not uniformly superior.
 
 1. The 20,000-evaluation gate is complete and failed advancement on both
    workloads; do not run unchanged seeds 3 and 4.
-2. The v2 learner passed the formal VGG16-CONV gate but acted mostly as its
-   embedded proxy operator. Run `scripts/run_kaggle_operator_sa_attribution.sh`
-   on seeds 0--2 against the exact proxy-only operator control.
-3. Advance to untouched seeds 3 and 4 only if learned selection beats that
-   exact control in at least 2/3 seeds by at least 1% on average.
+2. The exact attribution test is complete: learning lost by 2.306% on average
+   and won only 1/3 seeds. Do not run unchanged held-out seeds.
+3. Treat the exact eight-candidate proxy-only SA as the current strongest
+   method. For another RL attempt, collect budget-accounted full-information
+   labels for all four move operators and train a gate to override proxy only
+   when a non-proxy move has demonstrated advantage. Require an exact
+   proxy-only control again.
 4. Scale a confirmed method to 100,000 evaluations before any paper-scale
    500,000--1,000,000 evaluation experiment.
 

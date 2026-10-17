@@ -37,3 +37,9 @@ triggers the exact embedded-proxy attribution test. Because v2 selected proxy
 for roughly 92% of VGG16 steps, held-out seeds are permitted only if learned
 selection also beats `--operator_sa_control proxy` in at least two of three
 seeds and by at least 1% on average.
+
+The completed attribution gate failed: learned selection was 2.306% worse than
+the exact embedded-proxy control and won only one of three seeds. Consequently,
+this online operator-bandit configuration is closed. Its strongest result is
+the training-free embedded proxy heuristic, which remains the required control
+for any future supervised or RL gating method.
