@@ -49,6 +49,30 @@ variants. Ordinary unthrottled embedded Proxy-SA is the decisive control. The
 method advances only with at least two of three paired wins and at least 1%
 mean improvement over that control.
 
+## Proxy-gated LinTS result (17 October 2026)
+
+The one-evaluation-per-step follow-up passed its mechanics checks but failed
+its performance gate. Against ordinary unthrottled embedded Proxy-SA, the
+outcome-reward variant produced paired improvements of -8.079%, -10.035%, and
+-1.647%, averaging -6.587% with no wins. The signed-reward variant produced
++0.338%, +0.237%, and -1.070%, averaging -0.165% with two wins. The required
+mean improvement was +1%.
+
+This is evidence against the current action space and credit mechanism rather
+than evidence that no learned annealing method can work. All learned runs made
+19,968 updates. The top-two proxy screen overrode the sampled primary operator
+about 10,500--11,350 times, and the executed proposal mix was materially
+different from pure proxy. Outcome-aware rewards selected non-proxy moves more
+often and harmed the final result. Signed immediate rewards remained close to
+the strong proxy baseline but did not improve it.
+
+Together with the full-information result, this closes one-step selection
+among the existing `proxy`, `bottleneck`, `swap`, and `relocation` operators.
+Further tuning on the same workload and seeds would be post-hoc. A credible
+next RL+SA experiment needs multi-step actions and delayed return, trained
+across independent chains or workloads, while retaining unthrottled Proxy-SA
+as the decisive non-learned control.
+
 ## Purpose
 
 This document records the investigation prompted by the 3,000-placement

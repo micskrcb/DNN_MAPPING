@@ -91,3 +91,11 @@ bash scripts/run_kaggle_proxy_gated_lints_gate.sh \
 The decisive baseline is ordinary unthrottled embedded Proxy-SA, which also
 uses one true objective per step. The outcome variant advances only with at
 least two of three wins and at least 1% mean improvement over that baseline.
+
+The completed gate failed. Outcome reward averaged 6.587% worse than Proxy-SA
+and lost all three pairs. Signed reward won two pairs narrowly but averaged
+0.165% worse because of a larger seed-2 loss. All accounting and learning
+mechanics passed, so more runs of this unchanged configuration are not
+justified. The four-operator one-step bandit is retained as a negative
+ablation; future learned-SA work must change the temporal action and credit
+assignment rather than retune this selector.

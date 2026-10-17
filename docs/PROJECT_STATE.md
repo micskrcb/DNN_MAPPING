@@ -1,5 +1,26 @@
 # Project state: paper-faithful DNN core placement
 
+## 2026-10-17: proxy-gated LinTS result
+
+The selected-action VGG16-CONV gate completed at revision `006d2bc` with a
+clean worktree and exact 20,001-call accounting in all nine runs. Archive
+SHA-256: `6a8cfe987ae3fa0fae6465a4736e183137655bb0ff2b76fc471afeb969e728a7`.
+
+Outcome-aware LinTS lost all three pairs to unthrottled embedded Proxy-SA and
+was 6.587% worse on mean cost. Signed-reward LinTS won seeds 0 and 1 by 0.338%
+and 0.237%, lost seed 2 by 1.070%, and was 0.165% worse on mean cost. It
+therefore failed the prespecified two-win plus 1% mean advancement rule.
+
+The method was active rather than frozen: every learned run made 19,968
+updates, screened 39,936 cheap candidates, and frequently overrode its primary
+sampled operator. Outcome credit caused substantially more non-proxy execution
+and clearly degraded placement quality. Cheap proxy gating protected the
+signed variant enough to approximately match Proxy-SA, but learning did not
+add value beyond the proxy. Close this four-operator contextual-bandit family;
+do not tune its discount, sampling scale, or reward weights on these seeds.
+The next learned-SA hypothesis must change the action/credit problem, using
+multi-step macro-actions and training across independent chains or workloads.
+
 ## 2026-10-17: full-information result and next gate
 
 The full-information VGG16-CONV gate completed at revision `8a60616`. All
