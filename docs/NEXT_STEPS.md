@@ -155,6 +155,8 @@ Current paper targets:
 83. Treat unthrottled embedded Proxy-SA as the current practical optimizer. Any further RL+SA proposal must introduce new information through a topology-aware representation or amortized training across distinct placement instances, with Proxy-SA retained as the advancement baseline.
 84. [x] Add a portable `topology16` proposal representation, true frozen-checkpoint bandit inference, and optimizer-state continuation for explicit cross-workload training. Preserve matched proxy and uniform controls and exact true-call accounting.
 85. [x] Run `scripts/run_kaggle_amortized_bandit_gate.sh`: train on AlexNet-FC and AlexNet-CONV, then freeze and test on ResNet50-CONV seeds 20--22. All training and held-out call accounting passed, and the checkpoint was genuinely frozen at hold-out; nevertheless every method reached 588.784 microseconds in all three seeds. Zero wins and 0.000% mean improvement failed the two-win/+1% rule. Close this exact transfer protocol; do not add epochs merely to pursue this null result.
+86. [x] Add a matched Proxy-SA versus uniform headroom preflight to the amortized runner. It stops before training if the chosen target cannot distinguish its decisive controls at the preflight budget.
+87. Run the VGG16-CONV transfer gate: train sequentially on AlexNet-FC and AlexNet-CONV, then freeze the checkpoint on VGG16-CONV seeds 20--22. Advance only on at least two wins over both controls and +1% mean improvement over Proxy-SA. This target is chosen because prior tests showed proposal-selection headroom, not because of a result from this gate.
 
 ## Gate 4: improvements after reproduction
 

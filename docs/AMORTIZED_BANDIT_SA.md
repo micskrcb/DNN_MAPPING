@@ -67,3 +67,16 @@ policy therefore had 0/3 wins and 0.000% mean improvement over proxy and over
 uniform. The pre-registered advancement rule failed. This records a valid
 null result, not a broken-checkpoint result; increasing only the evaluation
 budget is not justified.
+
+## Headroom safeguard and next transfer test
+
+The runner now performs a matched Proxy-SA versus uniform preflight before it
+trains a checkpoint. If both controls already obtain the same target result,
+the runner stops before spending the cross-workload training budget. This
+prevents a repeat of a transfer evaluation where the target offers no observed
+room for the learned proposal to matter.
+
+The next test keeps the two AlexNet training stages but uses VGG16-CONV as the
+held-out workload, whose earlier fixed-SA experiments showed a meaningful
+proposal-selection difference. It is still a gate: a pass requires two wins
+over both controls and at least 1% mean improvement over Proxy-SA.

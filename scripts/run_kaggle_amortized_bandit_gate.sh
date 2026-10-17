@@ -4,11 +4,16 @@ set -euo pipefail
 out="${1:-runs/kaggle-amortized-bandit-gate}"
 train_budget="${TRAIN_BUDGET_OVERRIDE:-20000}"
 test_budget="${TEST_BUDGET_OVERRIDE:-20000}"
+preflight_budget="${PREFLIGHT_BUDGET_OVERRIDE:-4000}"
+heldout_model="${HELDOUT_MODEL_OVERRIDE:-resnet50}"
+heldout_region="${HELDOUT_REGION_OVERRIDE:-conv}"
+preflight_seed="${PREFLIGHT_SEED_OVERRIDE:-19}"
 archive="${out}.zip"
 seeds=(20 21 22)
 [[ -n "${SEEDS_OVERRIDE:-}" ]] && read -r -a seeds <<<"${SEEDS_OVERRIDE}"
 [[ "${train_budget}" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid training budget"; exit 2; }
 [[ "${test_budget}" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid test budget"; exit 2; }
+[[ "${preflight_budget}" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid preflight budget"; exit 2; }
 [[ ! -e "${out}" && ! -e "${archive}" ]] || { echo "Use a fresh output path"; exit 2; }
 mkdir -p "${out}"
 git rev-parse HEAD > "${out}/commit.txt"
@@ -43,6 +48,37 @@ bandit=(
 checkpoint1="${out}/alexnet-fc.pt"
 checkpoint2="${out}/alexnet-fc-conv.pt"
 
+# A transfer comparison has no learning headroom when proxy and uniform reach
+# the same target result.  Screen this before spending the training budget.
+for method in proxy_greedy uniform; do
+  extra=(--ppo_asa_disable_learning --ppo_asa_bandit_control "${method}")
+  echo "===== ${heldout_model}-${heldout_region} preflight ${method} ====="
+  PYTHONUNBUFFERED=1 python src/run_multi_chip.py \
+    "${hardware[@]}" "${bandit[@]}" "${extra[@]}" \
+    --model "${heldout_model}" --workload_region "${heldout_region}" \
+    --seed "${preflight_seed}" --iters "${preflight_budget}" \
+    --report "${out}/preflight-${method}.json" \
+    > "${out}/preflight-${method}.log" 2>&1
+done
+
+python - "${out}" "${preflight_budget}" <<'PY'
+import json, sys
+from pathlib import Path
+root, budget = Path(sys.argv[1]), int(sys.argv[2])
+rows = {name: json.loads((root / f"preflight-{name}.json").read_text())
+        for name in ("proxy_greedy", "uniform")}
+assert all(row["complete_placement_evaluations"] == budget + 1
+           for row in rows.values()), "preflight accounting failed"
+proxy, uniform = rows["proxy_greedy"]["best_cost"], rows["uniform"]["best_cost"]
+result = {"budget": budget, "proxy_cost": proxy, "uniform_cost": uniform,
+          "headroom_present": proxy != uniform,
+          "proxy_improvement_percent": 100 * (uniform - proxy) / uniform}
+(root / "preflight-summary.json").write_text(json.dumps(result, indent=2))
+print(json.dumps(result, indent=2))
+if not result["headroom_present"]:
+    raise SystemExit("STOP: target has no proxy-vs-uniform headroom at preflight budget")
+PY
+
 echo "===== amortized training stage 1: AlexNet-FC ====="
 PYTHONUNBUFFERED=1 python src/run_multi_chip.py \
   "${hardware[@]}" "${bandit[@]}" \
@@ -75,22 +111,23 @@ for seed in "${seeds[@]}"; do
         extra+=(--ppo_asa_bandit_control uniform)
         ;;
     esac
-    echo "===== ResNet50-CONV seed ${seed}, ${method} ====="
+    echo "===== ${heldout_model}-${heldout_region} seed ${seed}, ${method} ====="
     PYTHONUNBUFFERED=1 python src/run_multi_chip.py \
       "${hardware[@]}" "${bandit[@]}" "${extra[@]}" \
-      --model resnet50 --workload_region conv --seed "${seed}" \
+      --model "${heldout_model}" --workload_region "${heldout_region}" --seed "${seed}" \
       --iters "${test_budget}" \
       --report "${out}/seed${seed}-${method}.json" \
       > "${out}/seed${seed}-${method}.log" 2>&1
   done
 done
 
-python - "${out}" "${train_budget}" "${test_budget}" <<'PY'
+python - "${out}" "${train_budget}" "${test_budget}" "${heldout_model}-${heldout_region}" <<'PY'
 import json, re, statistics, sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-train_budget, test_budget = map(int, sys.argv[2:])
+train_budget, test_budget = map(int, sys.argv[2:4])
+heldout_workload = sys.argv[4]
 training = [json.loads((root / name).read_text()) for name in
             ("train-alexnet-fc.json", "train-alexnet-conv.json")]
 training_pass = all(
@@ -133,7 +170,7 @@ proxy_gains = [row["checkpoint_improvement_over_proxy_percent"] for row in pairs
 uniform_gains = [row["checkpoint_improvement_over_uniform_percent"] for row in pairs]
 summary = {
     "training_workloads": ["alexnet-fc", "alexnet-conv"],
-    "heldout_workload": "resnet50-conv",
+    "heldout_workload": heldout_workload,
     "train_budget_per_stage": train_budget,
     "test_budget_per_method_seed": test_budget,
     "training_pass": training_pass,
