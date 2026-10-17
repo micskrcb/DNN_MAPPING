@@ -10,10 +10,12 @@ and a custom torus CNN. Proxy-SA was competitive but not uniformly superior.
 2. The exact attribution test is complete: learning lost by 2.306% on average
    and won only 1/3 seeds. Do not run unchanged held-out seeds.
 3. Treat the exact eight-candidate proxy-only SA as the current strongest
-   method. For another RL attempt, collect budget-accounted full-information
-   labels for all four move operators and train a gate to override proxy only
-   when a non-proxy move has demonstrated advantage. Require an exact
-   proxy-only control again.
+   method. The budget-accounted full-information operator gate is now
+   implemented: every twentieth decision labels all four operators while the
+   matched proxy control pays for the identical labels. Run
+   `scripts/run_kaggle_full_information_operator_gate.sh`; advance only if the
+   learner wins at least two of three pairs and improves mean cost by at least
+   1%.
 4. Scale a confirmed method to 100,000 evaluations before any paper-scale
    500,000--1,000,000 evaluation experiment.
 

@@ -4284,6 +4284,7 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
                            discount: float = 0.995,
                            minimum_exploration: float = 0.10,
                            phase_bins: int = 3,
+                           full_information_stride: int = 0,
                            control: str = "learned",
                            disable_learning: bool = False,
                            seed: int = None, initial_acceptance: float = 0.8,
@@ -4303,6 +4304,8 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("invalid operator-bandit discount/exploration")
     if phase_bins <= 0:
         raise ValueError("operator-bandit phase count must be positive")
+    if full_information_stride < 0:
+        raise ValueError("full-information stride cannot be negative")
     if control not in {"learned", "uniform", "proxy"}:
         raise ValueError("unknown operator-SA control")
     if disable_learning:
@@ -4469,7 +4472,10 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     phase_counts = [{name: 0 for name in operators}
                     for _ in range(phase_bins)]
     reward_sums = {name: 0.0 for name in operators}
+    supervised_reward_sums = {name: 0.0 for name in operators}
     exploration_selections = proxy_fallback_selections = 0
+    supervised_pools = supervised_operator_labels = 0
+    decision_steps = 0
     recent_acceptance = 0.0
     last_reward = 0.0
     stagnant = 0
@@ -4477,6 +4483,7 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     progress_interval = max(1, n_iter // 50)
 
     while evaluations < n_iter:
+        decision_steps += 1
         progress = (evaluations - calibration) / remaining
         temperature = initial_temperature * (
             final_temperature_ratio ** progress)
@@ -4493,49 +4500,94 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             last_reward, dominance,
         ], dtype=np.float64)
         phase = min(phase_bins - 1, int(progress * phase_bins))
-        unseen = [name for name in operators if phase_counts[phase][name] == 0]
-        if control == "uniform":
-            operator = operators[selection_rng.randrange(len(operators))]
-        elif control == "proxy":
+        supervised_step = (
+            full_information_stride > 0 and
+            decision_steps % full_information_stride == 0 and
+            evaluations + len(operators) <= n_iter)
+        supervised_rewards = None
+        if supervised_step:
+            candidate_rows = [proposal(name) for name in operators]
+            costs, pending_rows = [], []
+            for candidate_row, changed_row, _ in candidate_rows:
+                env.place(candidate_row)
+                if evaluator is not None:
+                    costs.append(float(evaluator.candidate_cost(changed_row)))
+                    pending_rows.append((
+                        dict(evaluator.pending or {}),
+                        dict(evaluator.pending_details or {})))
+                    evaluator.reject()
+                else:
+                    costs.append(float(env.evaluate()))
+                    pending_rows.append(None)
+                env.place(placement)
             operator = "proxy"
-        elif unseen:
-            operator = unseen[0]
-        elif selection_rng.random() < minimum_exploration:
-            operator = operators[selection_rng.randrange(len(operators))]
-            exploration_selections += 1
+            selected = 0
+            candidate, changed, relocation = candidate_rows[selected]
+            new_cost = costs[selected]
+            env.place(candidate)
+            if evaluator is not None:
+                evaluator.pending = pending_rows[selected][0]
+                evaluator.pending_details = pending_rows[selected][1]
+            evaluations += len(operators)
+            supervised_rewards = {
+                name: float(np.tanh(-(cost - current_cost) / scale))
+                for name, cost in zip(operators, costs)}
+            supervised_pools += 1
+            supervised_operator_labels += len(operators)
         else:
-            identity = np.eye(dimension)
-            scores, estimates, uncertainties = {}, {}, {}
-            for name in operators:
-                matrices[phase][name] = (
-                    discount * matrices[phase][name] +
-                    (1.0 - discount) * identity)
-                targets[phase][name] *= discount
-                inverse = np.linalg.inv(matrices[phase][name])
-                estimate = targets[phase][name] @ inverse @ context
-                uncertainty = ucb_alpha * math.sqrt(
-                    max(0.0, context @ inverse @ context))
-                estimates[name] = estimate
-                uncertainties[name] = uncertainty
-                scores[name] = estimate + uncertainty
-            operator = max(scores, key=scores.get)
-            if (operator != "proxy" and
-                    estimates[operator] - uncertainties[operator] <=
-                    estimates["proxy"] + uncertainties["proxy"]):
+            unseen = [name for name in operators
+                      if phase_counts[phase][name] == 0]
+            if control == "uniform":
+                operator = operators[selection_rng.randrange(len(operators))]
+            elif control == "proxy":
                 operator = "proxy"
-                proxy_fallback_selections += 1
-
-        candidate, changed, relocation = proposal(operator)
+            elif unseen and not full_information_stride:
+                operator = unseen[0]
+            elif selection_rng.random() < minimum_exploration:
+                operator = operators[selection_rng.randrange(len(operators))]
+                exploration_selections += 1
+            else:
+                identity = np.eye(dimension)
+                scores, estimates, uncertainties = {}, {}, {}
+                for name in operators:
+                    matrices[phase][name] = (
+                        discount * matrices[phase][name] +
+                        (1.0 - discount) * identity)
+                    targets[phase][name] *= discount
+                    inverse = np.linalg.inv(matrices[phase][name])
+                    estimate = targets[phase][name] @ inverse @ context
+                    uncertainty = ucb_alpha * math.sqrt(
+                        max(0.0, context @ inverse @ context))
+                    estimates[name] = estimate
+                    uncertainties[name] = uncertainty
+                    scores[name] = estimate + uncertainty
+                operator = max(scores, key=scores.get)
+                if (operator != "proxy" and
+                        estimates[operator] - uncertainties[operator] <=
+                        estimates["proxy"] + uncertainties["proxy"]):
+                    operator = "proxy"
+                    proxy_fallback_selections += 1
+            candidate, changed, relocation = proposal(operator)
+            new_cost = evaluate(candidate, changed)
+            evaluations += 1
         old_cost = current_cost
         old_best = best_cost
-        new_cost = evaluate(candidate, changed)
-        evaluations += 1
         delta = new_cost - old_cost
         reward = float(np.tanh(-delta / scale))
         accept = (delta <= 0 or acceptance_rng.random() <
                   math.exp(-delta / max(temperature, np.finfo(float).eps)))
         finish(candidate, changed, relocation, new_cost, accept)
-        if control == "learned":
+        if control == "learned" and supervised_rewards is not None:
+            identity = np.eye(dimension)
+            for name in operators:
+                matrices[phase][name] = (
+                    discount * matrices[phase][name] +
+                    (1.0 - discount) * identity)
+                targets[phase][name] *= discount
+                matrices[phase][name] += np.outer(context, context)
+                targets[phase][name] += supervised_rewards[name] * context
+                supervised_reward_sums[name] += supervised_rewards[name]
+        elif control == "learned" and not full_information_stride:
             matrices[phase][operator] += np.outer(context, context)
             targets[phase][operator] += reward * context
         counts[operator] += 1
@@ -4552,7 +4604,9 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
     env.place(best_placement)
     if metadata is not None:
         metadata.update({
-            "method": "phase_discounted_operator_bandit_fixed_sa_v2",
+            "method": ("full_information_operator_gate_sa_v3"
+                       if full_information_stride else
+                       "phase_discounted_operator_bandit_fixed_sa_v2"),
             "learning_enabled": control == "learned",
             "control": control,
             "unsupervised_online_learning": True,
@@ -4560,10 +4614,15 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             "operator_selection_counts": counts,
             "phase_operator_selection_counts": phase_counts,
             "operator_reward_sums": reward_sums,
+            "supervised_operator_reward_sums": supervised_reward_sums,
             "ucb_alpha": ucb_alpha,
             "discount": discount,
             "minimum_exploration": minimum_exploration,
             "phase_bins": phase_bins,
+            "full_information_stride": full_information_stride,
+            "supervised_pools": supervised_pools,
+            "supervised_operator_labels": supervised_operator_labels,
+            "decision_steps": decision_steps,
             "exploration_selections": exploration_selections,
             "proxy_fallback_selections": proxy_fallback_selections,
             "proxy_fallback_rule": "nonproxy_lcb_exceeds_proxy_ucb",
@@ -4572,7 +4631,10 @@ def run_operator_bandit_sa(env: MultiChipEnvironment, n_iter: int = 100000,
             "best_cost": best_cost,
             "accepted_moves": accepted,
             "improving_moves": improving,
-            "update_count": sum(counts.values()) if control == "learned" else 0,
+            "update_count": (
+                supervised_operator_labels if control == "learned" and
+                full_information_stride else
+                sum(counts.values()) if control == "learned" else 0),
             "initial_placement_evaluations": 1,
             "total_objective_evaluations": n_iter + 1,
             "acceptance_rule": "fixed_metropolis",
@@ -5299,6 +5361,9 @@ def main():
                         help="Minimum uniform operator-exploration probability")
     parser.add_argument("--operator_sa_phase_bins", type=int, default=3,
                         help="Independent early/middle/late operator models")
+    parser.add_argument("--operator_sa_full_information_stride", type=int,
+                        default=0,
+                        help="Every N decisions, label all four operators within budget")
     parser.add_argument("--operator_sa_disable_learning", action="store_true",
                         help="Select move operators uniformly as a matched control")
     parser.add_argument("--operator_sa_control",
@@ -5685,6 +5750,8 @@ def main():
         parser.error("--operator_sa_minimum_exploration must be in [0,1]")
     if args.operator_sa_phase_bins <= 0:
         parser.error("--operator_sa_phase_bins must be positive")
+    if args.operator_sa_full_information_stride < 0:
+        parser.error("--operator_sa_full_information_stride cannot be negative")
     if not 0.0 <= args.ppo_asa_focus_fraction <= 1.0:
         parser.error("--ppo_asa_focus_fraction must be in [0, 1]")
     if not 0.0 <= args.ppo_asa_focus_stage_slack < 1.0:
@@ -6084,6 +6151,7 @@ def main():
             discount=args.operator_sa_discount,
             minimum_exploration=args.operator_sa_minimum_exploration,
             phase_bins=args.operator_sa_phase_bins,
+            full_information_stride=args.operator_sa_full_information_stride,
             control=args.operator_sa_control,
             disable_learning=args.operator_sa_disable_learning,
             seed=args.seed, metadata=algorithm_metadata)

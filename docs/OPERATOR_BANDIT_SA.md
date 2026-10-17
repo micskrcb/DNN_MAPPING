@@ -40,6 +40,24 @@ seeds and by at least 1% on average.
 
 The completed attribution gate failed: learned selection was 2.306% worse than
 the exact embedded-proxy control and won only one of three seeds. Consequently,
-this online operator-bandit configuration is closed. Its strongest result is
-the training-free embedded proxy heuristic, which remains the required control
-for any future supervised or RL gating method.
+the selected-action-only operator-bandit configuration is closed. Its
+strongest result is the training-free embedded proxy heuristic, which remains
+the required control for any future supervised or RL gating method.
+
+The follow-up full-information mode is enabled with
+`--operator_sa_full_information_stride N`. Every `N`th decision evaluates all
+four operators at the same state and trains from all four exact signed gains.
+The proxy candidate advances the chain on those collection steps. This avoids
+the biased feedback loop in which the policy only observes the move it chose.
+The proxy control performs the same extra evaluations and discards their
+labels, preserving equal objective-call budgets. The first gate uses stride 20,
+zero forced random exploration, three seeds, and 20,001 calls per method:
+
+```bash
+bash scripts/run_kaggle_full_information_operator_gate.sh \
+  runs/kaggle-full-information-operator
+```
+
+This is still online learning on one workload, without a pretrained dataset.
+It becomes a positive RL+SA result only if it beats the matched proxy control
+in at least two seeds and by at least 1% on mean cost.

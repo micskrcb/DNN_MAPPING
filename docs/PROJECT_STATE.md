@@ -1,5 +1,18 @@
 # Project state: paper-faithful DNN core placement
 
+## 2026-10-17: full-information operator-learning gate
+
+The next bounded RL+SA experiment is implemented. Every twentieth operator
+decision evaluates `proxy`, `bottleneck`, `swap`, and `relocation` from the
+same pre-move placement, charges all four exact calls to the declared budget,
+and trains the phase-specific LinUCB models from all four signed gains. The
+chain still advances with the proxy proposal at these collection steps, so the
+learner receives no oracle trajectory advantage. On every other step it may
+override proxy using the learned confidence gate. The matched proxy control
+makes the same four calls and discards the labels. A regression test and a
+reduced end-to-end archive smoke pass with exact accounting. Performance is
+not yet known; run `scripts/run_kaggle_full_information_operator_gate.sh`.
+
 ## 2026-10-16: training-free portable Proxy-SA mode
 
 The tested proxy-greedy control is now exposed directly as `--algo proxy_sa`.
