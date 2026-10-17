@@ -61,3 +61,33 @@ bash scripts/run_kaggle_full_information_operator_gate.sh \
 This is still online learning on one workload, without a pretrained dataset.
 It becomes a positive RL+SA result only if it beats the matched proxy control
 in at least two seeds and by at least 1% on mean cost.
+
+This gate completed with valid accounting but failed: it won one seed, tied
+two, and improved mean cost by 0.563%. The trained policy chose proxy on
+52,030 of 52,061 decisions, consistent with the exact labels showing that the
+other three operators were worse. Do not extend this mode unchanged.
+
+## Proxy-gated discounted Linear Thompson Sampling
+
+The selected-action follow-up avoids the full-information transition penalty.
+Set `--operator_sa_selection_policy lints` and
+`--operator_sa_proxy_gate_slate 2`. Cholesky Linear Thompson Sampling ranks
+the four operators; the two highest-ranked operators each produce a proposal;
+the cheap communication-distance proxy selects one; and only that proposal
+uses the true objective and updates the model. Thus each post-calibration
+decision still costs exactly one true evaluation.
+
+`--operator_sa_reward signed` uses the historical signed proposed cost change.
+`--operator_sa_reward outcome` gives bounded ALNS-style credit for a new best,
+an improving move, an accepted worsening move, or a rejection, with recent
+improvement magnitude as a secondary term. These are prespecified parallel
+variants rather than post-result tuning. Run the paired gate with:
+
+```bash
+bash scripts/run_kaggle_proxy_gated_lints_gate.sh \
+  runs/kaggle-proxy-gated-lints-gate
+```
+
+The decisive baseline is ordinary unthrottled embedded Proxy-SA, which also
+uses one true objective per step. The outcome variant advances only with at
+least two of three wins and at least 1% mean improvement over that baseline.

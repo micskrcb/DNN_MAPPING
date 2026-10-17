@@ -26,6 +26,29 @@ A maintained PPO library can improve reliability and parallel collection, but
 no available repository is a drop-in replacement for this project's DNN
 partition, routing, timing, and legal-placement environment.
 
+## Full-information operator result (17 October 2026)
+
+The VGG16-CONV gate at revision `8a60616` passed all mechanics checks. Each
+learned run used 20,001 true objective calls and obtained 3,472 exact labels
+from 868 same-state four-operator pools. Relative to the matched proxy control,
+the learned costs improved by 1.689%, 0%, and 0% across seeds 0--2. The mean
+was 0.563% with one win, below the prespecified two wins and 1% mean rule.
+
+The labels revealed a more specific limitation than "insufficient epochs."
+The trained policy selected proxy for 52,030 of 52,061 total decisions. The
+supervised signed-reward totals consistently ranked proxy above bottleneck,
+swap, and relocation proposals. More iterations of the same mechanism would
+mostly reinforce proxy selection while the four-call collection steps reduce
+the number of sequential state transitions.
+
+The next bounded hypothesis restores one true evaluation per step. Discounted
+Cholesky LinTS ranks operators, the cheap communication proxy chooses between
+the top two generated proposals, and only the executed operator is updated.
+Signed immediate reward and an outcome-aware reward are prespecified parallel
+variants. Ordinary unthrottled embedded Proxy-SA is the decisive control. The
+method advances only with at least two of three paired wins and at least 1%
+mean improvement over that control.
+
 ## Purpose
 
 This document records the investigation prompted by the 3,000-placement

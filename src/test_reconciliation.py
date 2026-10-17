@@ -68,6 +68,39 @@ class TimingTests(unittest.TestCase):
                              metadata["supervised_operator_labels"]
                              if control == "learned" else 0)
 
+    def test_proxy_gated_lints_uses_one_true_call_and_is_reproducible(self):
+        graph = np.zeros((5, 5), dtype=np.float32)
+        graph[0, 1] = graph[0, 2] = graph[1, 3] = graph[2, 3] = 2.0
+        graph[3, 4] = 3.0
+        rows = []
+        for _ in range(2):
+            env = MultiChipEnvironment(
+                2, 1, 2, 2, task_graph=graph, num_tasks=5)
+            metadata = {}
+            with contextlib.redirect_stdout(io.StringIO()):
+                result = rm.run_operator_bandit_sa(
+                    env, n_iter=64, proxy_candidates=4,
+                    selection_policy="lints", proxy_gate_slate=2,
+                    thompson_scale=0.25, discount=0.98,
+                    minimum_exploration=0.03, reward_mode="outcome",
+                    reward_window=20, seed=31, metadata=metadata)
+            rows.append((result, metadata))
+        result, metadata = rows[0]
+        self.assertTrue(np.isfinite(result))
+        self.assertEqual(metadata["total_objective_evaluations"], 65)
+        self.assertEqual(metadata["decision_steps"], 32)
+        self.assertEqual(metadata["proxy_gate_candidate_proposals"], 64)
+        self.assertEqual(sum(metadata["operator_selection_counts"].values()),
+                         metadata["decision_steps"])
+        self.assertEqual(sum(metadata["bandit_primary_selection_counts"].values()),
+                         metadata["decision_steps"])
+        self.assertEqual(metadata["update_count"], metadata["decision_steps"])
+        self.assertTrue(all(value >= 0 for value in
+                            metadata["operator_reward_sums"].values()))
+        self.assertEqual(rows[0][0], rows[1][0])
+        self.assertEqual(rows[0][1]["operator_selection_counts"],
+                         rows[1][1]["operator_selection_counts"])
+
     @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
     def test_proxy_guided_sa_is_training_free_across_supported_topologies(self):
         graph = np.zeros((4, 4), dtype=np.float32)

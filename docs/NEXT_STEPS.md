@@ -145,6 +145,9 @@ Current paper targets:
 73. [x] The seed 3--5 residual gate failed against proxy-greedy: one win, two losses, and -6.907% mean improvement. It beat fixed SA 3/3 by 23.788%. Do not extend this selected-only learner unchanged.
 74. [x] Add opt-in whole-pool labels with exact objective accounting. A supervised pool charges all 16 candidates to the fixed budget, is selected before their costs are known, and adds every exact gain to replay. The 45-test suite and a four-method 65-call smoke pass.
 75. Run the pool-supervised residual gate on fresh VGG16-CONV seeds 6--8 with stride 32 and 20,001 calls/method. Require positive mean and at least 2/3 wins against both proxy-greedy and fixed SA before any extension.
+76. [x] Complete the stride-20 full-information operator gate on VGG16-CONV seeds 0--2. Mechanics and exact accounting passed, but learning beat the matched transition-throttled proxy in only one seed and improved mean cost by 0.563%, so the two-win/1% gate failed. The policy chose proxy on 52,030 of 52,061 decisions; do not extend this configuration.
+77. [x] Implement the prespecified selected-action follow-up: discounted Cholesky LinTS, top-two cheap proxy screening, one true evaluation per step, and separate signed/outcome-aware reward variants. Preserve ordinary unthrottled embedded Proxy-SA as the decisive control and add reproducibility/accounting tests.
+78. Run `scripts/run_kaggle_proxy_gated_lints_gate.sh` on VGG16-CONV seeds 0--2 at 20,001 calls per method. Advance only if the outcome-reward variant beats unthrottled proxy in at least two seeds and by at least 1% on mean cost. Otherwise close this operator set and redesign the operators or move to multi-instance delayed-return learning.
 
 ## Gate 4: improvements after reproduction
 

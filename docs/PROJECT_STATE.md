@@ -1,5 +1,28 @@
 # Project state: paper-faithful DNN core placement
 
+## 2026-10-17: full-information result and next gate
+
+The full-information VGG16-CONV gate completed at revision `8a60616`. All
+nine runs used exactly 20,001 objective calls. Each learned seed collected
+3,472 exact labels from 868 four-operator pools. Learning improved on its
+matched, transition-throttled proxy control by 1.689% in seed 0 and tied it in
+seeds 1 and 2, for a 0.563% mean and one win. It therefore failed the frozen
+two-of-three and 1% advancement rule. Archive SHA-256:
+`913cfec6305bdd58da71ff97da3161f061189e189416af2d0e649559cb87b7a4`.
+
+The result is informative rather than a broken run. The learned selector used
+proxy on 52,030 of 52,061 decisions; all three other operators had much worse
+summed exact signed rewards. Full-information labels therefore taught the
+model that the existing proxy dominated this operator set, while sacrificing
+sequential search transitions. Do not extend this configuration.
+
+The next prespecified short gate is now implemented: discounted Cholesky
+Linear Thompson Sampling ranks the four operators, a cheap proxy screens its
+top two proposals, and exactly one true objective is evaluated per step. It
+compares signed and outcome-aware rewards with ordinary unthrottled embedded
+Proxy-SA on three seeds. This is contextual-bandit-guided SA, not a claim of
+long-horizon RL. Run `scripts/run_kaggle_proxy_gated_lints_gate.sh`.
+
 ## 2026-10-17: external bandit and SA research audit
 
 The internet review and supplied Gemini report have been reconciled with the
@@ -13,7 +36,7 @@ must be ablated separately. No external source code has been imported.
 
 ## 2026-10-17: full-information operator-learning gate
 
-The next bounded RL+SA experiment is implemented. Every twentieth operator
+This bounded RL+SA experiment evaluated every twentieth operator
 decision evaluates `proxy`, `bottleneck`, `swap`, and `relocation` from the
 same pre-move placement, charges all four exact calls to the declared budget,
 and trains the phase-specific LinUCB models from all four signed gains. The
@@ -21,8 +44,8 @@ chain still advances with the proxy proposal at these collection steps, so the
 learner receives no oracle trajectory advantage. On every other step it may
 override proxy using the learned confidence gate. The matched proxy control
 makes the same four calls and discards the labels. A regression test and a
-reduced end-to-end archive smoke pass with exact accounting. Performance is
-not yet known; run `scripts/run_kaggle_full_information_operator_gate.sh`.
+reduced end-to-end archive smoke passed with exact accounting. The completed
+negative performance result and replacement experiment are recorded above.
 
 ## 2026-10-16: training-free portable Proxy-SA mode
 
