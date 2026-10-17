@@ -42,3 +42,12 @@ bash scripts/run_kaggle_macro_operator_gate.sh \
 Passing this short gate would justify shared training across multiple chain
 restarts and workloads. Failure closes the current operator set and supports
 keeping Proxy-SA as the practical optimizer.
+
+## Completed result
+
+The gate completed with correct accounting and active learning. Learned macro
+selection beat the frozen macro controller in two of three seeds and by 0.816%
+on average, but it beat Proxy-SA only once and averaged 2.297% worse. All
+learned runs made 312 delayed updates and used every macro-action. The
+prespecified gate therefore failed, and this operator family is closed rather
+than retuned on the observed seeds.

@@ -1,5 +1,25 @@
 # Project state: paper-faithful DNN core placement
 
+## 2026-10-17: delayed macro-action gate result
+
+The VGG16-CONV macro gate completed on fresh seeds 9--11 at revision
+`ad056fc`, with a clean worktree and exact 20,001-call accounting for all nine
+runs. Archive SHA-256:
+`35f8a9a0e4ba6288d24b47f6e39591465d9c6b393f6eb441380e48ce213c52c6`.
+
+Learned macro selection beat its frozen uniform-macro control in two of three
+seeds and by 0.816% on mean paired cost. Against unthrottled Proxy-SA it won
+only seed 10: paired improvements were -0.757%, +2.097%, and -8.232%, for a
+-2.297% mean. It therefore failed the prespecified gate.
+
+Mechanics were healthy. Every learned run made 312 delayed segment updates,
+used all four macro-actions, and reported finite nonzero delayed rewards. This
+is weak evidence that delayed credit can distinguish search strategies, but it
+does not improve the strongest non-learned method. Together with the one-step
+and full-information failures, this closes the current four-operator family.
+Do not tune its horizon or Thompson parameters on these results. Proxy-SA
+remains the practical best method in this line of experiments.
+
 ## 2026-10-17: delayed macro-action RL+SA implementation
 
 The next bounded method is implemented as an opt-in extension of

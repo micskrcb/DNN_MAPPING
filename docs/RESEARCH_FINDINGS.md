@@ -73,6 +73,27 @@ next RL+SA experiment needs multi-step actions and delayed return, trained
 across independent chains or workloads, while retaining unthrottled Proxy-SA
 as the decisive non-learned control.
 
+## Delayed macro-action result (17 October 2026)
+
+The fresh-seed VGG16-CONV gate used 64-step macro-actions and segment-level
+best-cost reward. Learned selection improved on the frozen uniform-macro
+controller by 4.377%, -3.674%, and 1.746% across seeds 9--11, averaging
++0.816% with two wins. This is a small directional learning signal.
+
+The decisive Proxy-SA comparison was negative: -0.757%, +2.097%, and -8.232%,
+averaging -2.297% with one win. Every learner completed 312 delayed updates,
+used all four actions, and accumulated finite nonzero rewards, so the failure
+cannot be attributed to a frozen model or missing feedback. The macro policy
+changed search behavior but did not reliably improve it.
+
+The evidence now covers selected-action immediate credit, full-information
+immediate credit, proxy-gated Thompson sampling, and delayed 64-step credit.
+None beats unthrottled embedded Proxy-SA under the frozen gate. The honest
+conclusion is that the present hand-designed operator family adds no reliable
+learned advantage. Future RL work must change the representation or train an
+amortized policy across genuinely different placement instances; it should not
+retune this family on the completed seeds.
+
 ## Purpose
 
 This document records the investigation prompted by the 3,000-placement

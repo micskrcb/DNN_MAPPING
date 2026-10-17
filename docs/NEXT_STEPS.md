@@ -150,7 +150,9 @@ Current paper targets:
 78. [x] Run `scripts/run_kaggle_proxy_gated_lints_gate.sh` on VGG16-CONV seeds 0--2 at 20,001 calls per method. Outcome reward lost all pairs and averaged -6.587% versus unthrottled proxy. Signed reward won two pairs but averaged -0.165%. Both failed the required +1% mean gate.
 79. [x] Close one-step contextual selection among the existing four operators. Do not tune discount, Thompson scale, proxy slate, or reward weights on these seeds. Preserve unthrottled embedded Proxy-SA as the strong training-free result and mandatory future control.
 80. [x] Implement the first delayed-credit RL+SA gate. The policy holds an operator strategy for 64 proposals, receives segment-level best-cost improvement, and is compared with a matched frozen uniform-macro control and unthrottled Proxy-SA at equal true-call budgets. Exact-budget and reproducibility tests pass.
-81. Run `scripts/run_kaggle_macro_operator_gate.sh` on fresh VGG16-CONV seeds 9--11. Advance only with at least two wins against both controls and at least 1% mean improvement over Proxy-SA. Passing permits shared training across chain restarts/workloads; failure closes this operator family.
+81. [x] Run `scripts/run_kaggle_macro_operator_gate.sh` on fresh VGG16-CONV seeds 9--11. Learned macro selection beat its frozen macro control in two seeds by 0.816% on average, but beat Proxy-SA once and averaged -2.297%. The gate failed with valid mechanics.
+82. [x] Close the current four-operator learning family. Preserve immediate, full-information, Thompson, and delayed-credit methods as negative ablations; do not tune their horizon, reward, discount, or sampling scale on completed seeds.
+83. Treat unthrottled embedded Proxy-SA as the current practical optimizer. Any further RL+SA proposal must introduce new information through a topology-aware representation or amortized training across distinct placement instances, with Proxy-SA retained as the advancement baseline.
 
 ## Gate 4: improvements after reproduction
 
