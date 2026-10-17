@@ -1,5 +1,20 @@
 # Project state: paper-faithful DNN core placement
 
+## 2026-10-17: amortized topology-aware RL+SA gate
+
+The next method changes the information available to learning rather than
+retuning the closed operator controller. A `topology16` proposal representation
+adds hardware context to the existing contention features. Bandit checkpoints
+can now be evaluated as genuinely frozen policies, and explicit cross-workload
+fine-tuning restores Adam state instead of silently restarting the optimizer.
+
+The frozen protocol trains on AlexNet-FC and AlexNet-CONV, then evaluates on
+unseen ResNet50-CONV seeds 20--22 against matched proxy-greedy and uniform
+candidate controls. Every condition uses exact complete-placement accounting.
+The implementation compiles, the 51-test local suite passes, and PyTorch
+feature/checkpoint tests are included for the Kaggle environment. See
+[`AMORTIZED_BANDIT_SA.md`](AMORTIZED_BANDIT_SA.md). Performance is not known.
+
 ## 2026-10-17: delayed macro-action gate result
 
 The VGG16-CONV macro gate completed on fresh seeds 9--11 at revision

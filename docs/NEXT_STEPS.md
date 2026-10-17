@@ -153,6 +153,8 @@ Current paper targets:
 81. [x] Run `scripts/run_kaggle_macro_operator_gate.sh` on fresh VGG16-CONV seeds 9--11. Learned macro selection beat its frozen macro control in two seeds by 0.816% on average, but beat Proxy-SA once and averaged -2.297%. The gate failed with valid mechanics.
 82. [x] Close the current four-operator learning family. Preserve immediate, full-information, Thompson, and delayed-credit methods as negative ablations; do not tune their horizon, reward, discount, or sampling scale on completed seeds.
 83. Treat unthrottled embedded Proxy-SA as the current practical optimizer. Any further RL+SA proposal must introduce new information through a topology-aware representation or amortized training across distinct placement instances, with Proxy-SA retained as the advancement baseline.
+84. [x] Add a portable `topology16` proposal representation, true frozen-checkpoint bandit inference, and optimizer-state continuation for explicit cross-workload training. Preserve matched proxy and uniform controls and exact true-call accounting.
+85. Run `scripts/run_kaggle_amortized_bandit_gate.sh`: train on AlexNet-FC and AlexNet-CONV, then freeze and test on ResNet50-CONV seeds 20--22. Advance only with two wins over both controls and at least 1% mean improvement over proxy.
 
 ## Gate 4: improvements after reproduction
 

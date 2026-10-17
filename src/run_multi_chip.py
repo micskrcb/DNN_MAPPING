@@ -2792,13 +2792,15 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     if proposal_learner not in {"ppo", "bandit"}:
         raise ValueError("unknown proposal learner")
     if bandit_control not in {
-            "uniform", "proxy_greedy", "bottleneck_random"}:
+            "uniform", "proxy_greedy", "bottleneck_random", "checkpoint"}:
         raise ValueError("unknown bandit control")
     if bandit_control != "uniform" and (
             proposal_learner != "bandit" or not disable_learning):
         raise ValueError(
             "non-uniform bandit controls require the bandit learner with "
             "learning disabled")
+    if bandit_control == "checkpoint" and not load_checkpoint:
+        raise ValueError("checkpoint bandit control requires a loaded checkpoint")
     if min(bandit_replay_capacity, bandit_warmup) <= 0:
         raise ValueError("bandit replay capacity and warmup must be positive")
     if bandit_warmup > bandit_replay_capacity:
@@ -2813,7 +2815,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("bandit top-m must be in [1, candidate_count]")
     if not 0.0 <= bandit_global_epsilon <= 1.0:
         raise ValueError("bandit global epsilon must be in [0, 1]")
-    if bandit_feature_set not in {"legacy9", "contention12"}:
+    if bandit_feature_set not in {"legacy9", "contention12", "topology16"}:
         raise ValueError("unknown bandit candidate feature set")
     if bandit_scoring not in {"direct", "proxy_residual"}:
         raise ValueError("unknown bandit scoring mode")
@@ -2918,7 +2920,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             evaluator = IncrementalPipelineEvaluator(env)
         except (TypeError, AttributeError):
             evaluator = None
-    if (focus_fraction > 0 or bandit_feature_set == "contention12") and \
+    if (focus_fraction > 0 or bandit_feature_set in {
+            "contention12", "topology16"}) and \
             evaluator is None:
         raise ValueError(
             "focused/contention-aware PPO-ASA requires the incremental "
@@ -2936,10 +2939,15 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         "pressure_max", "motion", "chip_change",
         "bottleneck_fraction", "proxy_gain", "affected_volume",
     ]
-    if bandit_feature_set == "contention12":
+    if bandit_feature_set in {"contention12", "topology16"}:
         oracle_feature_names.extend([
             "max_link_delta", "stage_slack_ratio",
             "max_source_byte_hop_delta",
+        ])
+    if bandit_feature_set == "topology16":
+        oracle_feature_names.extend([
+            "offchip_latency_share", "normalized_chip_count",
+            "placement_load", "is_torus",
         ])
     oracle_feature_rows = []
     oracle_global_rows = []
@@ -2990,6 +2998,15 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                          np.finfo(float).eps)
     task_pressure /= pressure_scale
     total_edge_volume = max(float(edge_volumes.sum()), np.finfo(float).eps)
+    latency_total = max(
+        abs(float(env.topo.on_chip_latency)) +
+        abs(float(env.topo.off_chip_latency)), np.finfo(float).eps)
+    topology_features = [
+        abs(float(env.topo.off_chip_latency)) / latency_total,
+        min(1.0, math.log1p(env.topo.num_chips) / math.log1p(64.0)),
+        min(1.0, n / max(1, len(env.allowed_cores))),
+        float(env.topo.topology == "torus"),
+    ]
 
     def bottleneck_tasks(use_focus):
         if not use_focus:
@@ -3085,9 +3102,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             float(proxy_gain),
             float(min(1.0, affected_volume)),
         ]
-        if bandit_feature_set == "contention12":
+        if bandit_feature_set in {"contention12", "topology16"}:
             feature_values.extend(
                 evaluator.candidate_contention_features(candidate, changed))
+        if bandit_feature_set == "topology16":
+            feature_values.extend(topology_features)
         return np.asarray(feature_values, dtype=np.float32)
 
     def evaluate(candidate, changed):
@@ -3257,6 +3276,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         bandit_optimizer = optim.Adam(
             bandit.parameters(), lr=learning_rate, eps=1e-5,
             weight_decay=weight_decay)
+        if (loaded_checkpoint is not None and allow_finetune_loaded and
+                "bandit_optimizer" in loaded_checkpoint):
+            bandit_optimizer.load_state_dict(
+                loaded_checkpoint["bandit_optimizer"])
     elif update_style == "reference_separate":
         actor_optimizer = optim.Adam(
             actor.parameters(), lr=learning_rate, eps=1e-5,
@@ -3566,6 +3589,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             if proposal_learner == "bandit":
                 if disable_learning and bandit_control == "proxy_greedy":
                     normalized_logits = feature_tensor[:, :, 7]
+                elif disable_learning and bandit_control == "checkpoint":
+                    normalized_logits = bandit(global_tensor, feature_tensor)
                 elif disable_learning:
                     normalized_logits = torch.zeros_like(feature_tensor[:, :, 7])
                 else:
@@ -4133,6 +4158,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 "epsilon_greedy_proxy_gain"
                 if (proposal_learner == "bandit" and
                     bandit_control == "proxy_greedy")
+                else "frozen_checkpoint_contextual_bandit"
+                if (proposal_learner == "bandit" and
+                    bandit_control == "checkpoint")
                 else "focused_candidate_uniform"
                 if (proposal_learner == "bandit" and
                     bandit_control == "bottleneck_random")
@@ -5696,11 +5724,11 @@ def main():
                         help="Fraction of the run used to decay bandit exploration")
     parser.add_argument(
         "--ppo_asa_bandit_control",
-        choices=["uniform", "proxy_greedy", "bottleneck_random"],
+        choices=["uniform", "proxy_greedy", "bottleneck_random", "checkpoint"],
         default="uniform",
         help=("Non-learned comparator used with --ppo_asa_disable_learning: "
-              "uniform selection, epsilon-greedy proxy ranking, or uniform "
-              "selection within the focused half of the pool"))
+              "uniform selection, epsilon-greedy proxy ranking, frozen loaded "
+              "checkpoint scoring, or uniform selection within the focused pool"))
     parser.add_argument(
         "--ppo_asa_bandit_exploration",
         choices=["epsilon_all", "epsilon_top_m"], default="epsilon_all",
@@ -5713,9 +5741,9 @@ def main():
         help="Global-uniform probability retained by epsilon_top_m")
     parser.add_argument(
         "--ppo_asa_bandit_feature_set",
-        choices=["legacy9", "contention12"], default="legacy9",
+        choices=["legacy9", "contention12", "topology16"], default="legacy9",
         help=("Candidate features: historical hop proxies or those features "
-              "plus cached link, stage-slack, and source-serialization deltas"))
+              "plus contention deltas and optional portable topology context"))
     parser.add_argument(
         "--ppo_asa_bandit_shuffle_labels", action="store_true",
         help="Shuffle bandit targets within each update as a learning control")

@@ -57,6 +57,7 @@ Paper-mode reports include routed mean hop counts and on/off-chip link-load summ
 - `docs/PROXY_GUIDED_SA.md`: Proxy-SA definition, portability contract, limitations, and test command.
 - `docs/OPERATOR_BANDIT_SA.md`: Current RL+SA design, controls, advancement gate, and execution command.
 - `docs/MACRO_OPERATOR_SA.md`: Delayed segment-level RL+SA design, matched controls, and Kaggle gate.
+- `docs/AMORTIZED_BANDIT_SA.md`: Cross-workload topology-aware training, frozen checkpoint control, and holdout gate.
 - `docs/`: Active documentation:
   - `docs/CODEBASE_GUIDE.md`: Comprehensive architecture, evaluator data flow, and contributor guide.
   - `docs/IMP_README.md`: Essential developer onboarding rules, branch hygiene, and execution guide.

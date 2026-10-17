@@ -241,9 +241,42 @@ class TimingTests(unittest.TestCase):
                               state_encoding="relative_cost", bandit_scoring=scoring,
                               load_checkpoint=checkpoint, metadata=loaded)
                 self.assertEqual(loaded["model_initialization"], "loaded_checkpoint")
+                frozen = {}
+                rm.run_ppo_asa(
+                    environment(), **options, disable_learning=True,
+                    state_encoding="relative_cost", bandit_scoring=scoring,
+                    bandit_control="checkpoint", load_checkpoint=checkpoint,
+                    bandit_epsilon_final=0.0, metadata=frozen)
+                self.assertEqual(
+                    frozen["proposal_policy"],
+                    "frozen_checkpoint_contextual_bandit")
+                self.assertEqual(frozen["update_count"], 0)
             with self.assertRaisesRegex(ValueError, "bandit scoring"):
                 rm.run_ppo_asa(environment(), **options, disable_learning=True,
                               state_encoding="relative_cost", load_checkpoint=checkpoint)
+
+    @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
+    def test_topology_aware_bandit_feature_contract(self):
+        import torch
+        torch.set_num_threads(2)
+        graph = np.zeros((4, 4), dtype=np.float32)
+        graph[0, 1] = graph[1, 2] = graph[2, 3] = 1.0
+        env = MultiChipEnvironment(
+            1, 1, 2, 3, task_graph=graph, num_tasks=4)
+        metadata = {}
+        with contextlib.redirect_stdout(io.StringIO()):
+            rm.run_ppo_asa(
+                env, n_iter=24, candidate_count=4, rollout_steps=4,
+                device="cpu", update_epochs=1, minibatch_size=4,
+                hidden_dim=16, calibration_trials=4, adapt_window=4,
+                seed=41, proposal_learner="bandit", bandit_warmup=4,
+                bandit_feature_set="topology16",
+                annealing_schedule="fixed", metadata=metadata)
+        self.assertEqual(len(metadata["candidate_feature_names"]), 16)
+        self.assertEqual(
+            metadata["candidate_feature_names"][-4:],
+            ["offchip_latency_share", "normalized_chip_count",
+             "placement_load", "is_torus"])
 
     @unittest.skipUnless(rm.HAS_TORCH, "PyTorch is not installed")
     def test_zero_residual_matches_proxy_search_before_updates(self):
