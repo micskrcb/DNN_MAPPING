@@ -3,7 +3,7 @@
 ## 2026-10-17: full-information result and next gate
 
 The full-information VGG16-CONV gate completed at revision `8a60616`. All
-nine runs used exactly 20,001 objective calls. Each learned seed collected
+six runs used exactly 20,001 objective calls. Each learned seed collected
 3,472 exact labels from 868 four-operator pools. Learning improved on its
 matched, transition-throttled proxy control by 1.689% in seed 0 and tied it in
 seeds 1 and 2, for a 0.563% mean and one win. It therefore failed the frozen
