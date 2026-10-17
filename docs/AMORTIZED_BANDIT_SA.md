@@ -50,3 +50,20 @@ bash scripts/run_kaggle_amortized_bandit_gate.sh \
 This is an exploratory amortized-transfer gate. It is not evidence of broad
 generalization unless it passes and is subsequently confirmed on additional
 unseen workloads and hardware settings.
+
+## Result: failed transfer gate
+
+The protocol completed on Kaggle at revision `34c3101` with 51 passing tests.
+The result archive SHA-256 is
+`0b52220c8d9f81fab7a7c2e60e6d8f44d2c360469caa2be8d5d63f50f4466b20`.
+Both AlexNet training stages performed 77 bandit updates. The held-out
+checkpoint was loaded as `frozen_checkpoint_contextual_bandit` and performed
+zero updates; all nine held-out jobs consumed exactly 20,001 true objective
+calls.
+
+On ResNet50-CONV seeds 20, 21, and 22, frozen checkpoint, proxy-greedy, and
+uniform all reached the same best result: **588.784 microseconds**. The frozen
+policy therefore had 0/3 wins and 0.000% mean improvement over proxy and over
+uniform. The pre-registered advancement rule failed. This records a valid
+null result, not a broken-checkpoint result; increasing only the evaluation
+budget is not justified.

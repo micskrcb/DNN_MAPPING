@@ -2,6 +2,21 @@
 
 ## 2026-10-17: amortized topology-aware RL+SA gate
 
+**Result: failed frozen-transfer gate.** The Kaggle run at revision `34c3101`
+completed with a clean worktree, 51 passing tests, and archive SHA-256
+`0b52220c8d9f81fab7a7c2e60e6d8f44d2c360469caa2be8d5d63f50f4466b20`.
+Both AlexNet training stages made 77 bandit updates, and each held-out run
+used the exact 20,001 complete-placement budget. The ResNet50-CONV frozen
+checkpoint was genuinely loaded (`frozen_checkpoint_contextual_bandit`) and
+made zero updates, as intended.
+
+However, frozen checkpoint, proxy-greedy, and uniform each obtained exactly
+588.784 microseconds for every hold-out seed (20--22). Thus there were zero
+wins and 0.000% mean improvement over either control, far below the two-win
+and +1% advancement rule. This is a valid null transfer result: do not claim
+that the topology-aware checkpoint generalizes, and do not extend this exact
+training/hold-out protocol by merely increasing its budget.
+
 The next method changes the information available to learning rather than
 retuning the closed operator controller. A `topology16` proposal representation
 adds hardware context to the existing contention features. Bandit checkpoints

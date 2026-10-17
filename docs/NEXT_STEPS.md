@@ -154,7 +154,7 @@ Current paper targets:
 82. [x] Close the current four-operator learning family. Preserve immediate, full-information, Thompson, and delayed-credit methods as negative ablations; do not tune their horizon, reward, discount, or sampling scale on completed seeds.
 83. Treat unthrottled embedded Proxy-SA as the current practical optimizer. Any further RL+SA proposal must introduce new information through a topology-aware representation or amortized training across distinct placement instances, with Proxy-SA retained as the advancement baseline.
 84. [x] Add a portable `topology16` proposal representation, true frozen-checkpoint bandit inference, and optimizer-state continuation for explicit cross-workload training. Preserve matched proxy and uniform controls and exact true-call accounting.
-85. Run `scripts/run_kaggle_amortized_bandit_gate.sh`: train on AlexNet-FC and AlexNet-CONV, then freeze and test on ResNet50-CONV seeds 20--22. Advance only with two wins over both controls and at least 1% mean improvement over proxy.
+85. [x] Run `scripts/run_kaggle_amortized_bandit_gate.sh`: train on AlexNet-FC and AlexNet-CONV, then freeze and test on ResNet50-CONV seeds 20--22. All training and held-out call accounting passed, and the checkpoint was genuinely frozen at hold-out; nevertheless every method reached 588.784 microseconds in all three seeds. Zero wins and 0.000% mean improvement failed the two-win/+1% rule. Close this exact transfer protocol; do not add epochs merely to pursue this null result.
 
 ## Gate 4: improvements after reproduction
 

@@ -94,6 +94,18 @@ learned advantage. Future RL work must change the representation or train an
 amortized policy across genuinely different placement instances; it should not
 retune this family on the completed seeds.
 
+### Amortized topology-aware transfer result (2026-10-17)
+
+The first explicit amortization test did change both representation and
+training instances: `topology16` was trained on AlexNet-FC, fine-tuned on
+AlexNet-CONV, then frozen for ResNet50-CONV. Its mechanics were verified:
+both stages made 77 updates, the checkpoint loaded for hold-out inference, and
+each of the nine held-out runs consumed exactly 20,001 true calls. Yet all
+three controllers (frozen checkpoint, proxy-greedy, and uniform) ended at
+588.784 microseconds in every one of the three held-out seeds. This supplies
+no transfer signal. It closes this particular two-source/one-target protocol;
+it does not establish that every possible amortized RL+SA design is impossible.
+
 ## Purpose
 
 This document records the investigation prompted by the 3,000-placement
