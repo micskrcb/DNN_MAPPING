@@ -118,6 +118,13 @@ sensitivity diagnostics, and require at least 2% median unresolved headroom
 before running further RL. This is a screening criterion, not a claim that a
 workload failing it has a wrong simulator.
 
+The completed certification supports the screen. AlexNet-CONV and
+ResNet50-CONV each had 0.000% median short-to-reference gap despite broad
+random-placement spans, showing that random sensitivity alone does not certify
+late-search headroom. VGG16-CONV retained 6.709% median unresolved headroom,
+with its 100,001-call reference 40.706% above the compute floor. Therefore,
+only VGG16-CONV is eligible for the next controlled learned-transfer test.
+
 ## Purpose
 
 This document records the investigation prompted by the 3,000-placement

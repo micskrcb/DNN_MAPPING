@@ -10,6 +10,15 @@ distance to the compute-only floor, and permits later RL only where at least
 2% median short-to-reference headroom remains. This criterion prevents small,
 plateau-level differences from being misrepresented as learning progress.
 
+The certification completed at revision `305999c` with archive SHA-256
+`3e504b35d3c53138e6267abe5153e48648433fa881d47fa6be3d1a0985cb191f`.
+Only VGG16-CONV passed: its median 20,001-call Proxy-SA result was 6.709%
+above its 100,001-call reference and the reference remained 40.706% above the
+compute-only floor. AlexNet-CONV and ResNet50-CONV each had 0.000% median
+unresolved headroom and are excluded from further RL gates under this
+protocol. VGG16-CONV is the sole justified target for the next frozen transfer
+test.
+
 **Result: failed frozen-transfer gate.** The Kaggle run at revision `34c3101`
 completed with a clean worktree, 51 passing tests, and archive SHA-256
 `0b52220c8d9f81fab7a7c2e60e6d8f44d2c360469caa2be8d5d63f50f4466b20`.

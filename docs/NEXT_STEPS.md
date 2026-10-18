@@ -159,6 +159,8 @@ Current paper targets:
 87. Run the VGG16-CONV transfer gate: train sequentially on AlexNet-FC and AlexNet-CONV, then freeze the checkpoint on VGG16-CONV seeds 20--22. Advance only on at least two wins over both controls and +1% mean improvement over Proxy-SA. This target is chosen because prior tests showed proposal-selection headroom, not because of a result from this gate.
 88. [x] Add a preregistered Proxy-SA headroom-certification runner. It reports initial cost, sensitivity span, compute-floor gap, and short (20,001-call) versus long (100,001-call) Proxy-SA results on AlexNet-CONV, VGG16-CONV, and ResNet50-CONV. A workload is eligible for further RL only if the median short result remains at least 2% above the long reference.
 89. Run `scripts/run_kaggle_headroom_certification.sh` before the VGG16 transfer gate. Do not run RL on workloads that fail its 2% unresolved-headroom criterion.
+90. [x] Complete headroom certification at `305999c` (archive SHA-256 `3e504b35d3c53138e6267abe5153e48648433fa881d47fa6be3d1a0985cb191f`). AlexNet-CONV and ResNet50-CONV had 0.000% median unresolved headroom and are ineligible. VGG16-CONV passed with 6.709% median unresolved headroom and a 40.706% median reference gap above the compute floor.
+91. Run the one eligible frozen transfer gate only: AlexNet-FC then AlexNet-CONV training, frozen VGG16-CONV hold-out seeds 20--22, with Proxy-SA and uniform controls. Retain the prespecified two-win and +1% mean-versus-Proxy-SA advancement rule.
 
 ## Gate 4: improvements after reproduction
 
