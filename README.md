@@ -10,11 +10,13 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**Latest experiment:** the VGG16-CONV contention bandit lost to proxy-greedy
-and fixed SA on all three tested seeds. The next opt-in experiment starts at
-proxy-greedy and learns a bounded correction, with unclipped cost-ratio state
-inputs. It is implemented, not yet demonstrated to improve real placements.
-See [the residual-bandit protocol and run commands](docs/RESIDUAL_BANDIT.md).
+**Latest experiment (18 October):** signed pairwise training captured roughly
+80–87% of the available improvement over the proxy on held-out candidate pools,
+and 94–98% in late-stage pools. These are offline ranking results, not final
+placement improvements. The next experiment freezes this scorer and compares
+complete fixed-SA searches against proxy-greedy and uniform proposals on fresh
+seeds 40–42. This is supervised proposal learning; online RL benefit remains unproven.
+See [the rollout protocol and run command](docs/PAIRWISE_ROLLOUT.md).
 
 | Paper feature | Current status |
 | --- | --- |

@@ -34,4 +34,28 @@ class RankingRepairTests(unittest.TestCase):
             pred=model(g[64:],x[64:]).argmax(1)
         self.assertGreater((pred==y[64:].argmax(1)).float().mean().item(),.75)
 
+    @unittest.skipIf(torch is None, 'PyTorch unavailable')
+    def test_export_loads_as_frozen_proposer(self):
+        import tempfile, contextlib, io
+        from pathlib import Path
+        from diagnose_bandit_ranking import inference_checkpoint
+        from run_multi_chip import ProposalBanditRegressor, run_ppo_asa
+        from multi_chip_environment import MultiChipEnvironment
+        graph=np.zeros((4,4),dtype=np.float32)
+        graph[0,1]=graph[1,2]=graph[2,3]=1
+        model=ProposalBanditRegressor(8,9,hidden_dim=16,scoring='direct')
+        with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
+            path=Path(directory)/'ranker.pt'
+            torch.save(inference_checkpoint(model,4,100,feature_set='legacy9',focus=0,slack=0),path)
+            meta={}
+            run_ppo_asa(MultiChipEnvironment(1,1,2,3,task_graph=graph,num_tasks=4),
+                n_iter=24,candidate_count=4,hidden_dim=16,calibration_trials=4,
+                device='cpu',seed=17,proposal_learner='bandit',bandit_control='checkpoint',
+                disable_learning=True,annealing_schedule='fixed',state_encoding='relative_cost',
+                load_checkpoint=str(path),metadata=meta)
+        self.assertEqual(meta['update_count'],0)
+        self.assertEqual(meta['total_objective_evaluations'],25)
+        self.assertEqual(meta['source_training_updates'],100)
+        self.assertEqual(meta['model_initialization'],'loaded_checkpoint')
+
 if __name__=='__main__': unittest.main()

@@ -1,0 +1,148 @@
+{
+  "protocol": "offline chain-disjoint diagnostic, not an optimizer benchmark",
+  "train_seeds": [
+    30,
+    31,
+    32,
+    33
+  ],
+  "test_seeds": [
+    34,
+    35
+  ],
+  "epochs": 100,
+  "models": {
+    "bounded_positive_regression": {
+      "updates": 1600,
+      "test_chains": [
+        {
+          "seed": 34,
+          "all": {
+            "pools": 255,
+            "advantage_over_proxy_seconds": -1.5618817254905658e-06,
+            "advantage_over_uniform_seconds": 0.0005140803409411797,
+            "oracle_advantage_over_proxy_seconds": 7.308555607843109e-05,
+            "oracle_capture_over_proxy": -0.021370593716417058,
+            "harm_fraction": 0.00392156862745098
+          },
+          "late": {
+            "pools": 128,
+            "advantage_over_proxy_seconds": 0.0,
+            "advantage_over_uniform_seconds": 0.0006933310622656268,
+            "oracle_advantage_over_proxy_seconds": 3.596257000000007e-05,
+            "oracle_capture_over_proxy": 0.0,
+            "harm_fraction": 0.0
+          }
+        },
+        {
+          "seed": 35,
+          "all": {
+            "pools": 255,
+            "advantage_over_proxy_seconds": -7.548536470586882e-07,
+            "advantage_over_uniform_seconds": 0.0004969350026666684,
+            "oracle_advantage_over_proxy_seconds": 0.00013467927090195938,
+            "oracle_capture_over_proxy": -0.00560482427624804,
+            "harm_fraction": 0.00392156862745098
+          },
+          "late": {
+            "pools": 128,
+            "advantage_over_proxy_seconds": 0.0,
+            "advantage_over_uniform_seconds": 0.0007693731707812515,
+            "oracle_advantage_over_proxy_seconds": 4.175375749999978e-05,
+            "oracle_capture_over_proxy": 0.0,
+            "harm_fraction": 0.0
+          }
+        }
+      ]
+    },
+    "pairwise_signed": {
+      "updates": 1600,
+      "test_chains": [
+        {
+          "seed": 34,
+          "all": {
+            "pools": 255,
+            "advantage_over_proxy_seconds": 5.842696972548929e-05,
+            "advantage_over_uniform_seconds": 0.0005740691923921595,
+            "oracle_advantage_over_proxy_seconds": 7.308555607843109e-05,
+            "oracle_capture_over_proxy": 0.7994325125307787,
+            "harm_fraction": 0.054901960784313725
+          },
+          "late": {
+            "pools": 128,
+            "advantage_over_proxy_seconds": 3.382843624999988e-05,
+            "advantage_over_uniform_seconds": 0.0007271594985156268,
+            "oracle_advantage_over_proxy_seconds": 3.596257000000007e-05,
+            "oracle_capture_over_proxy": 0.9406568065074273,
+            "harm_fraction": 0.0078125
+          }
+        },
+        {
+          "seed": 35,
+          "all": {
+            "pools": 255,
+            "advantage_over_proxy_seconds": 0.00011741826572548967,
+            "advantage_over_uniform_seconds": 0.0006151081220392168,
+            "oracle_advantage_over_proxy_seconds": 0.00013467927090195938,
+            "oracle_capture_over_proxy": 0.8718362145794881,
+            "harm_fraction": 0.03529411764705882
+          },
+          "late": {
+            "pools": 128,
+            "advantage_over_proxy_seconds": 4.0763957499999815e-05,
+            "advantage_over_uniform_seconds": 0.0008101371282812513,
+            "oracle_advantage_over_proxy_seconds": 4.175375749999978e-05,
+            "oracle_capture_over_proxy": 0.976294349077446,
+            "harm_fraction": 0.0078125
+          }
+        }
+      ]
+    },
+    "pairwise_positive": {
+      "updates": 1600,
+      "test_chains": [
+        {
+          "seed": 34,
+          "all": {
+            "pools": 255,
+            "advantage_over_proxy_seconds": 6.465202196078382e-05,
+            "advantage_over_uniform_seconds": 0.000580294244627454,
+            "oracle_advantage_over_proxy_seconds": 7.308555607843109e-05,
+            "oracle_capture_over_proxy": 0.8846073756544057,
+            "harm_fraction": 0.2549019607843137
+          },
+          "late": {
+            "pools": 128,
+            "advantage_over_proxy_seconds": 2.5383531250000104e-05,
+            "advantage_over_uniform_seconds": 0.0007187145935156269,
+            "oracle_advantage_over_proxy_seconds": 3.596257000000007e-05,
+            "oracle_capture_over_proxy": 0.7058319594511753,
+            "harm_fraction": 0.3828125
+          }
+        },
+        {
+          "seed": 35,
+          "all": {
+            "pools": 255,
+            "advantage_over_proxy_seconds": 0.0001235677772549013,
+            "advantage_over_uniform_seconds": 0.0006212576335686284,
+            "oracle_advantage_over_proxy_seconds": 0.00013467927090195938,
+            "oracle_capture_over_proxy": 0.9174966305308648,
+            "harm_fraction": 0.22745098039215686
+          },
+          "late": {
+            "pools": 128,
+            "advantage_over_proxy_seconds": 2.84879875000001e-05,
+            "advantage_over_uniform_seconds": 0.0007978611582812516,
+            "oracle_advantage_over_proxy_seconds": 4.175375749999978e-05,
+            "oracle_capture_over_proxy": 0.6822856002840044,
+            "harm_fraction": 0.375
+          }
+        }
+      ]
+    }
+  },
+  "unreachable_positive_target_fraction_train": 0.5742647058823529,
+  "training_pools": 1020,
+  "interpretation": "Two test chains are exploratory. Positive offline ranking requires a later frozen rollout comparison; do not tune on these test seeds."
+}

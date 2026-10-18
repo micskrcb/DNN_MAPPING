@@ -1,6 +1,6 @@
-"""Offline paired ranking diagnostic; no optimizer-win claim or deployable checkpoint.
+"""Offline paired ranking diagnostic; no optimizer-win claim; optional signed-ranker inference export.
 
-Pools from seeds 30--33 train; seeds 34--35 are untouched test chains.
+Pools from seeds 30--33 train; seeds 34--35 are held-out diagnostic/model-selection chains.
 Compare the existing bounded regressor with same-architecture pairwise models.
 """
 import argparse
@@ -23,6 +23,17 @@ def metrics(scores, gains, features):
             "harm_fraction": float(np.mean(selected < proxy - 1e-15))}
 
 
+def inference_checkpoint(model, candidate_count, updates, feature_set="topology16", focus=.5, slack=.05):
+    """Inference-only payload compatible with run_ppo_asa's existing loader."""
+    return {"algorithm": "bandit_sa_proposal_v1", "resumable": False,
+            "candidate_count": candidate_count, "state_encoding": "relative_cost",
+            "bandit_scoring": "direct", "bandit_pool_supervision_stride": 0,
+            "annealing_schedule": "fixed", "focus_fraction": focus,
+            "focus_stage_slack": slack, "bandit_feature_set": feature_set,
+            "bandit": model.state_dict(), "update_count": updates,
+            "training_method": "offline_signed_pairwise", "training_seeds": [30,31,32,33]}
+
+
 def main():
     import torch
     import torch.nn.functional as F
@@ -30,12 +41,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('directory', type=Path)
     parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--export-signed', type=Path, help='Train only on seeds 30--33 and export; do not read test chains')
     args = parser.parse_args()
     if args.epochs < 1:
         parser.error('epochs must be positive')
     torch.set_num_threads(2)
     pools = []
-    for seed in range(30, 36):
+    for seed in range(30, 34 if args.export_signed else 36):
         with np.load(args.directory / f'seed{seed}.npz', allow_pickle=False) as d:
             row = {k: d[k].copy() for k in ('global_states', 'candidate_features', 'true_gains')}
         report = json.loads((args.directory / f'seed{seed}.json').read_text())
@@ -56,7 +68,7 @@ def main():
               'epochs': args.epochs, 'models': {},
               'unreachable_positive_target_fraction_train': float(np.mean(np.abs(targets-proxy) > .25)),
               'training_pools': len(raw)}
-    for mode in ('bounded_positive_regression', 'pairwise_signed', 'pairwise_positive'):
+    for mode in (('pairwise_signed',) if args.export_signed else ('bounded_positive_regression', 'pairwise_signed', 'pairwise_positive')):
         torch.manual_seed(20261018)
         rng = np.random.default_rng(20261018)
         model = ProposalBanditRegressor(gs.shape[1], xs.shape[2], hidden_dim=128,
@@ -87,6 +99,11 @@ def main():
                 torch.nn.utils.clip_grad_norm_(model.parameters(), .5)
                 optimizer.step()
                 updates += 1
+        if args.export_signed:
+            args.export_signed.parent.mkdir(parents=True, exist_ok=True)
+            torch.save(inference_checkpoint(model, xs.shape[1], updates), args.export_signed)
+            print(f"Exported signed ranker: {updates} updates, seeds 30--33 only")
+            return
         rows=[]
         model.eval()
         for r in pools[4:]:

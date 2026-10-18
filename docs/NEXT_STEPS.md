@@ -1,5 +1,28 @@
 # Paper-reproduction execution plan
 
+## 18 October: ranking repair positive offline result
+
+At `952be72`, archive SHA-256
+`d1848d59939c2b2b0e11d0ebe8b66cfb26a4aefad6ea898e2da9c6d784fc02b8`,
+all 53 tests passed. Six chains each consumed 7,926 exact calls, including
+3,825 additional oracle calls (plus 16 sensitivity samples). Four chains
+provided 1,020 training pools; seeds 34--35 were held out.
+
+Signed pairwise ranking captured 79.94%/87.18% of available immediate oracle
+gain over proxy, and 94.07%/97.63% in the late half. Late harm frequency was
+0.78% in both chains. Positive ranking captured 88.46%/91.75% overall but
+70.58%/68.23% late, with 38.28%/37.50% late harm. The bounded regressor
+had negative total advantage and tied proxy late. 57.43% of its training
+targets were outside its representable interval. These are offline ranking
+results, not percentages of final placement improvement or a causal isolation
+of the range restriction. Model selection used seeds 34--35.
+
+Next: freeze signed ranking trained only on seeds 30--33, test complete
+4,101-call SA rollouts on fresh seeds 40--42 against proxy and uniform.
+The scorer is supervised from oracle labels, not an online RL update.
+See `PAIRWISE_ROLLOUT.md`; no performance result exists yet.
+
+
 ## 18 October: VGG16 frozen-transfer result and ranking repair
 
 Archive `kaggle-amortized-vgg16-transfer.zip`, SHA-256
