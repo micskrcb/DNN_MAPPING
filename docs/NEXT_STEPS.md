@@ -1,5 +1,24 @@
 # Paper-reproduction execution plan
 
+## 18 October: VGG16 frozen-transfer result and ranking repair
+
+Archive `kaggle-amortized-vgg16-transfer.zip`, SHA-256
+`d2f75471b927bc0de83b45b08cb4b42716d5d341b6d6ba7324ada0a4a31a19f4`,
+ran revision `7d64193`. All 51 tests passed, both training stages made 77
+updates, and each held-out seed used 20,001 calls with frozen loaded weights.
+Mean costs: proxy 1210.63451 us, checkpoint 1274.90944 us, uniform
+1472.72832 us. The checkpoint beat uniform 3/3 by 13.316% mean paired gain
+but lost to proxy 3/3 by 5.340%. The advancement gate failed. Since the scorer
+contains a proxy prior, its uniform advantage cannot be attributed solely to
+learning. No extension of this checkpoint is recommended.
+
+The next diagnostic is `scripts/run_kaggle_ranking_repair.sh`, documented in
+`RANKING_REPAIR.md`. It reuses chain-disjoint labels to compare bounded
+positive regression with signed and positive pairwise ranking, preserving
+VVA execution/partition rates 1/1. This is an offline representation test,
+not a demonstrated improvement to the deployed optimizer.
+
+
 ## Immediate Proxy-SA portability gate
 
 The 2,000-move portability gate passed mechanically on AlexNet-FC, ResNet18,
