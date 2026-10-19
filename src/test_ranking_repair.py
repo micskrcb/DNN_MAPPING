@@ -44,6 +44,10 @@ class RankingRepairTests(unittest.TestCase):
         graph=np.zeros((4,4),dtype=np.float32)
         graph[0,1]=graph[1,2]=graph[2,3]=1
         model=ProposalBanditRegressor(8,9,hidden_dim=16,scoring='direct')
+        # Force score ties to exercise greedy tie-breaking deterministically.
+        with torch.no_grad():
+            for parameter in model.parameters():
+                parameter.zero_()
         with tempfile.TemporaryDirectory() as directory, contextlib.redirect_stdout(io.StringIO()):
             path=Path(directory)/'ranker.pt'
             torch.save(inference_checkpoint(model,4,100,feature_set='legacy9',focus=0,slack=0),path)

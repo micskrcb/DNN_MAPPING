@@ -5,6 +5,12 @@ out="${1:-runs/kaggle-ranking-path-audit}"
 mkdir -p "$out"
 archive_results() {
  local status=$?
+ if [[ "$status" -ne 0 ]]; then
+  echo "Run failed; recent diagnostic logs:"
+  for log in "$out"/*.log; do
+   [[ ! -f "$log" ]] || tail -n 35 "$log"
+  done
+ fi
  printf '%s\n' "$status" > "$out/exit-status.txt"
  python - "$out" <<'PY'
 import sys,zipfile,os

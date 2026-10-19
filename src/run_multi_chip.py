@@ -3645,8 +3645,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                         probabilities = torch.full_like(
                             normalized_logits,
                             global_mass / candidate_count)
-                        top_indices = normalized_logits.topk(
-                            bandit_top_m, dim=-1).indices
+                        # topk(1) and argmax may break equal-score ties differently.
+                        # Share the greedy winner so top-m=1 remains one-hot.
+                        top_indices = (normalized_logits.argmax(dim=-1, keepdim=True)
+                            if bandit_top_m == 1 else normalized_logits.topk(
+                                bandit_top_m, dim=-1).indices)
                         probabilities.scatter_add_(
                             1, top_indices,
                             torch.full_like(

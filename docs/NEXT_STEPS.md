@@ -1,3 +1,16 @@
+## 19 October: greedy tie-breaking regression caught before training
+
+Archive `kaggle-ranking-path-fixed-20261019T044048Z.zip` at `c9e08ba`
+passed the 51-test suite but failed the added one-hot greedy assertion.
+No training or new rollouts completed. With tied scores, PyTorch topk(1)
+and argmax can choose different indices, splitting exploration/exploitation
+mass between equal maxima. Top-m=1 now shares argmax tie-breaking. The test
+explicitly zeros model weights to guarantee ties; its assertion is retained.
+The audit runner now prints failure log tails in Kaggle output.
+Local verification with temporary CPU PyTorch/torchvision passed all 51
+reconciliation tests, functional smoke tests, and all 3 ranking tests
+(including both frozen greedy controls); no PyTorch tests skipped.
+
 ## 19 October: ranking-path audit interrupted — implementation error
 
 Run `0596e1a` passed 54 tests and reproduced both seed-40 exploratory costs
