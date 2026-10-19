@@ -48,11 +48,24 @@ class RankingRepairTests(unittest.TestCase):
             path=Path(directory)/'ranker.pt'
             torch.save(inference_checkpoint(model,4,100,feature_set='legacy9',focus=0,slack=0),path)
             meta={}
-            run_ppo_asa(MultiChipEnvironment(1,1,2,3,task_graph=graph,num_tasks=4),
+            cost=run_ppo_asa(MultiChipEnvironment(1,1,2,3,task_graph=graph,num_tasks=4),
                 n_iter=24,candidate_count=4,hidden_dim=16,calibration_trials=4,
                 device='cpu',seed=17,proposal_learner='bandit',bandit_control='checkpoint',
                 disable_learning=True,annealing_schedule='fixed',state_encoding='relative_cost',
                 load_checkpoint=str(path),metadata=meta)
+            audit_meta={}
+            audited_cost=run_ppo_asa(MultiChipEnvironment(1,1,2,3,task_graph=graph,num_tasks=4),
+                n_iter=24,candidate_count=4,hidden_dim=16,calibration_trials=4,
+                device='cpu',seed=17,proposal_learner='bandit',bandit_control='checkpoint',
+                disable_learning=True,annealing_schedule='fixed',state_encoding='relative_cost',
+                load_checkpoint=str(path),metadata=audit_meta,oracle_pools=4,oracle_stride=4,
+                oracle_dataset_path=str(Path(directory)/'audit.npz'),
+                oracle_diagnostics_path=str(Path(directory)/'audit.json'))
+            with np.load(Path(directory)/'audit.npz') as audit:
+                self.assertEqual(audit['policy_scores'].shape,(4,4))
+                self.assertTrue(np.allclose(audit['selection_probabilities'].sum(1),1))
+                self.assertEqual(audit['selected_indices'].shape,(4,))
+            self.assertEqual(audited_cost,cost)
         self.assertEqual(meta['update_count'],0)
         self.assertEqual(meta['total_objective_evaluations'],25)
         self.assertEqual(meta['source_training_updates'],100)

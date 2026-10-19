@@ -2952,6 +2952,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     oracle_feature_rows = []
     oracle_global_rows = []
     oracle_gain_rows = []
+    oracle_score_rows = []
+    oracle_probability_rows = []
+    oracle_selected_rows = []
     oracle_chain_rows = []
     oracle_pool_rows = []
     oracle_candidate_evaluations = 0
@@ -3708,6 +3711,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 oracle_feature_rows.append(np.asarray(features, dtype=np.float64))
                 oracle_global_rows.append(np.asarray(global_state, dtype=np.float64))
                 oracle_gain_rows.append(true_gains)
+                oracle_score_rows.append(normalized_logits[0].detach().cpu().numpy().copy())
+                oracle_probability_rows.append(probabilities[0].detach().cpu().numpy().copy())
+                oracle_selected_rows.append(selected)
                 oracle_chain_rows.append(chain_count)
                 oracle_pool_rows.append({
                     "before_cost": before_cost,
@@ -4081,6 +4087,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 candidate_features=np.asarray(
                     oracle_feature_rows, dtype=np.float32),
                 true_gains=np.asarray(oracle_gain_rows, dtype=np.float64),
+                policy_scores=np.asarray(oracle_score_rows, dtype=np.float32),
+                selection_probabilities=np.asarray(oracle_probability_rows, dtype=np.float32),
+                selected_indices=np.asarray(oracle_selected_rows, dtype=np.int64),
                 chain_ids=np.asarray(oracle_chain_rows, dtype=np.int64),
                 feature_names=np.asarray(oracle_feature_names),
                 candidate_count=np.asarray(candidate_count, dtype=np.int64),

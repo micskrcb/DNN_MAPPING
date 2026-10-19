@@ -1,3 +1,23 @@
+## 19 October: frozen pairwise rollout fails proxy comparison
+
+Archive `kaggle-pairwise-rollout-20261018T131223Z.zip`, revision `994a83d`,
+exit 0; all 54 Kaggle tests passed. VGG16-CONV seeds 40–42 each had 4,101
+objective calls, matched initial placements, and no deployment updates.
+Mean best costs: proxy-SA 1,491.228 µs; learned-SA 1,694.697 µs;
+uniform-proposal SA 1,885.773 µs. Mean paired learned improvement was
+10.135% over uniform (3/3 wins), but -13.607% over proxy (0/3 wins).
+Uniform-proposal SA is not random search. Nine rollouts took 91.68 minutes.
+Offline ranking gains did not establish improved full-search optimization.
+The planned longer run does not advance. Summary is archived in
+`artifacts/pairwise-rollout-20261018/`.
+
+Next: an eight-run diagnostic reuses seeds 40–41, comparing learned/proxy
+scores with exploratory/greedy selection. This is developmental, not fresh
+confirmation. Audit exact gains in up to 64 pools per run; export scores,
+selection probabilities and chosen indices without changing selection or
+training. All extra oracle calls are included in reported budgets.
+See [ranking-path audit](RANKING_PATH_AUDIT.md).
+
 # DDPG Learning Failure: Research Findings and Actions
 
 ## 18 October: ranking repair positive offline result

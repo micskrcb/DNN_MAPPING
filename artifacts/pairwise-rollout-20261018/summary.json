@@ -1,0 +1,69 @@
+{
+  "protocol": "frozen signed pairwise scorer + fixed SA, 4101-call rollout screen",
+  "training_seeds": [
+    30,
+    31,
+    32,
+    33
+  ],
+  "model_selection_seeds": [
+    34,
+    35
+  ],
+  "rollout_seeds": [
+    40,
+    41,
+    42
+  ],
+  "pairs": [
+    {
+      "seed": 40,
+      "cost_seconds": {
+        "checkpoint": 0.0017824083200000036,
+        "proxy_greedy": 0.0015174790400000022,
+        "uniform": 0.0019309763199999962
+      },
+      "runtime_seconds": {
+        "checkpoint": 596.529454966,
+        "proxy_greedy": 586.9349707439999,
+        "uniform": 604.7188003159999
+      },
+      "gain_over_proxy_percent": -17.45851329847699,
+      "gain_over_uniform_percent": 7.693931741223677
+    },
+    {
+      "seed": 41,
+      "cost_seconds": {
+        "checkpoint": 0.0016802295999999981,
+        "proxy_greedy": 0.0014997841599999995,
+        "uniform": 0.001836308319999997
+      },
+      "runtime_seconds": {
+        "checkpoint": 585.0440952519998,
+        "proxy_greedy": 585.7388743300003,
+        "uniform": 714.1233522080001
+      },
+      "gain_over_proxy_percent": -12.03142724217055,
+      "gain_over_uniform_percent": 8.499592268906081
+    },
+    {
+      "seed": 42,
+      "cost_seconds": {
+        "checkpoint": 0.0016214531199999983,
+        "proxy_greedy": 0.0014564211200000024,
+        "uniform": 0.0018900358400000044
+      },
+      "runtime_seconds": {
+        "checkpoint": 646.5927427540005,
+        "proxy_greedy": 592.4809174270003,
+        "uniform": 588.3649114619993
+      },
+      "gain_over_proxy_percent": -11.33133801300517,
+      "gain_over_uniform_percent": 14.210456453566797
+    }
+  ],
+  "mean_paired_gain_over_proxy_percent": -13.60709285121757,
+  "wins_over_proxy": 0,
+  "advance_to_longer_rollouts": false,
+  "limitation": "Supervised proposal learning, not online PPO or DDPG. Three-seed developmental screen; training and oracle collection are additional costs."
+}

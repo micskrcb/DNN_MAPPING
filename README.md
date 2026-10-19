@@ -10,13 +10,10 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**Latest experiment (18 October):** signed pairwise training captured roughly
-80–87% of the available improvement over the proxy on held-out candidate pools,
-and 94–98% in late-stage pools. These are offline ranking results, not final
-placement improvements. The next experiment freezes this scorer and compares
-complete fixed-SA searches against proxy-greedy and uniform proposals on fresh
-seeds 40–42. This is supervised proposal learning; online RL benefit remains unproven.
-See [the rollout protocol and run command](docs/PAIRWISE_ROLLOUT.md).
+**Latest experiment (19 October):** frozen signed-ranker + SA beat uniform-SA
+by 10.13% but lost to proxy-SA by 13.61% (mean paired percentages, three seeds).
+The next diagnostic isolates exploration and on-trajectory ranking errors;
+no improved optimizer is claimed. See [protocol and commands](docs/RANKING_PATH_AUDIT.md).
 
 | Paper feature | Current status |
 | --- | --- |
