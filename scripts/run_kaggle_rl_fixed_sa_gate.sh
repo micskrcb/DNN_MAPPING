@@ -158,12 +158,17 @@ common=(
   --sensitivity_trials 256
 )
 
+# Historical bandit replay used signed proposed gains regardless of the
+# PPO reward flag. Explicitly preserve that behavior in today's engine.
+training_reward="positive_delta"
+[[ "$learner" != bandit ]] || training_reward="proposed_delta"
+
 ppo_common=(
   --algo ppo_asa --ppo_asa_annealing "${annealing}"
   --ppo_asa_learner "${learner}"
   --ppo_asa_candidates 16 --ppo_asa_focus_fraction 0.5
   --ppo_asa_update_style reference_separate
-  --ppo_asa_reward_mode positive_delta
+  --ppo_asa_reward_mode "${training_reward}"
   --ppo_asa_rollout_steps 256 --ppo_update_epochs 4
   --ppo_minibatch_size 256 --ppo_hidden_dim 128
   --ppo_learning_rate 3e-4 --ppo_asa_weight_decay 1e-4

@@ -1,0 +1,48 @@
+{
+  "protocol": "Learned proposal selection inside matched fixed SA",
+  "seeds": 3,
+  "learned_win_count": 3,
+  "mean_learned_improvement_over_control_percent": 2.255109039211538,
+  "individual_results": [
+    {
+      "seed": 0,
+      "learned_microseconds": 4.411839999999999,
+      "frozen_control_microseconds": 4.489439999999999,
+      "fixed_sa_microseconds": 4.424479999999999,
+      "asa_microseconds": 4.626239999999998,
+      "learned_improvement_over_control_percent": 1.728500659324992,
+      "learned_wins": true,
+      "learned_updates": 389,
+      "learned_schedule": "fixed",
+      "proposal_learner": "bandit",
+      "control_schedule": "fixed"
+    },
+    {
+      "seed": 1,
+      "learned_microseconds": 4.381759999999999,
+      "frozen_control_microseconds": 4.498399999999999,
+      "fixed_sa_microseconds": 4.428639999999999,
+      "asa_microseconds": 4.641759999999998,
+      "learned_improvement_over_control_percent": 2.5929219277965534,
+      "learned_wins": true,
+      "learned_updates": 389,
+      "learned_schedule": "fixed",
+      "proposal_learner": "bandit",
+      "control_schedule": "fixed"
+    },
+    {
+      "seed": 2,
+      "learned_microseconds": 4.368639999999999,
+      "frozen_control_microseconds": 4.478079999999999,
+      "fixed_sa_microseconds": 4.429759999999999,
+      "asa_microseconds": 4.648319999999999,
+      "learned_improvement_over_control_percent": 2.4439045305130684,
+      "learned_wins": true,
+      "learned_updates": 389,
+      "learned_schedule": "fixed",
+      "proposal_learner": "bandit",
+      "control_schedule": "fixed"
+    }
+  ],
+  "next_decision": "Treat learning as supported only if the mean improvement is positive and learned proposals win at least two of three seeds."
+}

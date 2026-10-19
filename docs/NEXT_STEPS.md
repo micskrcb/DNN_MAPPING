@@ -1,3 +1,18 @@
+## 19 October: return to the demonstrated online bandit
+
+Priority is now restoration and controlled improvement of the original online
+bandit+fixed-SA, not replacement by offline ranking. Archived VGG16-FC seeds
+3–5 showed 22.405% over random, 1.637% over focused-uniform and 0.122% over
+plain fixed SA. These baselines must not be conflated.
+
+Found reward compatibility drift: old bandit replay stored signed proposed
+reward despite positive_delta CLI metadata; current code honors the flag.
+Historical bandit runner now explicitly selects proposed_delta. New restoration
+runner includes archived bacc334 source, current signed online learner, a
+single relative-state ablation, uniform, proxy and fixed-SA controls. Original
+100001-call budget/VGG16-FC/VVA16/1 retained; default reused seed3. No new
+performance claim. See ONLINE_BANDIT_RESTORATION.md for provenance and commands.
+
 ## 19 October: ranking-path diagnosis completed; productive target next
 
 Revision dc5d536 completed eight runs, exit 0, all 54 tests passed.

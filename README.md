@@ -10,11 +10,10 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**Latest experiment (19 October):** the frozen learned scorer mostly selected
-neutral moves on its greedy trajectories; removing exploration worsened final
-costs. The next matched test trains a productive-move target and compares it
-with the signed scorer and proxy-SA on fresh seeds. No optimizer win is claimed.
-See [productive-ranker protocol](docs/PRODUCTIVE_RANKER.md).
+**Current priority:** restore and improve the demonstrated **online bandit +
+fixed SA**. The restoration test retains archived source and current references,
+fixes historical reward-flag compatibility, and tests one state-encoding change.
+See [online restoration protocol](docs/ONLINE_BANDIT_RESTORATION.md).
 
 | Paper feature | Current status |
 | --- | --- |
