@@ -1,3 +1,12 @@
+## 19 October: ranking-path audit interrupted — implementation error
+
+Run `0596e1a` passed 54 tests and reproduced both seed-40 exploratory costs
+exactly (learned 1782.40832 µs, proxy 1517.47904 µs), then failed before the
+first greedy rollout: validation rejected warmup=0. No exploration comparison
+or complete gate conclusion is available. Fix permits zero warmup only with
+learning disabled; tests now exercise both frozen greedy controls and verify
+one-hot maximum-score selection. Re-run the unchanged diagnostic protocol.
+
 ## 19 October: frozen pairwise rollout fails proxy comparison
 
 Archive `kaggle-pairwise-rollout-20261018T131223Z.zip`, revision `994a83d`,

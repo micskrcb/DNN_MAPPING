@@ -2801,8 +2801,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "learning disabled")
     if bandit_control == "checkpoint" and not load_checkpoint:
         raise ValueError("checkpoint bandit control requires a loaded checkpoint")
-    if min(bandit_replay_capacity, bandit_warmup) <= 0:
-        raise ValueError("bandit replay capacity and warmup must be positive")
+    if bandit_replay_capacity <= 0 or bandit_warmup < 0 or (bandit_warmup == 0 and not disable_learning):
+        raise ValueError("replay capacity must be positive; zero warmup requires disabled learning")
     if bandit_warmup > bandit_replay_capacity:
         raise ValueError("bandit warmup cannot exceed replay capacity")
     if not 0.0 <= bandit_epsilon_final <= 1.0:

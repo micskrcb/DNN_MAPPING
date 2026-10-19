@@ -66,6 +66,21 @@ class RankingRepairTests(unittest.TestCase):
                 self.assertTrue(np.allclose(audit['selection_probabilities'].sum(1),1))
                 self.assertEqual(audit['selected_indices'].shape,(4,))
             self.assertEqual(audited_cost,cost)
+            for control in ('checkpoint', 'proxy_greedy'):
+                run_ppo_asa(MultiChipEnvironment(1,1,2,3,task_graph=graph,num_tasks=4),
+                    n_iter=24,candidate_count=4,hidden_dim=16,calibration_trials=4,
+                    device='cpu',seed=17,proposal_learner='bandit',bandit_control=control,
+                    disable_learning=True,annealing_schedule='fixed',state_encoding='relative_cost',
+                    load_checkpoint=str(path) if control=='checkpoint' else None,
+                    bandit_warmup=0,bandit_exploration='epsilon_top_m',bandit_top_m=1,
+                    bandit_global_epsilon=0,oracle_pools=4,oracle_stride=4,
+                    oracle_dataset_path=str(Path(directory)/'greedy.npz'),
+                    oracle_diagnostics_path=str(Path(directory)/'greedy.json'))
+                with np.load(Path(directory)/'greedy.npz') as d:
+                    self.assertTrue(np.allclose(d['selection_probabilities'].max(1),1))
+                    chosen=d['policy_scores'][np.arange(4),d['selected_indices']]
+                    self.assertTrue(np.allclose(chosen,d['policy_scores'].max(1)))
+
         self.assertEqual(meta['update_count'],0)
         self.assertEqual(meta['total_objective_evaluations'],25)
         self.assertEqual(meta['source_training_updates'],100)
