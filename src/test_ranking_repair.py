@@ -16,6 +16,21 @@ class RankingRepairTests(unittest.TestCase):
         self.assertIsNone(metrics(g,np.zeros_like(g),x)['oracle_capture_over_proxy'])
 
     @unittest.skipIf(torch is None, 'PyTorch unavailable')
+    def test_productive_target_prefers_improvements_and_ranks_gains(self):
+        from diagnose_bandit_ranking import productive_loss
+        scores=torch.zeros((1,4),requires_grad=True)
+        gains=torch.tensor([[2e-6,1e-6,0.,-1e-6]],dtype=torch.float64)
+        optimizer=torch.optim.Adam([scores],lr=.05)
+        for _ in range(100):
+            optimizer.zero_grad(); loss=productive_loss(scores,gains)
+            self.assertTrue(torch.isfinite(loss)); loss.backward(); optimizer.step()
+        self.assertGreater(scores[0,0].item(),scores[0,1].item())
+        self.assertGreater(scores[0,1].item(),scores[0,2].item())
+        for gains in (torch.zeros((2,4)), -torch.ones((2,4))):
+            loss=productive_loss(torch.zeros((2,4),requires_grad=True),gains)
+            self.assertTrue(torch.isfinite(loss)); loss.backward()
+
+    @unittest.skipIf(torch is None, 'PyTorch unavailable')
     def test_pairwise_gradient_learns_planted_order(self):
         from run_multi_chip import ProposalBanditRegressor
         import torch.nn.functional as F

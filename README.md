@@ -10,10 +10,11 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**Latest experiment (19 October):** frozen signed-ranker + SA beat uniform-SA
-by 10.13% but lost to proxy-SA by 13.61% (mean paired percentages, three seeds).
-The next diagnostic isolates exploration and on-trajectory ranking errors;
-no improved optimizer is claimed. See [protocol and commands](docs/RANKING_PATH_AUDIT.md).
+**Latest experiment (19 October):** the frozen learned scorer mostly selected
+neutral moves on its greedy trajectories; removing exploration worsened final
+costs. The next matched test trains a productive-move target and compares it
+with the signed scorer and proxy-SA on fresh seeds. No optimizer win is claimed.
+See [productive-ranker protocol](docs/PRODUCTIVE_RANKER.md).
 
 | Paper feature | Current status |
 | --- | --- |

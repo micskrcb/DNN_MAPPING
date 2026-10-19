@@ -1,3 +1,24 @@
+## 19 October: ranking-path diagnosis completed; productive target next
+
+Revision dc5d536 completed eight runs, exit 0, all 54 tests passed.
+VGG16-CONV seeds 40–41: mean best costs (µs) proxy exploratory 1508.632,
+proxy greedy 1519.286, learned exploratory 1731.319, learned greedy 2591.430.
+Mean paired learned disadvantage: 14.745% exploratory, 70.681% greedy.
+Each run used 4101 search + 960 audit calls, plus 16 sensitivity calls.
+Reused seeds make this diagnostic, not new held-out confirmation.
+
+On learned greedy trajectories, scorer-selected moves in audited pools were
+neutral in 63/64 and 64/64 pools. Strong raw-gain rankings can reflect avoiding
+harm rather than generating progress. This supports target correction but does
+not prove neutrality is the sole cause. Removing exploration worsened outcomes.
+Summary and test log: artifacts/ranking-path-20261019/.
+
+Next: balance improving/neutral/worsening example groups and rank gain among
+improving candidates, retaining the same scalar architecture and data (30–33).
+No new oracle data train the model. Compare productive/signed/proxy with
+exploration on fresh seeds 43–45. This is supervised pretraining/proposal
+learning, not demonstrated online RL. See PRODUCTIVE_RANKER.md.
+
 ## 19 October: greedy tie-breaking regression caught before training
 
 Archive `kaggle-ranking-path-fixed-20261019T044048Z.zip` at `c9e08ba`

@@ -1,0 +1,190 @@
+{
+  "protocol": "two-seed developmental exploration and on-trajectory ranking audit",
+  "limitation": "Seeds 40\u201341 are reused for diagnosis, not independent confirmation. Oracle labels are diagnostic only and charged separately; no training uses them.",
+  "rows": [
+    {
+      "seed": 40,
+      "method": "checkpoint",
+      "selection": "exploratory",
+      "best_cost_seconds": 0.0017824083200000036,
+      "objective_calls": 5061,
+      "audit": {
+        "all": {
+          "pools": 64,
+          "greedy_minus_proxy_ns": 390988.1499999988,
+          "expected_minus_greedy_ns": -101946.31271365816,
+          "realized_minus_proxy_ns": 291409.24750000116,
+          "greedy_worse_than_proxy_fraction": 0.03125
+        },
+        "late": {
+          "pools": 26,
+          "greedy_minus_proxy_ns": 265904.75692307646,
+          "expected_minus_greedy_ns": -42171.741862001174,
+          "realized_minus_proxy_ns": 264241.4707692298,
+          "greedy_worse_than_proxy_fraction": 0.0
+        }
+      }
+    },
+    {
+      "seed": 40,
+      "method": "proxy_greedy",
+      "selection": "exploratory",
+      "best_cost_seconds": 0.0015174790400000022,
+      "objective_calls": 5061,
+      "audit": {
+        "all": {
+          "pools": 64,
+          "greedy_minus_proxy_ns": 0.0,
+          "expected_minus_greedy_ns": -54882.865007415974,
+          "realized_minus_proxy_ns": -63650.87749999753,
+          "greedy_worse_than_proxy_fraction": 0.0
+        },
+        "late": {
+          "pools": 26,
+          "greedy_minus_proxy_ns": 0.0,
+          "expected_minus_greedy_ns": -69956.93600762496,
+          "realized_minus_proxy_ns": -16288.504615385003,
+          "greedy_worse_than_proxy_fraction": 0.0
+        }
+      }
+    },
+    {
+      "seed": 40,
+      "method": "checkpoint",
+      "selection": "greedy",
+      "best_cost_seconds": 0.002575871199999992,
+      "objective_calls": 5061,
+      "audit": {
+        "all": {
+          "pools": 64,
+          "greedy_minus_proxy_ns": 293568.67749998975,
+          "expected_minus_greedy_ns": 0.0,
+          "realized_minus_proxy_ns": 293568.67749998975,
+          "greedy_worse_than_proxy_fraction": 0.125
+        },
+        "late": {
+          "pools": 26,
+          "greedy_minus_proxy_ns": 123431.15076923178,
+          "expected_minus_greedy_ns": 0.0,
+          "realized_minus_proxy_ns": 123431.15076923178,
+          "greedy_worse_than_proxy_fraction": 0.038461538461538464
+        }
+      }
+    },
+    {
+      "seed": 40,
+      "method": "proxy_greedy",
+      "selection": "greedy",
+      "best_cost_seconds": 0.0014755664000000025,
+      "objective_calls": 5061,
+      "audit": {
+        "all": {
+          "pools": 64,
+          "greedy_minus_proxy_ns": 0.0,
+          "expected_minus_greedy_ns": 0.0,
+          "realized_minus_proxy_ns": 0.0,
+          "greedy_worse_than_proxy_fraction": 0.0
+        },
+        "late": {
+          "pools": 26,
+          "greedy_minus_proxy_ns": 0.0,
+          "expected_minus_greedy_ns": 0.0,
+          "realized_minus_proxy_ns": 0.0,
+          "greedy_worse_than_proxy_fraction": 0.0
+        }
+      }
+    },
+    {
+      "seed": 41,
+      "method": "checkpoint",
+      "selection": "exploratory",
+      "best_cost_seconds": 0.0016802295999999981,
+      "objective_calls": 5061,
+      "audit": {
+        "all": {
+          "pools": 64,
+          "greedy_minus_proxy_ns": 321087.32250000775,
+          "expected_minus_greedy_ns": -47946.34258212512,
+          "realized_minus_proxy_ns": 311397.3275000068,
+          "greedy_worse_than_proxy_fraction": 0.09375
+        },
+        "late": {
+          "pools": 26,
+          "greedy_minus_proxy_ns": 71081.3599999999,
+          "expected_minus_greedy_ns": -39726.277275074295,
+          "realized_minus_proxy_ns": 69536.88000000037,
+          "greedy_worse_than_proxy_fraction": 0.11538461538461539
+        }
+      }
+    },
+    {
+      "seed": 41,
+      "method": "proxy_greedy",
+      "selection": "exploratory",
+      "best_cost_seconds": 0.0014997841599999995,
+      "objective_calls": 5061,
+      "audit": {
+        "all": {
+          "pools": 64,
+          "greedy_minus_proxy_ns": 0.0,
+          "expected_minus_greedy_ns": -30163.51697790979,
+          "realized_minus_proxy_ns": 29788.937500002463,
+          "greedy_worse_than_proxy_fraction": 0.0
+        },
+        "late": {
+          "pools": 26,
+          "greedy_minus_proxy_ns": 0.0,
+          "expected_minus_greedy_ns": -70917.45907656541,
+          "realized_minus_proxy_ns": -21281.680000000142,
+          "greedy_worse_than_proxy_fraction": 0.0
+        }
+      }
+    },
+    {
+      "seed": 41,
+      "method": "checkpoint",
+      "selection": "greedy",
+      "best_cost_seconds": 0.0026069881599999913,
+      "objective_calls": 5061,
+      "audit": {
+        "all": {
+          "pools": 64,
+          "greedy_minus_proxy_ns": 229588.27500000864,
+          "expected_minus_greedy_ns": 0.0,
+          "realized_minus_proxy_ns": 229588.27500000864,
+          "greedy_worse_than_proxy_fraction": 0.125
+        },
+        "late": {
+          "pools": 26,
+          "greedy_minus_proxy_ns": 260846.44923078016,
+          "expected_minus_greedy_ns": 0.0,
+          "realized_minus_proxy_ns": 260846.44923078016,
+          "greedy_worse_than_proxy_fraction": 0.038461538461538464
+        }
+      }
+    },
+    {
+      "seed": 41,
+      "method": "proxy_greedy",
+      "selection": "greedy",
+      "best_cost_seconds": 0.001563005919999999,
+      "objective_calls": 5061,
+      "audit": {
+        "all": {
+          "pools": 64,
+          "greedy_minus_proxy_ns": 0.0,
+          "expected_minus_greedy_ns": 0.0,
+          "realized_minus_proxy_ns": 0.0,
+          "greedy_worse_than_proxy_fraction": 0.0
+        },
+        "late": {
+          "pools": 26,
+          "greedy_minus_proxy_ns": 0.0,
+          "expected_minus_greedy_ns": 0.0,
+          "realized_minus_proxy_ns": 0.0,
+          "greedy_worse_than_proxy_fraction": 0.0
+        }
+      }
+    }
+  ]
+}

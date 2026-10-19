@@ -34,6 +34,30 @@ def inference_checkpoint(model, candidate_count, updates, feature_set="topology1
             "training_method": "offline_signed_pairwise", "training_seeds": [30,31,32,33]}
 
 
+def productive_loss(scores, gains):
+    """Balance improving/neutral/worsening groups; rank gains among improvements.
+
+    A scalar score is shared with the existing inference model. This is not a
+    calibrated probability. No ordering reward is given for neutral > worsening.
+    """
+    import torch
+    import torch.nn.functional as F
+    positive = gains > 1e-15
+    neutral = gains.abs() <= 1e-15
+    negative = gains < -1e-15
+    groups = [F.softplus(-scores[positive]).mean()] if positive.any() else []
+    for mask in (neutral, negative):
+        if mask.any():
+            groups.append(F.softplus(scores[mask]).mean())
+    classification = torch.stack(groups).mean()
+    a, b = torch.triu_indices(scores.shape[1], scores.shape[1], offset=1, device=scores.device)
+    delta = gains[:,a] - gains[:,b]
+    mask = positive[:,a] & positive[:,b] & (delta.abs() > 1e-15)
+    ranking = (F.softplus(-delta.sign().to(scores.dtype)[mask] *
+               (scores[:,a]-scores[:,b])[mask]).mean() if mask.any() else scores.sum()*0)
+    return classification + ranking
+
+
 def main():
     import torch
     import torch.nn.functional as F
@@ -42,12 +66,16 @@ def main():
     parser.add_argument('directory', type=Path)
     parser.add_argument('--epochs', type=int, default=100)
     parser.add_argument('--export-signed', type=Path, help='Train only on seeds 30--33 and export; do not read test chains')
+    parser.add_argument('--export-productive', type=Path)
     args = parser.parse_args()
+    if args.export_signed and args.export_productive:
+        parser.error('choose only one export mode')
+    export_path = args.export_signed or args.export_productive
     if args.epochs < 1:
         parser.error('epochs must be positive')
     torch.set_num_threads(2)
     pools = []
-    for seed in range(30, 34 if args.export_signed else 36):
+    for seed in range(30, 34 if export_path else 36):
         with np.load(args.directory / f'seed{seed}.npz', allow_pickle=False) as d:
             row = {k: d[k].copy() for k in ('global_states', 'candidate_features', 'true_gains')}
         report = json.loads((args.directory / f'seed{seed}.json').read_text())
@@ -68,7 +96,7 @@ def main():
               'epochs': args.epochs, 'models': {},
               'unreachable_positive_target_fraction_train': float(np.mean(np.abs(targets-proxy) > .25)),
               'training_pools': len(raw)}
-    for mode in (('pairwise_signed',) if args.export_signed else ('bounded_positive_regression', 'pairwise_signed', 'pairwise_positive')):
+    for mode in (('productive',) if args.export_productive else ('pairwise_signed',) if args.export_signed else ('bounded_positive_regression', 'pairwise_signed', 'pairwise_positive')):
         torch.manual_seed(20261018)
         rng = np.random.default_rng(20261018)
         model = ProposalBanditRegressor(gs.shape[1], xs.shape[2], hidden_dim=128,
@@ -84,7 +112,9 @@ def main():
                 # Fixed-epoch, fixed-size random minibatches, independent of test outcomes.
                 ids = torch.tensor(rng.choice(len(raw), min(64,len(raw)), replace=False))
                 scores = model(gs[ids], xs[ids])
-                if mode.startswith('bounded'):
+                if mode == 'productive':
+                    loss = productive_loss(scores, label[ids])
+                elif mode.startswith('bounded'):
                     loss = F.smooth_l1_loss(scores, target[ids])
                 else:
                     delta = label[ids][:, a] - label[ids][:, b]
@@ -99,10 +129,12 @@ def main():
                 torch.nn.utils.clip_grad_norm_(model.parameters(), .5)
                 optimizer.step()
                 updates += 1
-        if args.export_signed:
-            args.export_signed.parent.mkdir(parents=True, exist_ok=True)
-            torch.save(inference_checkpoint(model, xs.shape[1], updates), args.export_signed)
-            print(f"Exported signed ranker: {updates} updates, seeds 30--33 only")
+        if export_path:
+            export_path.parent.mkdir(parents=True, exist_ok=True)
+            checkpoint = inference_checkpoint(model, xs.shape[1], updates)
+            checkpoint['training_method'] = 'offline_' + mode
+            torch.save(checkpoint, export_path)
+            print(f"Exported {mode}: {updates} updates, seeds 30--33 only")
             return
         rows=[]
         model.eval()
