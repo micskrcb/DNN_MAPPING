@@ -1,0 +1,65 @@
+{
+  "protocol": "unchanged online signed bandit, additional seeds; seed 3 reported separately",
+  "pairs": [
+    {
+      "seed": 6,
+      "calls_per_method": 100001,
+      "best_cost_microseconds": {
+        "original": 4.433119999999999,
+        "uniform": 4.517119999999999,
+        "proxy": 4.539199999999999,
+        "fixed_sa": 4.415359999999999
+      },
+      "gain_percent": {
+        "uniform": 1.859591952394457,
+        "proxy": 2.3369756785336593,
+        "fixed_sa": -0.40223220756629985
+      },
+      "runtime_seconds": {
+        "original": 4982.755321584,
+        "uniform": 4932.407173752,
+        "proxy": 5046.451894197999,
+        "fixed_sa": 3526.4317086870014
+      }
+    },
+    {
+      "seed": 7,
+      "calls_per_method": 100001,
+      "best_cost_microseconds": {
+        "original": 4.4239999999999995,
+        "uniform": 4.500639999999999,
+        "proxy": 4.5668799999999985,
+        "fixed_sa": 4.419999999999999
+      },
+      "gain_percent": {
+        "uniform": 1.7028689253083984,
+        "proxy": 3.1286129699050425,
+        "fixed_sa": -0.09049773755656076
+      },
+      "runtime_seconds": {
+        "original": 5098.971158163,
+        "uniform": 5035.548611598999,
+        "proxy": 5048.575649107999,
+        "fixed_sa": 3746.6875735260037
+      }
+    }
+  ],
+  "aggregate": {
+    "uniform": {
+      "mean_paired_gain_percent": 1.7812304388514277,
+      "wins": 2,
+      "seeds": 2
+    },
+    "proxy": {
+      "mean_paired_gain_percent": 2.732794324219351,
+      "wins": 2,
+      "seeds": 2
+    },
+    "fixed_sa": {
+      "mean_paired_gain_percent": -0.2463649725614303,
+      "wins": 0,
+      "seeds": 2
+    }
+  },
+  "limitation": "Small seed sample on the same workload. No random-search run, no broad generalization or statistical-significance claim."
+}

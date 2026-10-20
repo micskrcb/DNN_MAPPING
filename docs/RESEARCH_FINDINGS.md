@@ -1,3 +1,20 @@
+## 20 October: additional seeds support learning, not superiority to plain SA
+
+9f8db7b completed seeds6–7, 100001 calls/arm, all 57 tests passed.
+Mean best costs µs: online4.42856, uniform4.50888, proxy4.55304,
+fixed-SA4.41768. Mean paired gain: +1.7812% uniform (2/2 wins),
++2.7328% proxy (2/2), -0.2464% fixed-SA (0/2). Online made389 updates
+per seed. Runtime10.394h total; online84.0 versus fixed-SA60.6 minutes/seed.
+Seed3 stays separate. No random baseline was rerun.
+
+Correction to proposed next step: the existing pool already contains 50%
+unfocused plain-SA-style neighbors. New opt-in change tests an entirely
+unfocused pool while retaining calibration focus=.5, the same online signed
+reward, features, training schedule, exploration and SA acceptance. Default
+behavior is unchanged. Compare original, unfocused online, same-pool uniform,
+same-pool proxy and plain-SA, initially seed8 at100001 calls each. No new
+performance improvement is claimed. See ONLINE_POOL_GATE.md.
+
 ## 20 October: positive online restoration; keep learner unchanged
 
 Run 2348e08 completed, 55 tests passed. VGG16-FC seed3, VVA16/1,

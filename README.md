@@ -10,11 +10,11 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**Current priority:** validate the restored online bandit + fixed SA unchanged.
-On VGG16-FC seed3 it beat uniform proposals by 2.06%, proxy by 2.95%, and
-plain fixed SA by 0.67%. This is a one-seed result. The follow-up uses seeds6–7,
-retains strong controls, and drops the losing state-feature variant.
-See [follow-up protocol](docs/ONLINE_BANDIT_FOLLOWUP.md).
+**Current priority:** improve the working online bandit with a controlled
+candidate-pool change. On seeds 6–7 it beat uniform by 1.78% and proxy by 2.73%,
+but lost to plain SA by 0.25%. The new opt-in experiment removes bottleneck
+focusing from the pool only; the original method remains unchanged by default.
+See [pool experiment](docs/ONLINE_POOL_GATE.md).
 
 | Paper feature | Current status |
 | --- | --- |

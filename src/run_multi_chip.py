@@ -2751,6 +2751,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 focus_bottleneck: bool = False,
                 focus_fraction: float = 0.0,
                 focus_stage_slack: float = 0.0,
+                pool_focus_fraction: float = None,
                 restart_interval: int = 0,
                 update_at_chain_end: bool = False,
                 seed: int = None, initial_acceptance: float = 0.8,
@@ -2799,6 +2800,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError(
             "non-uniform bandit controls require the bandit learner with "
             "learning disabled")
+    if pool_focus_fraction is not None and not 0 <= pool_focus_fraction <= 1:
+        raise ValueError("pool focus fraction must be in [0, 1]")
     if bandit_control == "checkpoint" and not load_checkpoint:
         raise ValueError("checkpoint bandit control requires a loaded checkpoint")
     if bandit_replay_capacity <= 0 or bandit_warmup < 0 or (bandit_warmup == 0 and not disable_learning):
@@ -3263,6 +3266,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 focus_stage_slack, rel_tol=0.0, abs_tol=0.0):
             raise ValueError(
                 "checkpoint focus-stage slack does not match this run")
+        saved_pool_focus = loaded_checkpoint.get("pool_focus_fraction", loaded_checkpoint.get("focus_fraction", 0.0))
+        requested_pool_focus = focus_fraction if pool_focus_fraction is None else pool_focus_fraction
+        if saved_pool_focus != requested_pool_focus:
+            raise ValueError("checkpoint pool focus fraction does not match this run")
         if loaded_checkpoint.get("bandit_feature_set", "legacy9") != \
                 bandit_feature_set:
             raise ValueError(
@@ -3318,7 +3325,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             return min(1.0, chain_evaluations / restart_interval)
         return evaluations / n_iter
 
-    focused_candidate_count = round(candidate_count * focus_fraction)
+    effective_pool_focus = focus_fraction if pool_focus_fraction is None else pool_focus_fraction
+    if not 0 <= effective_pool_focus <= 1:
+        raise ValueError("pool focus fraction must be in [0, 1]")
+    focused_candidate_count = round(candidate_count * effective_pool_focus)
 
     def make_proposal_pool(n_perturb):
         candidates, changed_sets, relocations, features = [], [], [], []
@@ -4123,6 +4133,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "hidden_dim": hidden_dim,
             "focus_fraction": focus_fraction,
             "focus_stage_slack": focus_stage_slack,
+            "pool_focus_fraction": effective_pool_focus,
             "restart_interval": restart_interval,
             "update_at_chain_end": update_at_chain_end,
             "independent_chains": chain_count,
@@ -4181,7 +4192,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 else "epsilon_greedy_contextual_bandit"
                 if proposal_learner == "bandit" else "candidate_set_ppo"),
             "proposal_focus": proposal_focus_label(
-                focus_fraction, focus_stage_slack),
+                effective_pool_focus, focus_stage_slack),
+            "pool_focus_fraction": effective_pool_focus,
+            "calibration_focus_fraction": focus_fraction,
             "acceptance_rule": "fixed_metropolis",
             "temperature_controller": (
                 "paper_style_fixed_schedule"
@@ -5780,6 +5793,8 @@ def main():
         choices=["shared_gae", "reference_separate"], default="shared_gae",
         help="PPO update implementation: historical shared actor/critic or "
              "RL-Based-SA-compatible separate actor and critic")
+    parser.add_argument("--ppo_asa_pool_focus_fraction", type=float, default=None,
+                        help="Override candidate-pool focus only; keep calibration focus unchanged")
     parser.add_argument(
         "--ppo_asa_reward_mode",
         choices=["realized", "proposed_delta", "positive_delta",
@@ -6364,6 +6379,7 @@ def main():
             focus_bottleneck=args.ppo_asa_focus_bottleneck,
             focus_fraction=args.ppo_asa_focus_fraction,
             focus_stage_slack=args.ppo_asa_focus_stage_slack,
+            pool_focus_fraction=args.ppo_asa_pool_focus_fraction,
             restart_interval=args.ppo_asa_restart_interval,
             update_at_chain_end=args.ppo_asa_update_at_chain_end,
             seed=args.seed,
