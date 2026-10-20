@@ -10,10 +10,11 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**Current priority:** restore and improve the demonstrated **online bandit +
-fixed SA**. The restoration test retains archived source and current references,
-fixes historical reward-flag compatibility, and tests one state-encoding change.
-See [online restoration protocol](docs/ONLINE_BANDIT_RESTORATION.md).
+**Current priority:** validate the restored online bandit + fixed SA unchanged.
+On VGG16-FC seed3 it beat uniform proposals by 2.06%, proxy by 2.95%, and
+plain fixed SA by 0.67%. This is a one-seed result. The follow-up uses seeds6–7,
+retains strong controls, and drops the losing state-feature variant.
+See [follow-up protocol](docs/ONLINE_BANDIT_FOLLOWUP.md).
 
 | Paper feature | Current status |
 | --- | --- |

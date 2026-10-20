@@ -1,3 +1,24 @@
+## 20 October: positive online restoration; keep learner unchanged
+
+Run 2348e08 completed, 55 tests passed. VGG16-FC seed3, VVA16/1,
+100001 evaluations/arm and equal initial placements. Archived bacc334 and
+current signed online learner both reached 4.41664 µs; uniform 4.50976,
+proxy 4.55088, fixed-SA 4.44640, relative-state learner 4.43184 µs.
+Current online learner gains: uniform 2.0649%, proxy 2.9498%, fixed-SA
+0.6693%. Relative state lost 0.3442%, so retain legacy state. Online learners
+made 389 updates and reached epsilon 0.502566. Total six-arm time 7.62 hours.
+
+Same-run final-cost agreement is not exact historical replay: archived source
+previously reached 4.45568 µs. Single reused seed does not establish a robust
+multi-seed win. No new random-search run; do not relabel this as a new 23% gain.
+Reports and test log are in artifacts/online-restoration-20261019/.
+
+Next: unchanged online learner versus uniform/proxy/plain-SA on additional
+seeds6–7. Remove duplicate archived arm and losing relative-state arm. Preserve
+100001-call budgets and all learner/search settings. Runner archives after
+every completed arm and checks budgets/initial costs/learning flags. Seed3
+remains separate from follow-up aggregates. See ONLINE_BANDIT_FOLLOWUP.md.
+
 ## 19 October: return to the demonstrated online bandit
 
 Priority is now restoration and controlled improvement of the original online

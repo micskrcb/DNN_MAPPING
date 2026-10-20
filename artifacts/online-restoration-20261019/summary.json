@@ -1,0 +1,40 @@
+{
+  "protocol": "historical online signed bandit restoration, FC VVA16/1 (see model per row)",
+  "limitation": "Reused historical seeds, developmental reproduction. Relative-cost encoding is an ablation, not a replacement. No comparison to newer CONV/VVA1 results.",
+  "historical_seed3_100001_calls_microseconds": {
+    "original": 4.45568,
+    "uniform": 4.51376,
+    "fixed_sa": 4.4464,
+    "random": 5.69456
+  },
+  "pairs": [
+    {
+      "model": "vgg16",
+      "seed": 3,
+      "objective_calls_per_arm": 100001,
+      "best_cost_microseconds": {
+        "historical": 4.416639999999998,
+        "original": 4.416639999999998,
+        "relative": 4.431839999999999,
+        "uniform": 4.509759999999999,
+        "proxy": 4.5508799999999985,
+        "fixed_sa": 4.446399999999999
+      },
+      "original_gain_over_controls_percent": {
+        "uniform": 2.0648548924998344,
+        "proxy": 2.9497591674577217,
+        "fixed_sa": 0.6693055055775443
+      },
+      "current_gain_over_historical_percent": 0.0,
+      "relative_gain_over_original_percent": -0.34415302130126335,
+      "runtime_seconds": {
+        "historical": 4418.297635074,
+        "original": 4841.949002208001,
+        "relative": 4852.464354944999,
+        "uniform": 4764.6444713050005,
+        "proxy": 4870.215623267999,
+        "fixed_sa": 3682.4603492979986
+      }
+    }
+  ]
+}
