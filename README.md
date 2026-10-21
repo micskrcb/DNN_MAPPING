@@ -10,11 +10,11 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**Current priority:** confirm the improved online candidate pool unchanged.
-Seed 8 beat the original mapper by 0.85%, same-pool uniform by 1.33%, proxy
-by 2.60%, and plain SA by 1.54%, at equal evaluation budgets. This is one
-seed; the original remains the default. Next: seeds 9–10, run separately.
-See [confirmation protocol](docs/ONLINE_POOL_CONFIRMATION.md).
+**Current priority:** improve online bandit + SA through mixed move sizes.
+The unfocused pool nearly tied the original on seed 9 while beating its
+non-learning controls. The new opt-in experiment mixes two-task moves with
+ordinary 1% perturbations; both previous mappers remain references.
+See [mixed-size experiment](docs/ONLINE_MULTISCALE.md).
 
 | Paper feature | Current status |
 | --- | --- |

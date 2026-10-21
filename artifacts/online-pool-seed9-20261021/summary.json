@@ -1,0 +1,52 @@
+{
+  "aggregate": {
+    "original": {
+      "mean_paired_gain_percent": -0.01449065352849832,
+      "wins": 0,
+      "seeds": 1
+    },
+    "pool_uniform": {
+      "mean_paired_gain_percent": 0.37528868360275913,
+      "wins": 1,
+      "seeds": 1
+    },
+    "pool_proxy": {
+      "mean_paired_gain_percent": 1.4985014985015033,
+      "wins": 1,
+      "seeds": 1
+    },
+    "fixed_sa": {
+      "mean_paired_gain_percent": 1.0678707088081385,
+      "wins": 1,
+      "seeds": 1
+    }
+  },
+  "protocol": "online signed bandit, unfocused candidate pool only; calibration fixed",
+  "pairs": [
+    {
+      "seed": 9,
+      "best_cost_microseconds": {
+        "original": 4.416639999999998,
+        "pool_online": 4.41728,
+        "pool_uniform": 4.433919999999999,
+        "pool_proxy": 4.48448,
+        "fixed_sa": 4.46496
+      },
+      "pool_online_gain_percent": {
+        "original": -0.01449065352849832,
+        "pool_uniform": 0.37528868360275913,
+        "pool_proxy": 1.4985014985015033,
+        "fixed_sa": 1.0678707088081385
+      },
+      "directional_screen_positive": false,
+      "runtime_seconds": {
+        "original": 5234.6032743549995,
+        "pool_online": 4757.700034712,
+        "pool_uniform": 4718.624173399001,
+        "pool_proxy": 4568.172243382998,
+        "fixed_sa": 3680.7163288970005
+      }
+    }
+  ],
+  "limitation": "Small-sample comparison on one workload; screening seed8 must be reported separately from confirmation seeds9\u201310. No significance or broad-generalization claim. Plain SA retains distinct calibration and selection mechanics."
+}

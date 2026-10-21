@@ -1,3 +1,21 @@
+## 21 October: seed9 near-ties original; resume mapper development
+
+56e0176 seed9 completed,62 tests passed,100001 calls/arm. Costs µs:
+original4.41664, unfocused-online4.41728, same-pool uniform4.43392,
+proxy4.48448, fixed-SA4.46496. Unfocused-online gains: -0.01449% original,
++0.37529% uniform, +1.49850% proxy, +1.06787% fixed-SA. This supports
+learning versus controls, not superiority to the original mapper. Both
+learners made389 updates. Total6.38h. Source summary is archived.
+
+At the user's request, stop the planned unchanged seed10 confirmation and
+resume algorithm development. Seed10 is now a new developmental experiment,
+not confirmation of the previous pool-only hypothesis. New opt-in pool:
+8 two-task moves +8 ordinary ~1%-task moves. Preserve online signed learning,
+fixed calibration, features, exploration and objective budget. Original focused
+and unfocused mappers remain reference arms. Same mixed-pool uniform/proxy and
+plain SA remain controls. No promotion/performance claim before results.
+See ONLINE_MULTISCALE.md.
+
 ## 21 October: unfocused online pool passes seed8 screen
 
 Run e871e64 completed all59 tests and five100001-call arms. VGG16-FC seed8

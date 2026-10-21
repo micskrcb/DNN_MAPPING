@@ -37,6 +37,29 @@ class PoolTests(unittest.TestCase):
         self.assertEqual(mc['calibration_focus_fraction'],.5)
         self.assertGreater(mc['update_count'],0)
 
+    def test_mixed_sizes_preserve_calibration_and_budget(self):
+        a,ma=self.run_arm(fixed_perturb_fraction=1,pool_focus_fraction=0)
+        b,mb=self.run_arm(fixed_perturb_fraction=1,pool_focus_fraction=0,pool_small_move_fraction=0)
+        self.assertEqual(a,b)
+        self.assertEqual(ma['final_update_metrics'],mb['final_update_metrics'])
+        with patch.object(rm,'_placement_neighbor',wraps=rm._placement_neighbor) as neighbor:
+            _,mc=self.run_arm(fixed_perturb_fraction=1,pool_focus_fraction=0,pool_small_move_fraction=.5)
+        sizes=[c.args[1] for c in neighbor.call_args_list]
+        self.assertEqual(sizes[:4],[4]*4)
+        self.assertEqual(sizes[4:],[2,2,4,4]*20)
+        self.assertEqual(ma['initial_temperature'],mc['initial_temperature'])
+        self.assertEqual(mc['total_objective_evaluations'],25)
+        self.assertEqual(mc['small_move_candidates_per_pool'],2)
+        self.assertGreater(mc['update_count'],0)
+        self.assertTrue(0<=mc['selected_small_move_proposals']<=20)
+
+    def test_checkpoint_rejects_changed_move_sizes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=str(Path(directory)/'model.pt')
+            self.run_arm(pool_small_move_fraction=.5,save_checkpoint=path)
+            with self.assertRaisesRegex(ValueError,'small-move fraction'):
+                self.run_arm(load_checkpoint=path,disable_learning=True,bandit_control='checkpoint')
+
     def test_checkpoint_rejects_changed_pool(self):
         with tempfile.TemporaryDirectory() as directory:
             path=str(Path(directory)/'model.pt')

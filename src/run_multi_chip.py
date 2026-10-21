@@ -2752,6 +2752,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 focus_fraction: float = 0.0,
                 focus_stage_slack: float = 0.0,
                 pool_focus_fraction: float = None,
+                pool_small_move_fraction: float = 0.0,
                 restart_interval: int = 0,
                 update_at_chain_end: bool = False,
                 seed: int = None, initial_acceptance: float = 0.8,
@@ -2800,6 +2801,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError(
             "non-uniform bandit controls require the bandit learner with "
             "learning disabled")
+    if not 0 <= pool_small_move_fraction <= 1:
+        raise ValueError("pool small-move fraction must be in [0, 1]")
     if pool_focus_fraction is not None and not 0 <= pool_focus_fraction <= 1:
         raise ValueError("pool focus fraction must be in [0, 1]")
     if bandit_control == "checkpoint" and not load_checkpoint:
@@ -3266,6 +3269,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 focus_stage_slack, rel_tol=0.0, abs_tol=0.0):
             raise ValueError(
                 "checkpoint focus-stage slack does not match this run")
+        if loaded_checkpoint.get("pool_small_move_fraction", 0.0) != pool_small_move_fraction:
+            raise ValueError("checkpoint small-move fraction does not match this run")
         saved_pool_focus = loaded_checkpoint.get("pool_focus_fraction", loaded_checkpoint.get("focus_fraction", 0.0))
         requested_pool_focus = focus_fraction if pool_focus_fraction is None else pool_focus_fraction
         if saved_pool_focus != requested_pool_focus:
@@ -3329,6 +3334,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     if not 0 <= effective_pool_focus <= 1:
         raise ValueError("pool focus fraction must be in [0, 1]")
     focused_candidate_count = round(candidate_count * effective_pool_focus)
+    small_candidate_count = round(candidate_count * pool_small_move_fraction)
+    selected_small_move_count = 0
 
     def make_proposal_pool(n_perturb):
         candidates, changed_sets, relocations, features = [], [], [], []
@@ -3336,8 +3343,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         bottleneck_stage = (int(np.argmax(evaluator.stage_costs))
                             if evaluator is not None else None)
         for candidate_index in range(candidate_count):
+            move_size = min(n, 2) if candidate_index < small_candidate_count else n_perturb
             candidate, changed, relocation = _placement_neighbor(
-                placement, n_perturb, free_pool, rng=proposal_rng,
+                placement, move_size, free_pool, rng=proposal_rng,
                 anchor_tasks=(focused_tasks
                               if candidate_index < focused_candidate_count else None))
             candidates.append(candidate)
@@ -3698,6 +3706,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 sample.squeeze(-1) * candidate_count).long().clamp(
                     max=candidate_count - 1)
         selected = int(action.item())
+        selected_small_move_count += int(selected < small_candidate_count)
         candidate = candidates[selected]
         changed = changed_sets[selected]
         relocation = relocations[selected]
@@ -4134,6 +4143,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "focus_fraction": focus_fraction,
             "focus_stage_slack": focus_stage_slack,
             "pool_focus_fraction": effective_pool_focus,
+            "pool_small_move_fraction": pool_small_move_fraction,
             "restart_interval": restart_interval,
             "update_at_chain_end": update_at_chain_end,
             "independent_chains": chain_count,
@@ -4194,7 +4204,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "proposal_focus": proposal_focus_label(
                 effective_pool_focus, focus_stage_slack),
             "pool_focus_fraction": effective_pool_focus,
+            "pool_small_move_fraction": pool_small_move_fraction,
             "calibration_focus_fraction": focus_fraction,
+            "small_move_candidates_per_pool": small_candidate_count,
+            "selected_small_move_proposals": selected_small_move_count,
             "acceptance_rule": "fixed_metropolis",
             "temperature_controller": (
                 "paper_style_fixed_schedule"
@@ -5793,6 +5806,8 @@ def main():
         choices=["shared_gae", "reference_separate"], default="shared_gae",
         help="PPO update implementation: historical shared actor/critic or "
              "RL-Based-SA-compatible separate actor and critic")
+    parser.add_argument("--ppo_asa_pool_small_move_fraction", type=float, default=0.0,
+                        help="Fraction of candidates using two-task moves; calibration unchanged")
     parser.add_argument("--ppo_asa_pool_focus_fraction", type=float, default=None,
                         help="Override candidate-pool focus only; keep calibration focus unchanged")
     parser.add_argument(
@@ -6380,6 +6395,7 @@ def main():
             focus_fraction=args.ppo_asa_focus_fraction,
             focus_stage_slack=args.ppo_asa_focus_stage_slack,
             pool_focus_fraction=args.ppo_asa_pool_focus_fraction,
+            pool_small_move_fraction=args.ppo_asa_pool_small_move_fraction,
             restart_interval=args.ppo_asa_restart_interval,
             update_at_chain_end=args.ppo_asa_update_at_chain_end,
             seed=args.seed,
