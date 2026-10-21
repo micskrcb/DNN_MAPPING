@@ -10,11 +10,11 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**Current priority:** improve the working online bandit with a controlled
-candidate-pool change. On seeds 6–7 it beat uniform by 1.78% and proxy by 2.73%,
-but lost to plain SA by 0.25%. The new opt-in experiment removes bottleneck
-focusing from the pool only; the original method remains unchanged by default.
-See [pool experiment](docs/ONLINE_POOL_GATE.md).
+**Current priority:** confirm the improved online candidate pool unchanged.
+Seed 8 beat the original mapper by 0.85%, same-pool uniform by 1.33%, proxy
+by 2.60%, and plain SA by 1.54%, at equal evaluation budgets. This is one
+seed; the original remains the default. Next: seeds 9–10, run separately.
+See [confirmation protocol](docs/ONLINE_POOL_CONFIRMATION.md).
 
 | Paper feature | Current status |
 | --- | --- |

@@ -27,10 +27,18 @@ git rev-parse HEAD > "$out/commit.txt"
 git status --short > "$out/git-status.txt"
 
 python tests/run_all_tests.py > "$out/tests.log" 2>&1
-PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}" python -m unittest test_ranking_repair test_online_followup test_online_pool >> "$out/tests.log" 2>&1
+PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}" python -m unittest test_ranking_repair test_online_followup test_online_pool test_online_pool_summary >> "$out/tests.log" 2>&1
 model="${MODEL_OVERRIDE:-vgg16}"
 budget="${BUDGET_OVERRIDE:-100000}"
 read -r -a seeds <<< "${SEEDS_OVERRIDE:-8}"
+python - "$out" "${seeds[@]}" <<'PYENV'
+import json,platform,sys,torch,numpy
+from pathlib import Path
+(Path(sys.argv[1])/'run-environment.json').write_text(json.dumps({
+ 'python':sys.version,'platform':platform.platform(),'torch':torch.__version__,
+ 'numpy':numpy.__version__,'seeds':[int(x) for x in sys.argv[2:]],
+ 'device':'cpu','requested_cpu_threads':2},indent=2))
+PYENV
 for seed in "${seeds[@]}"; do
  for method in original pool_online pool_uniform pool_proxy fixed_sa; do
   extra=(--algo ppo_asa --ppo_asa_learner bandit --ppo_asa_annealing fixed
@@ -62,6 +70,10 @@ for seed in "${seeds[@]}"; do
   printf 'running; completed seed %s method %s\n' "$seed" "$method" > "$out/run-status.txt"
   archive_results
  done
+ # Save a validated per-seed summary before starting the next seed.
+ python src/analyze_online_pool.py "$out" --seeds "$seed"
+ cp "$out/summary.json" "$out/seed${seed}-summary.json"
+ archive_results
 done
 python src/analyze_online_pool.py "$out" --seeds "${seeds[@]}"
 printf 'complete\n' > "$out/run-status.txt"

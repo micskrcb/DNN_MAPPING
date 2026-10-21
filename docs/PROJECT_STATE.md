@@ -1,3 +1,20 @@
+## 21 October: unfocused online pool passes seed8 screen
+
+Run e871e64 completed all59 tests and five100001-call arms. VGG16-FC seed8
+best costs (µs): modified online4.36672, original4.40432, same-pool uniform
+4.42544, same-pool proxy4.48320, plain-SA4.43520. Modified gain: +0.8537%
+original, +1.3269% uniform, +2.5981% proxy, +1.5440% fixed-SA. Both online
+learners made389 updates; initial placement and candidate-arm calibration
+matched. Modified runtime71.58 minutes versus58.96 fixed-SA; total5.696h.
+This is positive one-seed screening evidence, not a promoted replacement.
+Source reports: artifacts/online-pool-seed8-20261020/.
+
+Next: unchanged configuration, confirmation seeds9–10 in separate sessions.
+Keep all five arms and100001-call budgets. No mapper/target/exploration changes.
+Runner improvements: validated per-seed summaries, environment version logging,
+aggregate paired gains and guards against duplicate seeds/mixed workloads.
+Report screening seed8 separately. See ONLINE_POOL_CONFIRMATION.md.
+
 ## 20 October: additional seeds support learning, not superiority to plain SA
 
 9f8db7b completed seeds6–7, 100001 calls/arm, all 57 tests passed.

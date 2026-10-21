@@ -1,0 +1,30 @@
+{
+  "protocol": "online signed bandit, unfocused candidate pool only; calibration fixed",
+  "pairs": [
+    {
+      "seed": 8,
+      "best_cost_microseconds": {
+        "original": 4.404319999999999,
+        "pool_online": 4.366719999999999,
+        "pool_uniform": 4.425439999999999,
+        "pool_proxy": 4.483199999999999,
+        "fixed_sa": 4.435199999999999
+      },
+      "pool_online_gain_percent": {
+        "original": 0.853707269226589,
+        "pool_uniform": 1.3268737119924934,
+        "pool_proxy": 2.598144182726625,
+        "fixed_sa": 1.5440115440115587
+      },
+      "directional_screen_positive": true,
+      "runtime_seconds": {
+        "original": 4369.264808261,
+        "pool_online": 4294.883570519,
+        "pool_uniform": 4104.254168232001,
+        "pool_proxy": 4200.3484263810005,
+        "fixed_sa": 3537.676041388
+      }
+    }
+  ],
+  "limitation": "One-seed directional screen by default; confirm on additional seeds before promotion. Plain SA retains its distinct calibration and selection mechanics."
+}
