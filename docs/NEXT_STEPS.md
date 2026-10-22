@@ -1,3 +1,21 @@
+## 22 October: recent replay did not beat reference; exploration test next
+
+Archive `artifacts/online-recent-replay-20261022/` records commit a9d8b6a, seed11, successful completion and67 passing tests. All five arms used100001 placement evaluations and the same initial cost8.016µs. Both learners made389 updates.
+
+| Method | Best cost µs | Improvement over fixed SA |
+|---|---:|---:|
+| Existing unfocused online | 4.37776 | 1.09886% |
+| Recent-replay online | 4.38912 | 0.84222% |
+| Fixed SA | 4.42640 | 0% |
+| Same-pool uniform | 4.42736 | -0.02169% |
+| Same-pool proxy | 4.49296 | -1.50371% |
+
+Recent replay lost to the existing learner by0.25949%. It beat uniform by0.86372% and proxy by2.31117%, but failed the primary advancement comparison. Existing learner beat uniform by1.12031% and proxy by2.56401%. These controls are not standalone random search. This single seed does not establish general inferiority of recent replay.
+
+Sampling changed as intended: final mean replay age24806.69→9967.02 observations; recent fraction21.19%→79.88%. Better prediction/target mean agreement did not translate to a better final placement. Keep uniform replay as reference. Runtime summed across arms5.58h.
+
+Next experiment uses the already-supported exploration endpoint0.1 versus reference0.5, with unchanged linear decay duration. This reduces exploration throughout post-warmup training, not only at the end. Actual terminal epsilon is slightly above its configured endpoint because warmup is excluded from learned steps. This is a hypothesis, not an established improvement. Seed12,100000 proposals, five matched arms. See [ONLINE_EXPLORATION.md](ONLINE_EXPLORATION.md). Prior entries below are historical.
+
 ## 22 October: multiscale rejected; improve online replay next
 
 Both uploaded runs completed. The seed10 confirmation did run despite the previous plan to supersede it. Shared seed10 arms in the two ZIPs match exactly and count only once.

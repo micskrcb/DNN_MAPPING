@@ -10,7 +10,7 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**22 October:** unfocused online bandit remains the reference; mixed-size proposals lost. The next experiment changes only replay sampling to emphasize recent experience. [Results and exact run instructions](docs/ONLINE_RECENT_REPLAY.md).
+**22 October:** recent replay failed to improve the existing online RL+SA mapper. The next test lowers the exploration endpoint from50% to10%, preserving the reference and all other settings. [Results and run instructions](docs/ONLINE_EXPLORATION.md).
 
 **Current priority:** improve online bandit + SA through mixed move sizes.
 The unfocused pool nearly tied the original on seed 9 while beating its

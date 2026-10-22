@@ -71,6 +71,15 @@ class PoolTests(unittest.TestCase):
         self.assertEqual(mc['initial_temperature'],ma['initial_temperature'])
         self.assertGreaterEqual(mc['final_update_metrics']['sampled_recent_fraction'],.75)
 
+    def test_lower_exploration_keeps_budget_updates_and_calibration(self):
+        _,reference=self.run_arm(pool_focus_fraction=0)
+        _,candidate=self.run_arm(pool_focus_fraction=0,bandit_epsilon_final=.1)
+        self.assertLess(candidate['final_exploration_epsilon'],reference['final_exploration_epsilon'])
+        self.assertGreaterEqual(candidate['final_exploration_epsilon'],.1)
+        for key in ('total_objective_evaluations','update_count','initial_temperature','initial_cost'):
+            self.assertEqual(candidate[key],reference[key])
+        self.assertEqual(candidate['bandit_recent_fraction'],0)
+
     def test_checkpoint_rejects_changed_pool(self):
         with tempfile.TemporaryDirectory() as directory:
             path=str(Path(directory)/'model.pt')
