@@ -85,6 +85,24 @@ def valid_ppo_gamma(algorithm, gamma):
             else 0 < gamma <= 1)
 
 
+def sample_bandit_replay_indices(rng, size, batch_size, recent_fraction=0.0, recent_window=10000):
+    """Mix recent samples with full-buffer samples; never oversample by reward."""
+    if not 0 <= recent_fraction <= 1 or recent_window < 1 or not 0 < batch_size <= size:
+        raise ValueError("invalid replay sampling configuration")
+    if recent_fraction == 0:
+        return rng.sample(range(size), batch_size)  # Preserve historical RNG behavior.
+    window = min(size, recent_window)
+    recent_count = min(window, round(batch_size * recent_fraction))
+    chosen = rng.sample(range(size-window, size), recent_count)
+    seen = set(chosen)
+    while len(chosen) < batch_size:
+        index = rng.randrange(size)
+        if index not in seen:
+            chosen.append(index)
+            seen.add(index)
+    return chosen
+
+
 def proposal_training_reward(mode, proposed_reward, realized_reward,
                              planted_proxy):
     """Return the declared local reward for learned SA proposal selection."""
@@ -2735,6 +2753,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 bandit_control: str = "uniform",
                 bandit_replay_capacity: int = 50000,
                 bandit_warmup: int = 512,
+                bandit_recent_fraction: float = 0.0,
+                bandit_recent_window: int = 10000,
                 bandit_epsilon_final: float = 0.50,
                 bandit_epsilon_decay_fraction: float = 1.00,
                 bandit_exploration: str = "epsilon_all",
@@ -2807,6 +2827,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("pool focus fraction must be in [0, 1]")
     if bandit_control == "checkpoint" and not load_checkpoint:
         raise ValueError("checkpoint bandit control requires a loaded checkpoint")
+    if not 0 <= bandit_recent_fraction <= 1 or bandit_recent_window < 1:
+        raise ValueError("invalid recent replay settings")
     if bandit_replay_capacity <= 0 or bandit_warmup < 0 or (bandit_warmup == 0 and not disable_learning):
         raise ValueError("replay capacity must be positive; zero warmup requires disabled learning")
     if bandit_warmup > bandit_replay_capacity:
@@ -3373,10 +3395,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             if row[2] > 0.0]
         for _ in range(update_epochs):
             batch_size = min(minibatch_size, len(bandit_replay))
-            # Uniform replay preserves the observed outcome distribution.
+            # Default replay is uniform; optional recency sampling tracks drift.
             # Oversampling improving moves made the first bandit severely
             # overpredict gains and exploit harmful proposals.
-            chosen = bandit_rng.sample(range(len(bandit_replay)), batch_size)
+            chosen = sample_bandit_replay_indices(bandit_rng, len(bandit_replay),
+                batch_size, bandit_recent_fraction, bandit_recent_window)
             global_states = torch.as_tensor(
                 np.asarray([bandit_replay[i][0] for i in chosen]),
                 dtype=torch.float32, device=torch_device)
@@ -3405,6 +3428,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 "gradient_norm": float(gradient_norm),
                 "score_head_weight_norm": float(
                     bandit.score_head.weight.detach().norm().cpu()),
+                "mean_replay_age": float(np.mean([len(bandit_replay)-1-i for i in chosen])),
+                "sampled_recent_fraction": float(np.mean([i >= len(bandit_replay)-bandit_recent_window for i in chosen])),
                 "mean_prediction": float(predictions.detach().mean().cpu()),
                 "mean_target": float(targets.detach().mean().cpu()),
                 "positive_replay_fraction": (
@@ -3960,7 +3985,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                         "policy_head_gradient_norm",
                         "value_head_gradient_norm",
                         "score_head_weight_norm", "bandit_loss",
-                        "mean_prediction", "mean_target",
+                        "mean_prediction", "mean_target", "mean_replay_age", "sampled_recent_fraction",
                         "positive_replay_fraction"):
                 record[key] = (latest_metrics.get(key)
                                if latest_metrics is not None else None)
@@ -4155,6 +4180,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "bandit_top_m": bandit_top_m,
             "bandit_global_epsilon": bandit_global_epsilon,
             "bandit_shuffle_labels": bandit_shuffle_labels,
+            "bandit_recent_fraction": bandit_recent_fraction,
+            "bandit_recent_window": bandit_recent_window,
             "bandit_scoring": bandit_scoring,
             "bandit_residual_limit": bandit_residual_limit,
             "state_encoding": state_encoding,
@@ -4263,6 +4290,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "proposal_learner": proposal_learner,
             "bandit_control": (
                 bandit_control if proposal_learner == "bandit" else None),
+            "bandit_recent_fraction": bandit_recent_fraction,
+            "bandit_recent_window": bandit_recent_window,
             "bandit_replay_capacity": (
                 bandit_replay_capacity if proposal_learner == "bandit" else None),
             "bandit_warmup": (
@@ -5752,6 +5781,8 @@ def main():
         help="Proposal learner: PPO or an immediate-gain contextual bandit")
     parser.add_argument("--ppo_asa_bandit_replay", type=int, default=50000,
                         help="Maximum selected-move observations retained by the bandit")
+    parser.add_argument("--ppo_asa_bandit_recent_fraction", type=float, default=0.0)
+    parser.add_argument("--ppo_asa_bandit_recent_window", type=int, default=10000)
     parser.add_argument("--ppo_asa_bandit_warmup", type=int, default=512,
                         help="Uniform proposals collected before bandit exploitation")
     parser.add_argument("--ppo_asa_bandit_epsilon_final", type=float,
@@ -6377,6 +6408,8 @@ def main():
             bandit_control=args.ppo_asa_bandit_control,
             bandit_replay_capacity=args.ppo_asa_bandit_replay,
             bandit_warmup=args.ppo_asa_bandit_warmup,
+            bandit_recent_fraction=args.ppo_asa_bandit_recent_fraction,
+            bandit_recent_window=args.ppo_asa_bandit_recent_window,
             bandit_epsilon_final=args.ppo_asa_bandit_epsilon_final,
             bandit_epsilon_decay_fraction=args.ppo_asa_bandit_epsilon_decay,
             bandit_exploration=args.ppo_asa_bandit_exploration,

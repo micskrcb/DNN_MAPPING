@@ -1,3 +1,28 @@
+## 22 October: multiscale rejected; improve online replay next
+
+Both uploaded runs completed. The seed10 confirmation did run despite the previous plan to supersede it. Shared seed10 arms in the two ZIPs match exactly and count only once.
+
+| Seed10 method | Best cost (µs) |
+|---|---:|
+| Original focused online | 4.41280 |
+| Unfocused online | 4.37216 |
+| Unfocused uniform | 4.44112 |
+| Unfocused proxy | 4.45760 |
+| Fixed SA | 4.44640 |
+| Mixed-size online | 4.45984 |
+| Mixed-size uniform | 4.46240 |
+| Mixed-size proxy | 4.49168 |
+
+Mixed-size online is 2.0054% worse than unfocused online and 0.3023% worse than fixed SA. Keep it opt-in for reproducibility; do not promote it. Unfocused online remains the working reference.
+
+Across confirmation seeds9–10, unfocused online mean paired improvements are **0.4532% over original (1/2 wins), 0.9640% over uniform (2/2), 1.7076% over proxy (2/2), and 1.3688% over fixed SA (2/2)**. Screening seed8 is separate. These are small-sample VGG16-FC results, not broad superiority or paper reproduction.
+
+Next: test recent-experience replay within the successful online mapper. In the middle 40k–60k proposals, current reward versus replay-target means were -5.348 versus -2.621 (seed9), and -4.555 versus -3.062 (seed10). This is consistent with lagging replay; it does not establish causation. Best placements still improved near proposals99732/99332, so the traces do not establish a plateau.
+
+The new optional sampler draws at least75% of each minibatch from the latest10000 observations and the remainder from the full50000 buffer without duplicates. No reward-sign oversampling, new features, new moves, or SA changes. Default sampling remains exactly the old behavior. See [ONLINE_RECENT_REPLAY.md](ONLINE_RECENT_REPLAY.md) for the protocol and commands. No performance claim until its results arrive.
+
+Evidence: `artifacts/online-multiscale-20261021/` and `artifacts/online-pool-seed10-20261021/`, including source hashes, reports, summaries, completion and test logs. Prior entries below are historical plans/results.
+
 ## 21 October: seed9 near-ties original; resume mapper development
 
 56e0176 seed9 completed,62 tests passed,100001 calls/arm. Costs µs:

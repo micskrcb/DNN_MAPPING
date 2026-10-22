@@ -1,0 +1,60 @@
+{
+  "aggregate": {
+    "original": {
+      "mean_paired_gain_percent": -1.0659898477157093,
+      "wins": 0,
+      "seeds": 1
+    },
+    "pool_online": {
+      "mean_paired_gain_percent": -2.005416087242917,
+      "wins": 0,
+      "seeds": 1
+    },
+    "mixed_uniform": {
+      "mean_paired_gain_percent": 0.057368232341348246,
+      "wins": 1,
+      "seeds": 1
+    },
+    "mixed_proxy": {
+      "mean_paired_gain_percent": 0.7088661703416266,
+      "wins": 1,
+      "seeds": 1
+    },
+    "fixed_sa": {
+      "mean_paired_gain_percent": -0.3022670025188967,
+      "wins": 0,
+      "seeds": 1
+    }
+  },
+  "protocol": "online signed bandit, mixed two-task and 1-percent moves; calibration fixed",
+  "pairs": [
+    {
+      "seed": 10,
+      "best_cost_microseconds": {
+        "original": 4.4128,
+        "pool_online": 4.372159999999999,
+        "mixed_online": 4.459839999999999,
+        "mixed_uniform": 4.462399999999999,
+        "mixed_proxy": 4.491679999999999,
+        "fixed_sa": 4.446399999999999
+      },
+      "mixed_online_gain_percent": {
+        "original": -1.0659898477157093,
+        "pool_online": -2.005416087242917,
+        "mixed_uniform": 0.057368232341348246,
+        "mixed_proxy": 0.7088661703416266,
+        "fixed_sa": -0.3022670025188967
+      },
+      "directional_screen_positive": false,
+      "runtime_seconds": {
+        "original": 4595.912650695999,
+        "pool_online": 4479.0363739350005,
+        "mixed_online": 3836.5805702340003,
+        "mixed_uniform": 3896.7184678970007,
+        "mixed_proxy": 3879.156974409001,
+        "fixed_sa": 3691.736674705997
+      }
+    }
+  ],
+  "limitation": "New developmental algorithm experiment, not the unfinished pool-only confirmation. Small-sample same-workload result; no significance claim. Plain SA retains distinct calibration and selection mechanics."
+}

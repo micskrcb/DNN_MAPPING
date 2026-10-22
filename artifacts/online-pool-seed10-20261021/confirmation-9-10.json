@@ -1,0 +1,75 @@
+{
+  "aggregate": {
+    "original": {
+      "mean_paired_gain_percent": 0.4532332809224826,
+      "wins": 1,
+      "seeds": 2
+    },
+    "pool_uniform": {
+      "mean_paired_gain_percent": 0.9640250745895085,
+      "wins": 2,
+      "seeds": 2
+    },
+    "pool_proxy": {
+      "mean_paired_gain_percent": 1.7076139940461588,
+      "wins": 2,
+      "seeds": 2
+    },
+    "fixed_sa": {
+      "mean_paired_gain_percent": 1.368768028027667,
+      "wins": 2,
+      "seeds": 2
+    }
+  },
+  "pairs": [
+    {
+      "seed": 9,
+      "best_cost_microseconds": {
+        "original": 4.416639999999998,
+        "pool_online": 4.41728,
+        "pool_uniform": 4.433919999999999,
+        "pool_proxy": 4.48448,
+        "fixed_sa": 4.46496
+      },
+      "pool_online_gain_percent": {
+        "original": -0.01449065352849832,
+        "pool_uniform": 0.37528868360275913,
+        "pool_proxy": 1.4985014985015033,
+        "fixed_sa": 1.0678707088081385
+      },
+      "directional_screen_positive": false,
+      "runtime_seconds": {
+        "original": 5234.6032743549995,
+        "pool_online": 4757.700034712,
+        "pool_uniform": 4718.624173399001,
+        "pool_proxy": 4568.172243382998,
+        "fixed_sa": 3680.7163288970005
+      }
+    },
+    {
+      "seed": 10,
+      "best_cost_microseconds": {
+        "original": 4.4128,
+        "pool_online": 4.372159999999999,
+        "pool_uniform": 4.44112,
+        "pool_proxy": 4.457599999999999,
+        "fixed_sa": 4.446399999999999
+      },
+      "pool_online_gain_percent": {
+        "original": 0.9209572153734635,
+        "pool_uniform": 1.5527614655762578,
+        "pool_proxy": 1.9167264895908143,
+        "fixed_sa": 1.6696653472471956
+      },
+      "directional_screen_positive": true,
+      "runtime_seconds": {
+        "original": 4748.904888536,
+        "pool_online": 4664.334128154999,
+        "pool_uniform": 4503.807811491,
+        "pool_proxy": 4452.4716497220015,
+        "fixed_sa": 3850.917173728001
+      }
+    }
+  ],
+  "note": "Screen seed8 excluded. Duplicate seed10 arms from multiscale excluded."
+}

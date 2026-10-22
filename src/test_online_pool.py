@@ -60,6 +60,17 @@ class PoolTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'small-move fraction'):
                 self.run_arm(load_checkpoint=path,disable_learning=True,bandit_control='checkpoint')
 
+    def test_recent_replay_retains_online_updates_and_default(self):
+        a,ma=self.run_arm(pool_focus_fraction=0)
+        b,mb=self.run_arm(pool_focus_fraction=0,bandit_recent_fraction=0)
+        self.assertEqual(a,b)
+        self.assertEqual(ma['final_update_metrics'],mb['final_update_metrics'])
+        _,mc=self.run_arm(pool_focus_fraction=0,bandit_recent_fraction=.75,bandit_recent_window=4)
+        self.assertEqual(mc['total_objective_evaluations'],25)
+        self.assertEqual(mc['update_count'],ma['update_count'])
+        self.assertEqual(mc['initial_temperature'],ma['initial_temperature'])
+        self.assertGreaterEqual(mc['final_update_metrics']['sampled_recent_fraction'],.75)
+
     def test_checkpoint_rejects_changed_pool(self):
         with tempfile.TemporaryDirectory() as directory:
             path=str(Path(directory)/'model.pt')
