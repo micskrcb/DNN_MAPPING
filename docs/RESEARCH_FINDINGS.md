@@ -1,3 +1,21 @@
+## 23 October: lower exploration passes seed12 screen; confirm unchanged
+
+Evidence: `artifacts/online-exploration-seed12-20261023/` (source hash, reports, summary and test/completion logs). Commit d65d9e4;68 tests passed;100001 placement evaluations per arm;389 updates per learner; identical initial cost6.72µs. Total runtime5.84h.
+
+| Method | Best cost µs | Lower-exploration improvement |
+|---|---:|---:|
+| Lower-exploration online RL+SA | 4.33616 | — |
+| Existing online RL+SA | 4.37264 | 0.83428% |
+| Same-pool uniform | 4.42576 | 2.02451% |
+| Fixed SA | 4.45360 | 2.63697% |
+| Same-pool proxy | 4.46432 | 2.87076% |
+
+Actual final epsilon0.10462 versus0.50257. Lower exploration won all comparisons on this seed. This is exploratory evidence, not proof of general superiority. It is not a5% win over published DDPG/SOTA, and same-pool uniform is not standalone RS.
+
+Next: lock this configuration and run confirmation seeds13 and14 in separate sessions. Do not tune between them. Keep seed12 separate. Advance if mean paired improvement is positive against all four comparators and candidate wins against the existing learner on both confirmation seeds; report mixed results honestly. This is a practical directional screen, not a statistical-significance claim. No mapper rewrite is justified by a successful single-seed result.
+
+Code improvements: stricter analyzer validation of learner, features, replay, candidate count, annealing and actual control selection; reject mixing seed12 with confirmation; archived-report regression tests; dedicated confirmation runner. Protocol in [ONLINE_EXPLORATION_CONFIRMATION.md](ONLINE_EXPLORATION_CONFIRMATION.md). Published-method comparison remains a separate required experiment: matched simulator/workload and budget, independently validated DDPG reconstruction, training/evaluation costs reported. Do not present failure of an unvalidated DDPG implementation as a published-method win.
+
 ## 22 October: recent replay did not beat reference; exploration test next
 
 Archive `artifacts/online-recent-replay-20261022/` records commit a9d8b6a, seed11, successful completion and67 passing tests. All five arms used100001 placement evaluations and the same initial cost8.016µs. Both learners made389 updates.

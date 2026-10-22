@@ -27,7 +27,7 @@ git rev-parse HEAD > "$out/commit.txt"
 git status --short > "$out/git-status.txt"
 
 python tests/run_all_tests.py > "$out/tests.log" 2>&1
-PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}" python -m unittest test_ranking_repair test_online_followup test_online_pool test_online_pool_summary test_recent_replay >> "$out/tests.log" 2>&1
+PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}" python -m unittest test_ranking_repair test_online_followup test_online_pool test_online_pool_summary test_recent_replay test_online_exploration >> "$out/tests.log" 2>&1
 model="${MODEL_OVERRIDE:-vgg16}"
 budget="${BUDGET_OVERRIDE:-100000}"
 read -r -a seeds <<< "${SEEDS_OVERRIDE:-12}"

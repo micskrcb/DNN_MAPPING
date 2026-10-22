@@ -10,7 +10,7 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**22 October:** recent replay failed to improve the existing online RL+SA mapper. The next test lowers the exploration endpoint from50% to10%, preserving the reference and all other settings. [Results and run instructions](docs/ONLINE_EXPLORATION.md).
+**23 October:** lower-exploration online RL+SA passed the seed12 screen (0.83% over previous RL+SA,2.64% over fixed SA). Confirm unchanged on seeds13–14. [Results and commands](docs/ONLINE_EXPLORATION_CONFIRMATION.md). No published-DDPG superiority claim yet.
 
 **Current priority:** improve online bandit + SA through mixed move sizes.
 The unfocused pool nearly tied the original on seed 9 while beating its

@@ -10,6 +10,7 @@ METHODS=('pool_online','low_exploration','pool_uniform','pool_proxy','fixed_sa')
 def summarize(root,seeds):
     if not seeds or len(set(seeds)) != len(seeds):
         raise ValueError("Supply nonempty unique seeds")
+    assert not (12 in seeds and len(seeds)>1), 'Report exploratory seed12 separately from confirmation'
     pairs=[]
     workload_signatures=set()
     for seed in seeds:
@@ -28,6 +29,16 @@ def summarize(root,seeds):
             if method=='fixed_sa':continue
             meta=r['algorithm_metadata']
             assert meta['reward_mode']=='proposed_delta'
+            expected={'annealing_schedule':'fixed','proposal_learner':'bandit',
+                'bandit_exploration':'epsilon_all','bandit_feature_set':'legacy9',
+                'state_encoding':'legacy_clipped','bandit_scoring':'direct',
+                'bandit_replay_capacity':50000,'bandit_warmup':512,
+                'proposal_candidates_per_step':16,'bandit_shuffle_labels':False}
+            for key,value in expected.items():
+                assert meta[key]==value, f'{method}: changed {key}'
+            control='proxy_greedy' if method=='pool_proxy' else 'uniform'
+            assert meta['bandit_control']==control
+
             assert meta['pool_focus_fraction']==0
             assert meta['calibration_focus_fraction']==.5
             assert meta['learning_enabled']==(method in ('low_exploration','pool_online'))
@@ -52,7 +63,7 @@ def summarize(root,seeds):
         'wins':sum(p['low_exploration_gain_percent'][m]>0 for p in pairs),'seeds':len(pairs)}
         for m in METHODS if m!='low_exploration'}
     return {'aggregate':aggregate,'protocol':'online signed bandit, epsilon endpoint only; unfocused pool and calibration fixed',
-        'pairs':pairs,'limitation':'Small-sample comparison on one workload; Exploratory seed12 is not independent confirmation of a selected method. No significance or broad-generalization claim. Plain SA retains distinct calibration and selection mechanics.'}
+        'pairs':pairs,'limitation':'Small-sample comparison on one workload; Seed12 is exploratory; report confirmation seeds13–14 separately. No significance or broad-generalization claim. Plain SA retains distinct calibration and selection mechanics.'}
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('directory',type=Path);p.add_argument('--seeds',type=int,nargs='+',default=[12]);args=p.parse_args()

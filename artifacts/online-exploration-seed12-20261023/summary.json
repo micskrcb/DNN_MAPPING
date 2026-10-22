@@ -1,0 +1,78 @@
+{
+  "aggregate": {
+    "pool_online": {
+      "mean_paired_gain_percent": 0.8342786051447115,
+      "wins": 1,
+      "seeds": 1
+    },
+    "pool_uniform": {
+      "mean_paired_gain_percent": 2.0245110444307657,
+      "wins": 1,
+      "seeds": 1
+    },
+    "pool_proxy": {
+      "mean_paired_gain_percent": 2.8707619525481953,
+      "wins": 1,
+      "seeds": 1
+    },
+    "fixed_sa": {
+      "mean_paired_gain_percent": 2.6369678462367374,
+      "wins": 1,
+      "seeds": 1
+    }
+  },
+  "protocol": "online signed bandit, epsilon endpoint only; unfocused pool and calibration fixed",
+  "pairs": [
+    {
+      "seed": 12,
+      "best_cost_microseconds": {
+        "pool_online": 4.37264,
+        "low_exploration": 4.33616,
+        "pool_uniform": 4.425759999999999,
+        "pool_proxy": 4.46432,
+        "fixed_sa": 4.453599999999999
+      },
+      "low_exploration_gain_percent": {
+        "pool_online": 0.8342786051447115,
+        "pool_uniform": 2.0245110444307657,
+        "pool_proxy": 2.8707619525481953,
+        "fixed_sa": 2.6369678462367374
+      },
+      "directional_screen_positive": true,
+      "final_exploration_epsilon": {
+        "pool_online": 0.5025658210627401,
+        "low_exploration": 0.1046184779129321
+      },
+      "final_learning_metrics": {
+        "pool_online": {
+          "bandit_loss": 2.3650267124176025,
+          "gradient_norm": 0.3719114828854799,
+          "score_head_weight_norm": 2.284246861934662,
+          "mean_replay_age": 25491.4365234375,
+          "sampled_recent_fraction": 0.1875,
+          "mean_prediction": -5.78894829750061,
+          "mean_target": -5.470586776733398,
+          "positive_replay_fraction": 0.00238
+        },
+        "low_exploration": {
+          "bandit_loss": 2.512162685394287,
+          "gradient_norm": 0.6313680224120617,
+          "score_head_weight_norm": 2.5730616450309753,
+          "mean_replay_age": 25491.4365234375,
+          "sampled_recent_fraction": 0.1875,
+          "mean_prediction": -4.182681560516357,
+          "mean_target": -4.579636454582214,
+          "positive_replay_fraction": 0.00318
+        }
+      },
+      "runtime_seconds": {
+        "pool_online": 4364.919052078,
+        "low_exploration": 4376.389460341001,
+        "pool_uniform": 4324.607831248,
+        "pool_proxy": 4325.416216176001,
+        "fixed_sa": 3641.949255268002
+      }
+    }
+  ],
+  "limitation": "Small-sample comparison on one workload; Exploratory seed12 is not independent confirmation of a selected method. No significance or broad-generalization claim. Plain SA retains distinct calibration and selection mechanics."
+}
