@@ -85,6 +85,14 @@ def valid_ppo_gamma(algorithm, gamma):
             else 0 < gamma <= 1)
 
 
+def within_pool_ranking_loss(scores, gains):
+    """Pairwise ordering only within a fully evaluated common-state pool."""
+    difference = gains.unsqueeze(-1) - gains.unsqueeze(-2)
+    margin = scores.unsqueeze(-1) - scores.unsqueeze(-2)
+    mask = difference > 1e-8
+    return F.softplus(-margin[mask]).mean() if mask.any() else scores.sum() * 0.0
+
+
 def sample_bandit_replay_indices(rng, size, batch_size, recent_fraction=0.0, recent_window=10000):
     """Mix recent samples with full-buffer samples; never oversample by reward."""
     if not 0 <= recent_fraction <= 1 or recent_window < 1 or not 0 < batch_size <= size:
@@ -2766,6 +2774,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 bandit_residual_limit: float = 0.25,
                 state_encoding: str = "legacy_clipped",
                 bandit_pool_supervision_stride: int = 0,
+                bandit_ranking_weight: float = 0.0,
                 update_style: str = "shared_gae",
                 reward_mode: str = "realized",
                 focus_bottleneck: bool = False,
@@ -2853,6 +2862,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("proxy residual scoring requires the bandit learner")
     if state_encoding not in {"legacy_clipped", "relative_cost"}:
         raise ValueError("unknown proposal state encoding")
+    if not math.isfinite(bandit_ranking_weight) or bandit_ranking_weight < 0:
+        raise ValueError("ranking weight must be finite and nonnegative")
+    if bandit_ranking_weight and (not bandit_pool_supervision_stride or bandit_shuffle_labels):
+        raise ValueError("ranking requires supervised pools and unshuffled labels")
     if bandit_pool_supervision_stride < 0:
         raise ValueError("bandit pool-supervision stride cannot be negative")
     if bandit_pool_supervision_stride and (
@@ -3277,6 +3290,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                     bandit_pool_supervision_stride:
                 raise ValueError(
                     "checkpoint pool-supervision stride does not match this run")
+        if loaded_checkpoint.get("bandit_ranking_weight", 0.0) != bandit_ranking_weight:
+            raise ValueError("checkpoint ranking weight does not match this run")
         if loaded_checkpoint.get("annealing_schedule", "adaptive") != \
                 annealing_schedule:
             raise ValueError(
@@ -3380,6 +3395,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     latest_metrics = None
     pending = []
     bandit_replay = []
+    ranking_replay = []
     bandit_steps_since_update = 0
     bandit_observations = 0
     epsilon = 1.0
@@ -3418,6 +3434,14 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 targets = torch.tanh(targets)
             predictions = bandit(global_states, candidate_rows).squeeze(1)
             loss = F.smooth_l1_loss(predictions, targets)
+            ranking_loss = predictions.sum() * 0.0
+            if bandit_ranking_weight and ranking_replay:
+                rows = bandit_rng.sample(ranking_replay, min(8, len(ranking_replay)))
+                gs = torch.as_tensor(np.asarray([r[0] for r in rows]), dtype=torch.float32, device=torch_device)
+                xs = torch.as_tensor(np.asarray([r[1] for r in rows]), dtype=torch.float32, device=torch_device)
+                ys = torch.as_tensor(np.asarray([r[2] for r in rows]), dtype=torch.float32, device=torch_device)
+                ranking_loss = within_pool_ranking_loss(bandit(gs, xs), ys)
+                loss = loss + bandit_ranking_weight * ranking_loss
             bandit_optimizer.zero_grad()
             loss.backward()
             gradient_norm = torch.nn.utils.clip_grad_norm_(
@@ -3425,6 +3449,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             bandit_optimizer.step()
             metrics.append({
                 "bandit_loss": float(loss.detach().cpu()),
+                "ranking_loss": float(ranking_loss.detach().cpu()),
                 "gradient_norm": float(gradient_norm),
                 "score_head_weight_norm": float(
                     bandit.score_head.weight.detach().norm().cpu()),
@@ -3811,6 +3836,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                     pool_rewards = np.maximum(pool_rewards, 0.0)
                 elif reward_mode == "planted_proxy":
                     pool_rewards = features[:, 7]
+                if bandit_ranking_weight:
+                    ranking_replay.append((global_state.copy(), features.copy(), pool_rewards.copy()))
+                    del ranking_replay[:-256]
                 for row, reward in zip(features, pool_rewards):
                     bandit_replay.append((
                         global_state.copy(), row.copy(), float(reward)))
@@ -3984,7 +4012,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                         "actor_gradient_norm", "critic_gradient_norm",
                         "policy_head_gradient_norm",
                         "value_head_gradient_norm",
-                        "score_head_weight_norm", "bandit_loss",
+                        "score_head_weight_norm", "bandit_loss", "ranking_loss",
                         "mean_prediction", "mean_target", "mean_replay_age", "sampled_recent_fraction",
                         "positive_replay_fraction"):
                 record[key] = (latest_metrics.get(key)
@@ -4185,6 +4213,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "bandit_scoring": bandit_scoring,
             "bandit_residual_limit": bandit_residual_limit,
             "state_encoding": state_encoding,
+            "bandit_ranking_weight": bandit_ranking_weight,
             "bandit_pool_supervision_stride": (
                 bandit_pool_supervision_stride),
             "reward_mode": reward_mode,
@@ -4264,6 +4293,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "bandit_target_transform": (
                 "tanh_selected_reward" if bandit_scoring == "proxy_residual"
                 else "selected_reward"),
+            "bandit_ranking_weight": bandit_ranking_weight,
             "bandit_pool_supervision_stride": (
                 bandit_pool_supervision_stride),
             "supervised_pools": supervised_pools,
@@ -5828,6 +5858,7 @@ def main():
     parser.add_argument(
         "--ppo_asa_bandit_pool_supervision_stride", type=int, default=0,
         help="Evaluate and train on a whole candidate pool every N proposal steps")
+    parser.add_argument("--ppo_asa_bandit_ranking_weight", type=float, default=0.0)
     parser.add_argument("--ppo_asa_rollout_steps", type=int, default=256,
                         help="Accepted/rejected proposal transitions per PPO-ASA update")
     parser.add_argument("--ppo_asa_weight_decay", type=float, default=0.0,
@@ -6420,6 +6451,7 @@ def main():
             bandit_scoring=args.ppo_asa_bandit_scoring,
             bandit_residual_limit=args.ppo_asa_bandit_residual_limit,
             state_encoding=args.ppo_asa_state_encoding,
+            bandit_ranking_weight=args.ppo_asa_bandit_ranking_weight,
             bandit_pool_supervision_stride=(
                 args.ppo_asa_bandit_pool_supervision_stride),
             update_style=args.ppo_asa_update_style,

@@ -1,3 +1,21 @@
+## 23 October: both exploration confirmation seeds pass
+
+Seed13 lower-exploration cost4.38688µs; seed14 cost4.34928µs. Completed successfully with100001 placement evaluations per arm. Both beat previous online RL+SA, same-pool uniform, proxy and fixed SA. Mean paired gains across confirmation seeds13–14: **0.49213% over previous online,2.24199% over uniform,2.86536% over proxy,1.92062% over fixed SA**;2/2 wins for every comparator. Seed12 remains a separate exploratory result.
+
+The prespecified directional confirmation rule passes, with only two seeds and one workload. Keep epsilon0.1 as the development reference. This does not establish5% improvement over published DDPG/SOTA; neither is included in these runs. Evidence and combined summary: `artifacts/online-exploration-confirmation-20261023/`.
+
+Continue the requested accelerated development workflow: seed15 screen and seed16 full-budget follow-up. Do not run seeds13–14 again. Previous entries describing confirmation as pending/deferred are historical and superseded by these received results.
+
+## 23 October: accelerated development replaces immediate confirmation
+
+User requested faster algorithm development. Seed12 remains the latest measured result: lower-exploration RL+SA4.33616µs,0.83428% over previous online mapper and2.63697% over fixed SA. No new Kaggle outcome has arrived; no new gain is claimed. Seeds13–14 confirmation runner remains available but is no longer the next requested run.
+
+New automated development run: seed15,25000 objective proposals per arm, five arms: working epsilon0.1 reference; stronger exploitation endpoint0.02; topology16 features; pool regression; within-pool pairwise ranking. Pool-regression and ranking evaluate a full16-candidate pool every64 proposal steps, charging every label to the same objective budget. Ranking adds weight0.25 softplus ordering loss to the existing signed regression loss. Comparisons are within one common-state pool, never arbitrary cross-state move pairs. It retains at most256 pools and samples up to8 per update. No extra objective calls occur during training.
+
+Automatically select the lowest-cost challenger and run it on fresh seed16 at100000 proposals with working reference and fixed SA; if ranking wins the screen, also retain pool regression in the full run. Run the best challenger even if the short screen is negative: this is an aggressive developmental test, not an advancement or publication gate. Keep screen and full-stage results separate. Both budgets include initialization in reported evaluations (+1). Extra pool evaluations reduce accepted search opportunities and may change update counts; report these tradeoffs.
+
+New code/defaults are opt-in; existing learner and confirmation runners remain intact.72 local tests passed. Full run has not been measured. Details and execution: [ONLINE_RAPID_DEVELOPMENT.md](ONLINE_RAPID_DEVELOPMENT.md). Published DDPG comparison remains outstanding; this run cannot establish a5% win over a published method.
+
 ## 23 October: lower exploration passes seed12 screen; confirm unchanged
 
 Evidence: `artifacts/online-exploration-seed12-20261023/` (source hash, reports, summary and test/completion logs). Commit d65d9e4;68 tests passed;100001 placement evaluations per arm;389 updates per learner; identical initial cost6.72µs. Total runtime5.84h.

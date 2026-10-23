@@ -1,0 +1,178 @@
+--- Running Functional Smoke Tests ---
+✓ topology tests passed
+✓ environment tests passed  (cost=1254.00)
+✓ pipeline_stages/pipeline_latency tests passed
+✓ compute latency estimate tests passed
+✓ collision resolution tests passed
+✓ batched action tests passed
+>> Per-layer VMM/VVA breakdown (simple, channels_per_partition=32, extracted via torch.fx true computational-graph tracing):
+   Layer                          Type        Cin   Cout    M    N    VMM   VVA
+   features.0                     conv          3     16    1    1      1     1
+   features.3                     conv         16     32    1    1      1     1
+   features.6                     conv         32     64    2    1      2     2
+   features.10                    linear     1024    256    8   32    256     8
+   features.12                    linear      256    128    4    8     32     4
+   features.14                    linear      128     10    1    4      4     1
+>> Per-layer VMM/VVA breakdown (simple, channels_per_partition=32, extracted via torch.fx true computational-graph tracing):
+   Layer                          Type        Cin   Cout    M    N    VMM   VVA
+   features.0                     conv          3     16    1    1      1     1
+   features.3                     conv         16     32    1    1      1     1
+   features.6                     conv         32     64    2    1      2     2
+   features.10                    linear     1024    256    8   32    256     8
+   features.12                    linear      256    128    4    8     32     4
+   features.14                    linear      128     10    1    4      4     1
+✓ CNN workload partitioning tests passed (313 logic cores at channels_per_partition=32, 6 in legacy mode)
+[SA] WARNING: n_iter=500 is far below the paper's ~1,000,000-placement search budget (Sec 4.2). Results are not directly comparable to the paper's reported SA baseline until run at closer to that scale.
+[SA] proposals=10/500 best=2346
+[SA] proposals=20/500 best=2313
+[SA] proposals=30/500 best=2304
+[SA] proposals=40/500 best=2250
+[SA] proposals=50/500 best=2222
+[SA] proposals=60/500 best=2198
+[SA] proposals=70/500 best=2173
+[SA] proposals=80/500 best=2173
+[SA] proposals=90/500 best=2119
+[SA] proposals=100/500 best=2119
+[SA] proposals=110/500 best=2119
+[SA] proposals=120/500 best=2119
+[SA] proposals=130/500 best=2119
+[SA] proposals=140/500 best=2119
+[SA] proposals=150/500 best=2119
+[SA] proposals=160/500 best=2119
+[SA] proposals=170/500 best=2119
+[SA] proposals=180/500 best=2119
+[SA] proposals=190/500 best=2119
+[SA] proposals=200/500 best=2119
+[SA] proposals=210/500 best=2119
+[SA] proposals=220/500 best=2119
+[SA] proposals=230/500 best=2114
+[SA] proposals=240/500 best=2111
+[SA] proposals=250/500 best=2081
+[SA] proposals=260/500 best=2060
+[SA] proposals=270/500 best=2033
+[SA] proposals=280/500 best=2031
+[SA] proposals=290/500 best=2008
+[SA] proposals=300/500 best=2008
+[SA] proposals=310/500 best=2002
+[SA] proposals=320/500 best=2002
+[SA] proposals=330/500 best=2002
+[SA] proposals=340/500 best=2002
+[SA] proposals=350/500 best=2002
+[SA] proposals=360/500 best=1995
+[SA] proposals=370/500 best=1989
+[SA] proposals=380/500 best=1989
+[SA] proposals=390/500 best=1989
+[SA] proposals=400/500 best=1985
+[SA] proposals=410/500 best=1985
+[SA] proposals=420/500 best=1985
+[SA] proposals=430/500 best=1985
+[SA] proposals=440/500 best=1985
+[SA] proposals=450/500 best=1975
+[SA] proposals=460/500 best=1969
+[SA] proposals=470/500 best=1963
+[SA] proposals=480/500 best=1959
+[SA] proposals=490/500 best=1958
+[SA] proposals=500/500 best=1958
+✓ SA cost=1958.00  random cost=2442.00
+All functional smoke tests passed.
+
+--- Running Reconciliation & Regression Unit Tests ---
+test_adaptive_sa_exact_budget_and_warm_start (test_reconciliation.TimingTests.test_adaptive_sa_exact_budget_and_warm_start) ... ok
+test_bandit_uses_selected_reward_and_checks_checkpoint_semantics (test_reconciliation.TimingTests.test_bandit_uses_selected_reward_and_checks_checkpoint_semantics) ... ok
+test_chain_metrics_use_trajectories_as_independent_units (test_reconciliation.TimingTests.test_chain_metrics_use_trajectories_as_independent_units) ... ok
+test_contention_features_match_exact_affected_stage_components (test_reconciliation.TimingTests.test_contention_features_match_exact_affected_stage_components) ... ok
+test_contextual_bandit_starts_tied_and_updates_with_fixed_sa (test_reconciliation.TimingTests.test_contextual_bandit_starts_tied_and_updates_with_fixed_sa) ... ok
+test_delayed_macro_operator_credit_is_budgeted_and_reproducible (test_reconciliation.TimingTests.test_delayed_macro_operator_credit_is_budgeted_and_reproducible) ... ok
+test_deterministic_candidate_retention_is_explicit_and_counted (test_reconciliation.TimingTests.test_deterministic_candidate_retention_is_explicit_and_counted) ... [DDPG] Computing random-search baseline B (1 trials)...
+[DDPG] Baseline B = 20
+[DDPG] Batched action: placing 1 logic core(s) per step (action_dim=2)
+[DDPG] Agent architecture: mlp
+[DDPG] Using device: cpu (2 CPU threads)
+[DDPG] Writing per-episode diagnostics to /tmp/tmpbyvsi6u8/diagnostics.jsonl
+# of placements:       1 | Current Cost: 20 | Best Cost: 10 | 0.00s/ep | ETA: 0:00:00
+--- Current Best Layout ---
+0 1
+. 2
+---------------------------
+ok
+test_fixed_sa_incremental_path_matches_full_evaluation (test_reconciliation.TimingTests.test_fixed_sa_incremental_path_matches_full_evaluation) ... ok
+test_focused_neighbor_always_moves_an_anchor_task (test_reconciliation.TimingTests.test_focused_neighbor_always_moves_an_anchor_task) ... ok
+test_full_information_operator_gate_matches_proxy_budget (test_reconciliation.TimingTests.test_full_information_operator_gate_matches_proxy_budget) ... ok
+test_guided_legal_actions_are_executed_without_repairs (test_reconciliation.TimingTests.test_guided_legal_actions_are_executed_without_repairs) ... ok
+test_hybrid_warm_starts_asa_from_ddpg_best (test_reconciliation.TimingTests.test_hybrid_warm_starts_asa_from_ddpg_best) ... ok
+test_improvement_only_proposal_reward (test_reconciliation.TimingTests.test_improvement_only_proposal_reward) ... ok
+test_incremental_pipeline_evaluator_matches_full_objective (test_reconciliation.TimingTests.test_incremental_pipeline_evaluator_matches_full_objective) ... ok
+test_logic_task_order_reindexes_graph_and_work_together (test_reconciliation.TimingTests.test_logic_task_order_reindexes_graph_and_work_together) ... ok
+test_masked_mapper_exposes_only_unused_allowed_cores (test_reconciliation.TimingTests.test_masked_mapper_exposes_only_unused_allowed_cores) ... [WARN] MultiChipCoreMapper created without baseline_latency -- reward will use unnormalized -sqrt(L(P)), not the paper's sqrt(B) - sqrt(L(P)) (Algorithm 1, line 11).
+ok
+test_masked_ppo_has_zero_illegal_probability_and_trains (test_reconciliation.TimingTests.test_masked_ppo_has_zero_illegal_probability_and_trains) ... ok
+test_masked_region_restricts_baselines_and_mapper (test_reconciliation.TimingTests.test_masked_region_restricts_baselines_and_mapper) ... ok
+test_objective_sensitivity_reports_range_without_changing_rng (test_reconciliation.TimingTests.test_objective_sensitivity_reports_range_without_changing_rng) ... ok
+test_operator_bandit_sa_has_exact_budget_and_uniform_control (test_reconciliation.TimingTests.test_operator_bandit_sa_has_exact_budget_and_uniform_control) ... ok
+test_oracle_supervised_ranker_generalizes_planted_ordering (test_reconciliation.TimingTests.test_oracle_supervised_ranker_generalizes_planted_ordering) ... ok
+test_paper_partitions_balance_vmm_and_vva_without_changing_count (test_reconciliation.TimingTests.test_paper_partitions_balance_vmm_and_vva_without_changing_count) ... ok
+test_paper_xy_gateway_route_and_contention (test_reconciliation.TimingTests.test_paper_xy_gateway_route_and_contention) ... ok
+test_pool_supervision_counts_every_candidate_in_fixed_budget (test_reconciliation.TimingTests.test_pool_supervision_counts_every_candidate_in_fixed_budget) ... ok
+test_potential_shaping_preserves_discounted_return (test_reconciliation.TimingTests.test_potential_shaping_preserves_discounted_return) ... ok
+test_ppo_asa_starts_uniform_and_respects_objective_budget (test_reconciliation.TimingTests.test_ppo_asa_starts_uniform_and_respects_objective_budget) ... [PPO-ASA] proposals=8/40 chains=1 updates=0 best_us=2000000.000000
+[PPO-ASA] proposals=16/40 chains=2 updates=1 best_us=1000000.000000
+[PPO-ASA] proposals=24/40 chains=3 updates=3 best_us=1000000.000000
+[PPO-ASA] proposals=32/40 chains=4 updates=5 best_us=1000000.000000
+[PPO-ASA] proposals=40/40 chains=4 updates=7 best_us=1000000.000000
+[PPO-ASA] proposals=8/40 chains=1 updates=0 best_us=2000000.000000
+[PPO-ASA] proposals=16/40 chains=2 updates=0 best_us=1000000.000000
+[PPO-ASA] proposals=24/40 chains=3 updates=0 best_us=1000000.000000
+[PPO-ASA] proposals=32/40 chains=4 updates=0 best_us=1000000.000000
+[PPO-ASA] proposals=40/40 chains=4 updates=0 best_us=1000000.000000
+[PPO-ASA] proposals=8/16 chains=1 updates=0 best_us=2000000.000000
+[PPO-ASA] proposals=16/16 chains=1 updates=0 best_us=2000000.000000
+[PPO-ASA] proposals=5/16 chains=1 updates=0 best_us=2000000.000000
+[PPO-ASA] proposals=8/16 chains=1 updates=1 best_us=2000000.000000
+[PPO-ASA] proposals=12/16 chains=1 updates=2 best_us=2000000.000000
+[PPO-ASA] proposals=16/16 chains=1 updates=3 best_us=2000000.000000
+ok
+test_proposal_focus_labels_preserve_legacy_zero_slack (test_reconciliation.TimingTests.test_proposal_focus_labels_preserve_legacy_zero_slack) ... ok
+test_proxy_gated_lints_uses_one_true_call_and_is_reproducible (test_reconciliation.TimingTests.test_proxy_gated_lints_uses_one_true_call_and_is_reproducible) ... ok
+test_proxy_greedy_control_uses_proxy_without_learning (test_reconciliation.TimingTests.test_proxy_greedy_control_uses_proxy_without_learning) ... ok
+test_proxy_guided_sa_is_training_free_across_supported_topologies (test_reconciliation.TimingTests.test_proxy_guided_sa_is_training_free_across_supported_topologies) ... ok
+test_reference_ppo_asa_separates_actor_and_critic (test_reconciliation.TimingTests.test_reference_ppo_asa_separates_actor_and_critic) ... [PPO-ASA] proposals=8/40 chains=1 updates=0 best_us=1000000.000000
+[PPO-ASA] proposals=16/40 chains=1 updates=1 best_us=1000000.000000
+[PPO-ASA] proposals=24/40 chains=1 updates=2 best_us=1000000.000000
+[PPO-ASA] proposals=32/40 chains=1 updates=3 best_us=1000000.000000
+[PPO-ASA] proposals=40/40 chains=1 updates=5 best_us=1000000.000000
+[PPO-ASA] proposals=8/16 chains=1 updates=0 best_us=2000000.000000
+[PPO-ASA] proposals=16/16 chains=1 updates=0 best_us=2000000.000000
+[PPO-ASA] proposals=8/16 chains=1 updates=0 best_us=2000000.000000
+[PPO-ASA] proposals=16/16 chains=1 updates=2 best_us=2000000.000000
+ok
+test_relative_cost_state_keeps_late_progress_distinct (test_reconciliation.TimingTests.test_relative_cost_state_keeps_late_progress_distinct) ... ok
+test_remainder_conserves_work (test_reconciliation.TimingTests.test_remainder_conserves_work) ... ok
+test_residual_bandit_starts_at_proxy_and_learns_planted_correction (test_reconciliation.TimingTests.test_residual_bandit_starts_at_proxy_and_learns_planted_correction) ... ok
+test_reward_scale_changes_magnitude_not_placement_objective (test_reconciliation.TimingTests.test_reward_scale_changes_magnitude_not_placement_objective) ... ok
+test_sa_exact_budget_and_unused_core (test_reconciliation.TimingTests.test_sa_exact_budget_and_unused_core) ... ok
+test_seconds_and_bytes (test_reconciliation.TimingTests.test_seconds_and_bytes) ... ok
+test_sequential_baseline_uses_chip_major_core_order (test_reconciliation.TimingTests.test_sequential_baseline_uses_chip_major_core_order) ... ok
+test_topology_aware_bandit_feature_contract (test_reconciliation.TimingTests.test_topology_aware_bandit_feature_contract) ... ok
+test_torus_and_grid_ids (test_reconciliation.TimingTests.test_torus_and_grid_ids) ... [WARN] MultiChipCoreMapper created without baseline_latency -- reward will use unnormalized -sqrt(L(P)), not the paper's sqrt(B) - sqrt(L(P)) (Algorithm 1, line 11).
+ok
+test_zero_discount_is_only_valid_for_proposal_ranking (test_reconciliation.TimingTests.test_zero_discount_is_only_valid_for_proposal_ranking) ... ok
+test_zero_residual_matches_proxy_search_before_updates (test_reconciliation.TimingTests.test_zero_residual_matches_proxy_search_before_updates) ... ok
+test_cnn_agent_spatial_state_and_update (test_reconciliation.WorkloadTests.test_cnn_agent_spatial_state_and_update) ... ok
+test_guided_replay_and_twin_critic_update_are_finite (test_reconciliation.WorkloadTests.test_guided_replay_and_twin_critic_update_are_finite) ... ok
+test_guided_replay_has_an_independent_random_stream (test_reconciliation.WorkloadTests.test_guided_replay_has_an_independent_random_stream) ... ok
+test_guided_replay_keeps_demonstrations_when_capacity_wraps (test_reconciliation.WorkloadTests.test_guided_replay_keeps_demonstrations_when_capacity_wraps) ... ok
+test_paper_target_counts_alexnet (test_reconciliation.WorkloadTests.test_paper_target_counts_alexnet) ... ok
+test_pool_flatten_and_mac_conservation (test_reconciliation.WorkloadTests.test_pool_flatten_and_mac_conservation) ... ok
+test_residual_graph_and_timing_assumption (test_reconciliation.WorkloadTests.test_residual_graph_and_timing_assumption) ... ok
+test_target_batchnorm_is_stable_and_synchronized (test_reconciliation.WorkloadTests.test_target_batchnorm_is_stable_and_synchronized) ... ok
+test_training_update_and_device (test_reconciliation.WorkloadTests.test_training_update_and_device) ... ok
+
+----------------------------------------------------------------------
+Ran 51 tests in 4.245s
+
+OK
+...................
+----------------------------------------------------------------------
+Ran 19 tests in 1.611s
+
+OK

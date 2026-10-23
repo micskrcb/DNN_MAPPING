@@ -10,7 +10,7 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**23 October:** lower-exploration online RL+SA passed the seed12 screen (0.83% over previous RL+SA,2.64% over fixed SA). Confirm unchanged on seeds13–14. [Results and commands](docs/ONLINE_EXPLORATION_CONFIRMATION.md). No published-DDPG superiority claim yet.
+**23 October:** accelerated RL development now screens exploration, topology features and a new within-pool ranking loss, then automatically runs the best challenger at full budget. [One-run protocol and commands](docs/ONLINE_RAPID_DEVELOPMENT.md). Confirmation seeds13–14 give mean paired gains1.92% over fixed SA and0.49% over previous RL+SA; no published-DDPG claim.
 
 **Current priority:** improve online bandit + SA through mixed move sizes.
 The unfocused pool nearly tied the original on seed 9 while beating its
