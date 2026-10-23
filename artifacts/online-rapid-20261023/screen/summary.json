@@ -1,0 +1,33 @@
+{
+  "seed": 15,
+  "best_cost_microseconds": {
+    "reference": 4.680479999999999,
+    "exploit": 4.639199999999999,
+    "topology": 4.704159999999998,
+    "pool_regression": 4.7444799999999985,
+    "ranking": 4.92528
+  },
+  "selected_challenger": "exploit",
+  "gain_over_reference_percent": {
+    "reference": 0.0,
+    "exploit": 0.8819608245308252,
+    "topology": -0.5059310156223074,
+    "pool_regression": -1.3673811233035904,
+    "ranking": -5.230232796636258
+  },
+  "runtime_seconds": {
+    "reference": 1254.775224292,
+    "exploit": 1234.9253017719998,
+    "topology": 2941.4909207289998,
+    "pool_regression": 1209.4332049060004,
+    "ranking": 1203.2214055980003
+  },
+  "updates": {
+    "reference": 96,
+    "exploit": 96,
+    "topology": 96,
+    "pool_regression": 96,
+    "ranking": 96
+  },
+  "note": "Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison."
+}

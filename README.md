@@ -10,7 +10,7 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**23 October:** accelerated RL development now screens exploration, topology features and a new within-pool ranking loss, then automatically runs the best challenger at full budget. [One-run protocol and commands](docs/ONLINE_RAPID_DEVELOPMENT.md). Confirmation seeds13–14 give mean paired gains1.92% over fixed SA and0.49% over previous RL+SA; no published-DDPG claim.
+**23 October:** stronger exploitation won the rapid screen and fresh full-budget follow-up (+0.80% over reference,+1.58% over SA on seed16). Next is an inclusive-budget comparison against our DDPG reconstruction. [Protocol and commands](docs/DDPG_MATCHED_COMPARISON.md).
 
 **Current priority:** improve online bandit + SA through mixed move sizes.
 The unfocused pool nearly tied the original on seed 9 while beating its

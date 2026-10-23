@@ -1,3 +1,13 @@
+## 23 October: stronger exploitation wins rapid screen and full follow-up
+
+Source archive and reports: `artifacts/online-rapid-20261023/`. Commit2d21749. Both stages complete;72 tests passed per stage. Seed15 screen(25001 evaluations): stronger exploitation+0.88196% over reference; topology-0.50593%; pool regression-1.36738%; ranking-5.23023%. Topology also cost roughly2.35× reference runtime. Do not promote ranking or topology from this result; only the winning exploitation variant was run fully.
+
+Fresh seed16 full run(100001 evaluations): exploitation4.33888µs, reference4.37376µs, fixed SA4.40832µs. Improvements0.79748% over reference and1.57520% over SA. Both learners389 updates. Final epsilon0.02503 versus0.10462. Preserve stronger exploitation as candidate. Do not compare this single-seed SA percentage directly with the earlier two-seed average. No published-method comparison yet.
+
+Next: inclusive-budget local DDPG reconstruction comparison, seed17. Fix missing baseline accounting: existing DDPG candidate count excludes baseline search although baseline can supply the returned best placement. New `search_evaluations_including_baseline` includes baseline, training and deterministic diagnostics; historical count remains unchanged for compatibility. Track actual optimizer updates this invocation and persist baseline count in new checkpoints; old checkpoints with unknown count report null rather than fabricated totals.
+
+A separate10-placement timing pilot automatically selects up to100 epochs against a conservative4-hour DDPG target; it is not reused as evidence. Runner uses DDPG paper_cnn, sparse rewards, batch_z3, train_every1,up to100 epochs×30 placements=3000,1000 baseline trials and periodic retained deterministic diagnostics. Inclusive search budget is computed from the actual selected epochs; at the cap it is4030. RL+SA/fixed SA/random receive that same actual budget. Identical VGG16-FC partition/hardware/timing/routing. DDPG auto-selects CUDA if available; bandit/SA CPU. This is a preliminary reconstruction comparison, not paper reproduction, convergence evidence or a5% published-SOTA claim. See [DDPG_MATCHED_COMPARISON.md](DDPG_MATCHED_COMPARISON.md).
+
 ## 23 October: both exploration confirmation seeds pass
 
 Seed13 lower-exploration cost4.38688µs; seed14 cost4.34928µs. Completed successfully with100001 placement evaluations per arm. Both beat previous online RL+SA, same-pool uniform, proxy and fixed SA. Mean paired gains across confirmation seeds13–14: **0.49213% over previous online,2.24199% over uniform,2.86536% over proxy,1.92062% over fixed SA**;2/2 wins for every comparator. Seed12 remains a separate exploratory result.

@@ -2056,6 +2056,9 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
         baseline_placement = env.placement.copy()
         print(f"[DDPG] Baseline B = {baseline_latency:.6g}")
 
+    baseline_search_evaluations = (checkpoint.get("baseline_search_evaluations") if checkpoint is not None else baseline_trials)
+    invocation_gradient_updates = 0
+
     topo  = env.topo
     rows  = topo.rows_per_chip * topo.num_chips_y
     cols  = topo.cols_per_chip * topo.num_chips_x
@@ -2137,6 +2140,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
             "best_candidate_source": best_candidate_source,
             "episode": ep,
             "baseline_latency": baseline_latency,
+            "baseline_search_evaluations": baseline_search_evaluations,
         }, save_checkpoint)
 
     # PERF FIX: agent.train() previously ran on EVERY environment step
@@ -2175,6 +2179,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
                 loss = agent.train(replay_buffer, batch_size)
                 if loss is not None:
                     losses.append(loss)
+                    invocation_gradient_updates += 1
             state = next_state
 
         noise_scale = noise_at(ep)
@@ -2261,7 +2266,10 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     if diagnostics_stream is not None:
         diagnostics_stream.close()
     if run_metadata is not None:
-        run_metadata.update({"agent_arch": agent_arch, "reward_mode": reward_mode,
+        run_metadata.update({"baseline_search_evaluations": baseline_search_evaluations,
+                             "search_evaluations_including_baseline": (None if baseline_search_evaluations is None else baseline_search_evaluations + n_episodes + deterministic_candidate_evaluations),
+                             "invocation_gradient_updates": invocation_gradient_updates,
+                             "agent_arch": agent_arch, "reward_mode": reward_mode,
                              "reward_scale": reward_scale,
                              "exploration_decay_placements": exploration_decay_placements,
                              "retain_deterministic_candidates": retain_deterministic_candidates,
