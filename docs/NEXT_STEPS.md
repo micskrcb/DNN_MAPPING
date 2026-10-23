@@ -1,3 +1,13 @@
+## 24 October: preliminary DDPG win; diagnose reward horizon
+
+Evidence: `artifacts/ddpg-comparison-20261024/`, source f423eaf;74 tests passed. Timing pilot selected11 epochs×30=330 training placements. Inclusive budget1334=1000 random baseline+330 training+4 deterministic diagnostics, matched across all methods. Costsµs: RL+SA5.27056; fixed SA5.31840; DDPG5.83376; random5.83376. RL+SA gains9.65415% versus our DDPG reconstruction and0.89952% versus SA. DDPG's best source remained random_baseline. CUDA DDPG10132.3s versus bandit54.28s. This does not establish5% over published DDPG: one seed, limited training and unvalidated reconstruction.
+
+DDPG made211797 updates, but logged1878–1911 collision repairs among1924 tasks; noisy actions had42–49% saturation. Existing gamma.98 with batch_z3 gives642 steps and first-step terminal multiplier .98^641=2.37637e-6. Sparse delayed reward is therefore heavily discounted. This motivates an experiment, not a proven diagnosis of failure; collision handling, saturation and function approximation may also matter.
+
+New opt-in `--ddpg_gamma`(.98 default) and `--ddpg_disable_learning`; checkpoint fingerprints reject differing settings, while default legacy fingerprints remain compatible. Metadata reports gamma, placement horizon, terminal-discount multiplier and learning status. No repair change or action/reward rewrite. New short real-training tests check discount and zero-update frozen control.
+
+Next: fresh seed18,180 training placements per DDPG arm,1000 baseline+6 diagnostics=1186 inclusive candidates. Compare default.98, long-horizon.999 and frozen.98. At.999 first-step multiplier≈0.5266. Identical repair and train_every1 for trained arms. RL+SA, fixed SA, random get1186 evaluations. Gamma.999 is an experimental extension, not asserted to be the paper's parameter. See [DDPG_HORIZON_DIAGNOSIS.md](DDPG_HORIZON_DIAGNOSIS.md). No new performance result yet.
+
 ## 23 October: stronger exploitation wins rapid screen and full follow-up
 
 Source archive and reports: `artifacts/online-rapid-20261023/`. Commit2d21749. Both stages complete;72 tests passed per stage. Seed15 screen(25001 evaluations): stronger exploitation+0.88196% over reference; topology-0.50593%; pool regression-1.36738%; ranking-5.23023%. Topology also cost roughly2.35× reference runtime. Do not promote ranking or topology from this result; only the winning exploitation variant was run fully.

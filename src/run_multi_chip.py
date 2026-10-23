@@ -2009,7 +2009,10 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
              reward_mode: str = "sparse", diagnostics_every: int = 100,
              reward_scale: float = 1.0,
              exploration_decay_placements: int = None,
-             retain_deterministic_candidates: bool = False) -> float:
+             retain_deterministic_candidates: bool = False,
+             ddpg_gamma: float = .98, ddpg_disable_learning: bool = False) -> float:
+    if not 0 < ddpg_gamma <= 1:
+        raise ValueError("DDPG gamma must be in (0,1]")
     if not HAS_TORCH:
         raise RuntimeError("DDPG requires PyTorch; refusing a random-search fallback")
     if diagnostics_every <= 0:
@@ -2028,6 +2031,8 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
                            reward_scale, exploration_decay_placements,
                            retain_deterministic_candidates,
                            "chip-major-v7-target-normalization")).encode())
+    if ddpg_gamma != .98 or ddpg_disable_learning:
+        signature.update(repr((ddpg_gamma, ddpg_disable_learning)).encode())
     fingerprint = signature.hexdigest()
     # Reject old or incompatible checkpoints, including changed objective units.
     # instead of starting fresh -- restores the trained networks, optimizer
@@ -2072,7 +2077,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
           f"(action_dim={action_dim})")
 
     agent = DDPGAgent(state_dim=state_dim, action_dim=action_dim, device=device,
-                      agent_arch=agent_arch, rows=rows, cols=cols, num_tasks=env.num_tasks)
+                      agent_arch=agent_arch, rows=rows, cols=cols, num_tasks=env.num_tasks, gamma=ddpg_gamma)
     print(f"[DDPG] Agent architecture: {agent_arch}")
     print(f"[DDPG] Using device: {agent.device}"
           + (f" ({torch.get_num_threads()} CPU threads)" if agent.device.type == "cpu" else ""))
@@ -2175,7 +2180,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
 
             replay_buffer.add(state, action, reward, next_state, done)
             global_step += 1
-            if global_step % train_every == 0:
+            if not ddpg_disable_learning and global_step % train_every == 0:
                 loss = agent.train(replay_buffer, batch_size)
                 if loss is not None:
                     losses.append(loss)
@@ -2266,7 +2271,10 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     if diagnostics_stream is not None:
         diagnostics_stream.close()
     if run_metadata is not None:
-        run_metadata.update({"baseline_search_evaluations": baseline_search_evaluations,
+        run_metadata.update({"gamma": ddpg_gamma, "learning_enabled": not ddpg_disable_learning,
+                             "placement_steps": math.ceil(env.num_tasks / batch_z),
+                             "first_step_terminal_discount": ddpg_gamma ** (math.ceil(env.num_tasks / batch_z)-1),
+                             "baseline_search_evaluations": baseline_search_evaluations,
                              "search_evaluations_including_baseline": (None if baseline_search_evaluations is None else baseline_search_evaluations + n_episodes + deterministic_candidate_evaluations),
                              "invocation_gradient_updates": invocation_gradient_updates,
                              "agent_arch": agent_arch, "reward_mode": reward_mode,
@@ -5757,6 +5765,8 @@ def main():
     parser.add_argument("--checkpoint_every", type=int, default=100,
                          help="Save a checkpoint every N episodes (only used with "
                               "--save_checkpoint).")
+    parser.add_argument("--ddpg_gamma", type=float, default=.98)
+    parser.add_argument("--ddpg_disable_learning", action="store_true")
     parser.add_argument("--train_every", type=int, default=5,
                          help="Run one DDPG gradient update every N environment "
                               "steps instead of every step. Experience is still "
@@ -6031,6 +6041,8 @@ def main():
                               "pass this explicitly per-run when you want either a single "
                               "reproducible run or a multi-seed comparison.")
     args = parser.parse_args()
+    if (args.ddpg_gamma != .98 or args.ddpg_disable_learning) and args.algo != "ddpg":
+        parser.error("DDPG gamma/frozen overrides apply only to --algo ddpg")
     if args.use_cnn and not HAS_TORCH:
         parser.error("--use_cnn requires PyTorch; refusing a synthetic-workload fallback")
     if args.device == "cuda" and (not HAS_TORCH or not torch.cuda.is_available()):
@@ -6363,7 +6375,8 @@ def main():
               f"{args.placements_per_epoch} placement(s) = "
               f"{complete_placements} complete placements")
         cost = run_ddpg(env, n_episodes=complete_placements,
-                        run_metadata=ddpg_metadata, **ddpg_options)
+                        run_metadata=ddpg_metadata, ddpg_gamma=args.ddpg_gamma,
+                        ddpg_disable_learning=args.ddpg_disable_learning, **ddpg_options)
         ddpg_metadata.update({"declared_epochs": args.epochs,
                               "placements_per_epoch": args.placements_per_epoch,
                               "complete_placement_evaluations": complete_placements})

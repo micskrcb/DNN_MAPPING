@@ -1,0 +1,29 @@
+{
+  "protocol": "Single-seed preliminary local reconstruction comparison; not published-method superiority",
+  "inclusive_search_evaluations_per_method": 1334,
+  "best_cost_microseconds": {
+    "ddpg": 5.833760000000017,
+    "exploit": 5.270560000000006,
+    "fixed_sa": 5.318400000000008,
+    "random": 5.833760000000017
+  },
+  "bandit_gain_over_ddpg_percent": 9.654151010669098,
+  "numerical_five_percent_threshold_met": true,
+  "published_five_percent_claim_supported": false,
+  "ddpg_gradient_updates": 211797,
+  "ddpg_best_source": "random_baseline",
+  "runtime_seconds": {
+    "ddpg": 10132.305454274001,
+    "exploit": 54.280187371001375,
+    "fixed_sa": 45.723886011001014,
+    "random": 49.53354978599964
+  },
+  "limitations": [
+    "DDPG is a reconstruction with unvalidated numerical reproduction, not author code.",
+    "At most3000 training placements after timing is not a convergence study or the paper budget.",
+    "DDPG baseline and deterministic diagnostics are charged; common sensitivity probes and reporting evaluations are outside search budget.",
+    "SA calibration is within its proposal budget. DDPG constructs placements; SA modifies them, so equal objective counts do not imply equal runtime.",
+    "DDPG checkpoint replay is not saved; resuming is not uninterrupted training.",
+    "No frozen-DDPG control or multi-seed confirmation in this preliminary comparison."
+  ]
+}

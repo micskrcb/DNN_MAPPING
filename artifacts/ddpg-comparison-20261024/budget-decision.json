@@ -1,0 +1,8 @@
+{
+  "pilot_seconds": 308.441116269,
+  "conservative_seconds_per_placement": 30.844111626900002,
+  "target_ddpg_seconds": 14400.0,
+  "selected_epochs": 11,
+  "placements_per_epoch": 30,
+  "pilot_excluded_from_comparison": true
+}
