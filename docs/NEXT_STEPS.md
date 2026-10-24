@@ -1,3 +1,11 @@
+## 24 October: structured candidate development instead of more confirmation
+
+No new result beyond seed21 has arrived. Recorded seed21 gains remain3.11114% versusSA on VGG16-FC and0.07294% on AlexNet-FC. The5% improvement over publishedDDPG is still unproven; local reconstruction gains must not be described as published-method gains.
+
+User requested faster algorithm improvement. Added opt-in communication-group axis reorder proposals: half the16-candidate pool permutes occupied slots within connected groups of up to8 tasks; half retains original moves. The working16-step bandit scores candidates using existing features and exact evaluation/SA acceptance. No evaluator, calibration, routing or reward changes. New moves are inspired by DOS's structured-search principle, not its tensor decomposition or time-sharing hardware. External paper cited; no external code copied.
+
+Next: VGG16-FC seed23,100001 evaluations per arm: working16-step RL+SA, structured RL+SA, same structured pool with uniform unlearned selection, fixedSA. One full-budget development run; no dependency on seed22. Report cost gains against every control, runtime and how often structured moves were selected. The structured method is unmeasured at full scale and not promoted yet. See `docs/STRUCTURED_BANDIT.md`.
+
 ## 24 October: 16-step learner improves both seed21 workloads
 
 Evidence: `artifacts/learning-intensity-seed21-20261024/`, including source SHA256, original reports and independently recomputed summary. Both stages completed revision b91fece with exit0 and73 preflight tests. Each arm used100001 evaluations and matched initialization within workload.

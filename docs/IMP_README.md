@@ -1,3 +1,7 @@
+## Latest algorithm experiment (24 October)
+
+For the structured online RL+SA change, read [STRUCTURED_BANDIT.md](STRUCTURED_BANDIT.md). The main files are `src/structured_moves.py` (new moves), `src/run_multi_chip.py` (learning and SA integration), `src/analyze_online_rapid.py` (comparisons) and `src/test_structured_moves.py` (correctness). Run from the repository root: `bash scripts/run_kaggle_structured_bandit.sh runs/structured-bandit-UNIQUE`. This uses CPU and takes an estimated4–6h. Previous experiments below are historical context; do not assume they are the active default.
+
 # Important: Read This Before Working on the Project
 
 The project has changed a lot from the older DDPG+ASA CPU version. The current

@@ -42,3 +42,7 @@ action space, and objective. The original license follows.
 > OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 > ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+
+## Communication-group spatial proposals (24 October 2026)
+
+`src/structured_moves.py` is original project code inspired by the structured-search principle in Song Wang et al., *A Dimensional Order Search Based Mapping Algorithm for Deploying DNNs onto Many-Core Neuromorphic IC*, IEEE TCAD, DOI: https://doi.org/10.1109/TCAD.2025.3640508. No third-party implementation was copied. This bounded graph-group reordering is not a reproduction of DOS, its four-dimensional tensor mapping, or its TianjicX communication scheduling. See `docs/STRUCTURED_BANDIT.md` for the precise adaptation and limitations.

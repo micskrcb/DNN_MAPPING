@@ -12,7 +12,7 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 **24 October:** 16-step online RL+SA improved over the previous learner on both tested FC workloads. It beats fixed SA by **3.11% on VGG16** and **0.073% on AlexNet** (one development seed). [Results and next run](docs/LEARNING_INTENSITY.md).
 
-**Current priority:** repeat the unchanged comparison on fresh seed22 with100001 evaluations per arm. New summaries report training cost and gains separately for each workload. The16-step learner is a development candidate, not a proven published-baseline improvement.
+**Current priority:** algorithm development with communication-group spatial proposals selected by the working16-step bandit. Next: VGG16-FC seed23, four arms,100001 evaluations each, including uniform selection from the same structured pool. [Implementation and Kaggle run](docs/STRUCTURED_BANDIT.md). No new improvement is claimed before this run.
 
 | Paper feature | Current status |
 | --- | --- |
