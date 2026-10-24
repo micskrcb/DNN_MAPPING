@@ -21,11 +21,13 @@ PYZIP
 }
 trap finish EXIT
 # Separate exploratory outcomes; no pooled cross-workload percentage.
+seed="${SEED_OVERRIDE:-21}"
 for model in vgg16 alexnet; do
- MODEL_OVERRIDE="$model" WORKLOAD_REGION_OVERRIDE=fc SEEDS_OVERRIDE=21 \
+ MODEL_OVERRIDE="$model" WORKLOAD_REGION_OVERRIDE=fc SEEDS_OVERRIDE="$seed" \
  BUDGET_OVERRIDE="${BUDGET_OVERRIDE:-100000}" \
  METHODS_OVERRIDE="exploit train_more fixed_sa" \
  bash scripts/run_kaggle_online_rapid_stage.sh "$out/$model-fc"
  finish
 done
+python src/analyze_learning_intensity.py "$out" --seed "$seed"
 printf 'complete\n' > "$out/run-status.txt"

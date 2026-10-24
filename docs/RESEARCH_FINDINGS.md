@@ -1,3 +1,18 @@
+## 24 October: 16-step learner improves both seed21 workloads
+
+Evidence: `artifacts/learning-intensity-seed21-20261024/`, including source SHA256, original reports and independently recomputed summary. Both stages completed revision b91fece with exit0 and73 preflight tests. Each arm used100001 evaluations and matched initialization within workload.
+
+| Workload | Previous RL+SA µs | 16-step RL+SA µs | FixedSA µs | Gain vs previous learner | Gain vs SA |
+|---|---:|---:|---:|---:|---:|
+| VGG16-FC |4.35488|4.33504|4.47424|0.45558%|3.11114%|
+| AlexNet-FC |2.24000|2.19200|2.19360|2.14286%|0.07294%|
+
+The16-step learner is the development candidate; AlexNet essentially ties SA. Both learners had389 update events but1556 versus6224 optimizer steps. Total reported runtimes5.12787h, excluding setup. One seed per workload; seed21 also had a prior mechanics smoke. No significance, universal learning-intensity claim or5% improvement over publishedDDPG is established.
+
+Next: one fresh seed22 on both FC workloads,100001 evaluations per arm, unchanged4-step/16-step learners and fixedSA. Keep seed21 exploratory and seed22 follow-up outcomes separate. Directional repeatability means the16-step cost is lower than both controls on each workload; ties or mixed outcomes must be reported, not hidden in a cross-model average. No new algorithm tuning during this comparison. If gains repeat, retain16-step training and move to structured proposals/CONV development; if mixed, retain workload-specific results and investigate the failing case. This is a bounded follow-up, not ten extra seeds.
+
+Code improvements: configurable seed in the existing runner, dedicated seed22 entrypoint, automatic workload-specific gains/runtime/optimizer-step summary, and rejection of hidden learning-configuration changes or incorrect budget/step counts. Existing defaults and old runners remain available. No external code reused.
+
 ## 24 October: learning follow-up received; test learning intensity across workloads
 
 Archived results and SHA256: `artifacts/learning-followup-20261024/`. Existing RL+SA (epsilon endpoint.02, decay1) gives4.34080µs versus faster decay4.34352µs and fixedSA4.42912µs on VGG16-FC seed19,100001 evaluations each. Existing method wins over SA1.99408%; faster decay loses0.06266%. Retain existing schedule. Both learners completed389 update events. DDPG clipping improves final numerical diagnostics but both bests remain random baseline6.07168µs; no convergence or published-DDPG claim.

@@ -1,0 +1,92 @@
+{
+  "seed": 21,
+  "workloads": {
+    "vgg16": {
+      "seed": 21,
+      "reference_method": "exploit",
+      "best_cost_microseconds": {
+        "exploit": 4.354879999999999,
+        "train_more": 4.335039999999999,
+        "fixed_sa": 4.474239999999999
+      },
+      "selected_challenger": "train_more",
+      "gain_over_reference_percent": {
+        "exploit": 0.0,
+        "train_more": 0.4555808656036331,
+        "fixed_sa": -2.7408332720993522
+      },
+      "workload": {
+        "model": "vgg16",
+        "workload_region": "fc"
+      },
+      "gain_over_fixed_sa_percent": {
+        "exploit": 2.667715634387069,
+        "train_more": 3.1111428980117206,
+        "fixed_sa": 0.0
+      },
+      "optimizer_steps": {
+        "exploit": 1556,
+        "train_more": 6224,
+        "fixed_sa": null
+      },
+      "runtime_seconds": {
+        "exploit": 4085.731192759,
+        "train_more": 4140.5053990940005,
+        "fixed_sa": 3533.788066007999
+      },
+      "updates": {
+        "exploit": 389,
+        "train_more": 389,
+        "fixed_sa": 0
+      },
+      "note": "Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison.",
+      "training_runtime_change_percent": 1.340621880168591,
+      "candidate_beats_both_controls": true,
+      "placement_evaluations_per_arm": 100001
+    },
+    "alexnet": {
+      "seed": 21,
+      "reference_method": "exploit",
+      "best_cost_microseconds": {
+        "exploit": 2.24,
+        "train_more": 2.1919999999999997,
+        "fixed_sa": 2.1935999999999978
+      },
+      "selected_challenger": "train_more",
+      "gain_over_reference_percent": {
+        "exploit": 0.0,
+        "train_more": 2.1428571428571574,
+        "fixed_sa": 2.0714285714286684
+      },
+      "workload": {
+        "model": "alexnet",
+        "workload_region": "fc"
+      },
+      "gain_over_fixed_sa_percent": {
+        "exploit": -2.1152443471919247,
+        "train_more": 0.07293946024790054,
+        "fixed_sa": 0.0
+      },
+      "optimizer_steps": {
+        "exploit": 1556,
+        "train_more": 6224,
+        "fixed_sa": null
+      },
+      "runtime_seconds": {
+        "exploit": 2479.115077843,
+        "train_more": 2469.0063940630007,
+        "fixed_sa": 1752.2034648539993
+      },
+      "updates": {
+        "exploit": 389,
+        "train_more": 389,
+        "fixed_sa": 0
+      },
+      "note": "Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison.",
+      "training_runtime_change_percent": -0.40775371302225194,
+      "candidate_beats_both_controls": true,
+      "placement_evaluations_per_arm": 100001
+    }
+  },
+  "interpretation": "Directional evidence on this seed only; not statistical significance or a published-method comparison."
+}

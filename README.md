@@ -10,9 +10,9 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**24 October:** existing RL+SA beats fixed SA **1.99%** on the latest seed; faster exploration decay did not help. Next: equal-placement-budget learning-intensity comparison on AlexNet-FC and VGG16-FC. [Run protocol](docs/LEARNING_INTENSITY.md) · [DOS paper assessment](docs/DOS_PAPER_ASSESSMENT.md).
+**24 October:** 16-step online RL+SA improved over the previous learner on both tested FC workloads. It beats fixed SA by **3.11% on VGG16** and **0.073% on AlexNet** (one development seed). [Results and next run](docs/LEARNING_INTENSITY.md).
 
-**Current priority:** improve the working online contextual bandit + fixed SA by testing more training per collected move across AlexNet-FC and VGG16-FC. Earlier move-size, replay and exploration experiments remain documented; failed variants are not the active default.
+**Current priority:** repeat the unchanged comparison on fresh seed22 with100001 evaluations per arm. New summaries report training cost and gains separately for each workload. The16-step learner is a development candidate, not a proven published-baseline improvement.
 
 | Paper feature | Current status |
 | --- | --- |
