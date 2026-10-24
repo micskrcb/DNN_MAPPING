@@ -1025,6 +1025,9 @@ if HAS_TORCH:
 
             self.critic_optimizer.zero_grad()
             critic_loss.backward()
+            critic_grad_norm = None
+            if getattr(self, "ddpg_grad_clip", 0):
+                critic_grad_norm = float(torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.ddpg_grad_clip))
             self.critic_optimizer.step()
 
             # Evaluate the critic without updating its BatchNorm statistics
@@ -1036,6 +1039,9 @@ if HAS_TORCH:
 
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
+            actor_grad_norm = None
+            if getattr(self, "ddpg_grad_clip", 0):
+                actor_grad_norm = float(torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.ddpg_grad_clip))
             self.actor_optimizer.step()
             self.critic.requires_grad_(True)
             self.critic.train()
@@ -1053,7 +1059,12 @@ if HAS_TORCH:
                     for source, destination in zip(online.buffers(), target.buffers()):
                         destination.copy_(source)
             return {"actor_loss": float(actor_loss.detach().cpu()),
-                    "critic_loss": float(critic_loss.detach().cpu())}
+                    "critic_loss": float(critic_loss.detach().cpu()),
+                    "q_abs_mean": float(current_Q.detach().abs().mean().cpu()),
+                    "target_abs_mean": float(target_Q.detach().abs().mean().cpu()),
+                    "td_abs_mean": float((target_Q-current_Q).detach().abs().mean().cpu()),
+                    "reward_abs_mean": float(rewards.detach().abs().mean().cpu()),
+                    "actor_grad_norm": actor_grad_norm, "critic_grad_norm": critic_grad_norm}
 
         def state_dict(self) -> dict:
             """Everything needed to exactly resume this agent's networks/optimizers."""
@@ -2010,7 +2021,10 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
              reward_scale: float = 1.0,
              exploration_decay_placements: int = None,
              retain_deterministic_candidates: bool = False,
-             ddpg_gamma: float = .98, ddpg_disable_learning: bool = False) -> float:
+             ddpg_gamma: float = .98, ddpg_disable_learning: bool = False,
+             ddpg_grad_clip: float = 0.0) -> float:
+    if not math.isfinite(ddpg_grad_clip) or ddpg_grad_clip < 0:
+        raise ValueError("DDPG gradient clip must be finite and nonnegative")
     if not 0 < ddpg_gamma <= 1:
         raise ValueError("DDPG gamma must be in (0,1]")
     if not HAS_TORCH:
@@ -2033,6 +2047,8 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
                            "chip-major-v7-target-normalization")).encode())
     if ddpg_gamma != .98 or ddpg_disable_learning:
         signature.update(repr((ddpg_gamma, ddpg_disable_learning)).encode())
+    if ddpg_grad_clip:
+        signature.update(repr(("grad_clip", ddpg_grad_clip)).encode())
     fingerprint = signature.hexdigest()
     # Reject old or incompatible checkpoints, including changed objective units.
     # instead of starting fresh -- restores the trained networks, optimizer
@@ -2078,6 +2094,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
 
     agent = DDPGAgent(state_dim=state_dim, action_dim=action_dim, device=device,
                       agent_arch=agent_arch, rows=rows, cols=cols, num_tasks=env.num_tasks, gamma=ddpg_gamma)
+    agent.ddpg_grad_clip = ddpg_grad_clip
     print(f"[DDPG] Agent architecture: {agent_arch}")
     print(f"[DDPG] Using device: {agent.device}"
           + (f" ({torch.get_num_threads()} CPU threads)" if agent.device.type == "cpu" else ""))
@@ -2249,6 +2266,9 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
                 "critic_loss_mean": float(np.mean([item["critic_loss"] for item in losses])) if losses else None,
                 "gradient_updates": len(losses),
             }
+            for metric in ("q_abs_mean", "target_abs_mean", "td_abs_mean", "reward_abs_mean", "actor_grad_norm", "critic_grad_norm"):
+                values = [item[metric] for item in losses if item.get(metric) is not None]
+                record[metric] = float(np.mean(values)) if values else None
             diagnostics_stream.write(json.dumps(record, allow_nan=False) + "\n")
             diagnostics_stream.flush()
 
@@ -2271,7 +2291,7 @@ def run_ddpg(env: MultiChipEnvironment, n_episodes: int = 500, batch_size: int =
     if diagnostics_stream is not None:
         diagnostics_stream.close()
     if run_metadata is not None:
-        run_metadata.update({"gamma": ddpg_gamma, "learning_enabled": not ddpg_disable_learning,
+        run_metadata.update({"ddpg_grad_clip": ddpg_grad_clip, "gamma": ddpg_gamma, "learning_enabled": not ddpg_disable_learning,
                              "placement_steps": math.ceil(env.num_tasks / batch_z),
                              "first_step_terminal_discount": ddpg_gamma ** (math.ceil(env.num_tasks / batch_z)-1),
                              "baseline_search_evaluations": baseline_search_evaluations,
@@ -5765,6 +5785,7 @@ def main():
     parser.add_argument("--checkpoint_every", type=int, default=100,
                          help="Save a checkpoint every N episodes (only used with "
                               "--save_checkpoint).")
+    parser.add_argument("--ddpg_grad_clip", type=float, default=0.0)
     parser.add_argument("--ddpg_gamma", type=float, default=.98)
     parser.add_argument("--ddpg_disable_learning", action="store_true")
     parser.add_argument("--train_every", type=int, default=5,
@@ -6041,7 +6062,7 @@ def main():
                               "pass this explicitly per-run when you want either a single "
                               "reproducible run or a multi-seed comparison.")
     args = parser.parse_args()
-    if (args.ddpg_gamma != .98 or args.ddpg_disable_learning) and args.algo != "ddpg":
+    if (args.ddpg_gamma != .98 or args.ddpg_disable_learning or args.ddpg_grad_clip) and args.algo != "ddpg":
         parser.error("DDPG gamma/frozen overrides apply only to --algo ddpg")
     if args.use_cnn and not HAS_TORCH:
         parser.error("--use_cnn requires PyTorch; refusing a synthetic-workload fallback")
@@ -6376,7 +6397,7 @@ def main():
               f"{complete_placements} complete placements")
         cost = run_ddpg(env, n_episodes=complete_placements,
                         run_metadata=ddpg_metadata, ddpg_gamma=args.ddpg_gamma,
-                        ddpg_disable_learning=args.ddpg_disable_learning, **ddpg_options)
+                        ddpg_disable_learning=args.ddpg_disable_learning, ddpg_grad_clip=args.ddpg_grad_clip, **ddpg_options)
         ddpg_metadata.update({"declared_epochs": args.epochs,
                               "placements_per_epoch": args.placements_per_epoch,
                               "complete_placement_evaluations": complete_placements})

@@ -10,7 +10,7 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**24 October:** RL+SA beat our short-run DDPG reconstruction by9.65%, but DDPG never beat its random baseline. Next: compare discount horizons and an untrained control. [Evidence and commands](docs/DDPG_HORIZON_DIAGNOSIS.md). This is not a published-DDPG superiority claim.
+**24 October:** gamma-only DDPG test did not beat its random baseline. Next: full-budget RL+SA exploration-schedule test, followed by short DDPG clipping/value diagnostics. Historical AlexNet300k evidence is archived separately. [Protocol](docs/LEARNING_FOLLOWUP.md).
 
 **Current priority:** improve online bandit + SA through mixed move sizes.
 The unfocused pool nearly tied the original on seed 9 while beating its

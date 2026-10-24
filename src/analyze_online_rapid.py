@@ -3,7 +3,8 @@ import argparse,json,math
 from pathlib import Path
 
 def summarize(root,seed,methods):
-    assert 'reference' in methods and len(set(methods))==len(methods)
+    reference='reference' if 'reference' in methods else 'exploit'
+    assert reference in methods and len(set(methods))==len(methods)
     reports={m:json.loads((root/f'seed{seed}-{m}.json').read_text()) for m in methods}
     assert len({r['complete_placement_evaluations'] for r in reports.values()})==1
     assert len({r['algorithm_metadata']['initial_cost'] for r in reports.values()})==1
@@ -20,7 +21,8 @@ def summarize(root,seed,methods):
         assert meta['bandit_exploration']=='epsilon_all' and not meta['bandit_shuffle_labels']
         assert meta['bandit_replay_capacity']==50000 and meta['proposal_candidates_per_step']==16
         assert meta['learning_enabled'] and meta['update_count']>0
-        assert meta['bandit_epsilon_final']==(.02 if m=='exploit' else .1)
+        assert meta['bandit_epsilon_final']==(.02 if m in ('exploit','fast_exploit') else .1)
+        assert meta['bandit_epsilon_decay_fraction']==(.5 if m=='fast_exploit' else 1)
         assert meta['bandit_feature_set']==('topology16' if m=='topology' else 'legacy9')
         assert meta['bandit_pool_supervision_stride']==(64 if m in ('ranking','pool_regression') else 0)
         assert meta['bandit_ranking_weight']==(.25 if m=='ranking' else 0)
@@ -28,11 +30,11 @@ def summarize(root,seed,methods):
         assert meta['bandit_recent_fraction']==0 and meta['reward_mode']=='proposed_delta'
         temperatures.append(meta['initial_temperature'])
     assert len(set(temperatures))==1
-    candidates=[m for m in methods if m not in ('reference','fixed_sa')]
+    candidates=[m for m in methods if m not in (reference,'fixed_sa')]
     winner=min(candidates,key=lambda m:reports[m]['best_cost'])
     costs={m:r['best_cost']*1e6 for m,r in reports.items()}
-    return {'seed':seed,'best_cost_microseconds':costs,'selected_challenger':winner,
-        'gain_over_reference_percent':{m:100*(1-r['best_cost']/reports['reference']['best_cost']) for m,r in reports.items()},
+    return {'seed':seed,'reference_method':reference,'best_cost_microseconds':costs,'selected_challenger':winner,
+        'gain_over_reference_percent':{m:100*(1-r['best_cost']/reports[reference]['best_cost']) for m,r in reports.items()},
         'runtime_seconds':{m:r['seconds_elapsed'] for m,r in reports.items()},
         'updates':{m:r['algorithm_metadata'].get('update_count',0) for m,r in reports.items()},
         'note':'Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison.'}

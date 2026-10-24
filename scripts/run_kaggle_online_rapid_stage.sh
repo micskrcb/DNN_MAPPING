@@ -55,6 +55,7 @@ for seed in "${seeds[@]}"; do
     --ppo_asa_update_style reference_separate)
   case "$method" in
    reference) ;;
+   fast_exploit) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_asa_bandit_epsilon_decay .5);;
    exploit) extra+=(--ppo_asa_bandit_epsilon_final .02);;
    topology) extra+=(--ppo_asa_bandit_feature_set topology16);;
    pool_regression) extra+=(--ppo_asa_bandit_pool_supervision_stride 64);;
