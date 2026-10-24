@@ -26,7 +26,8 @@ import numpy as np
 # Make sure the original src/ is on the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from structured_moves import flow_groups, axis_ranks, flow_axis_neighbor
+from structured_moves import (flow_groups, axis_ranks, flow_axis_neighbor,
+                              nearby_allowed_cores, attraction_neighbor)
 from multi_chip_topology import MultiChipTopology
 from multi_chip_environment import MultiChipEnvironment
 from compute_model import (PAPER_LOGIC_CORE_TARGETS, channel_ranges, tile_work,
@@ -2820,6 +2821,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 pool_focus_fraction: float = None,
                 pool_small_move_fraction: float = 0.0,
                 pool_structured_fraction: float = 0.0,
+                pool_attraction_fraction: float = 0.0,
                 restart_interval: int = 0,
                 update_at_chain_end: bool = False,
                 seed: int = None, initial_acceptance: float = 0.8,
@@ -2868,6 +2870,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError(
             "non-uniform bandit controls require the bandit learner with "
             "learning disabled")
+    if not 0 <= pool_attraction_fraction <= 1:
+        raise ValueError("attraction fraction must be in [0, 1]")
+    if pool_attraction_fraction and (pool_structured_fraction or pool_small_move_fraction):
+        raise ValueError("attraction mixture must be tested separately")
     if not 0 <= pool_structured_fraction <= 1:
         raise ValueError("structured fraction must be in [0, 1]")
     if pool_structured_fraction and pool_small_move_fraction:
@@ -3352,6 +3358,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             raise ValueError("checkpoint small-move fraction does not match this run")
         if loaded_checkpoint.get("pool_structured_fraction", 0.0) != pool_structured_fraction:
             raise ValueError("checkpoint structured fraction does not match this run")
+        if loaded_checkpoint.get("pool_attraction_fraction", 0.0) != pool_attraction_fraction:
+            raise ValueError("checkpoint attraction fraction does not match this run")
         saved_pool_focus = loaded_checkpoint.get("pool_focus_fraction", loaded_checkpoint.get("focus_fraction", 0.0))
         requested_pool_focus = focus_fraction if pool_focus_fraction is None else pool_focus_fraction
         if saved_pool_focus != requested_pool_focus:
@@ -3423,14 +3431,34 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     structured_count = round(candidate_count * pool_structured_fraction) if structured_groups else 0
     structured_ranks = axis_ranks(chip_x, chip_y, core_rows, core_cols) if structured_count else []
 
+    attraction_pairs = (flow_groups(n, edge_sources, edge_destinations, edge_volumes, limit=2)
+                        if pool_attraction_fraction else [])
+    attraction_count = round(candidate_count * pool_attraction_fraction) if attraction_pairs else 0
+    attraction_nearby = (nearby_allowed_cores(env.allowed_cores, topo.rows_per_chip,
+                         topo.cols_per_chip, topo.topology == 'torus') if attraction_count else {})
+    attraction_generated = [0, 0, 0]  # fallback, relocation, swap
+    attraction_selected = [0, 0, 0]
+
     def make_proposal_pool(n_perturb):
-        candidates, changed_sets, relocations, features = [], [], [], []
+        candidates, changed_sets, relocations, features, attraction_kinds = [], [], [], [], []
+        inverse = None
+        if attraction_count:
+            inverse = np.full(env.total_cores, -1, dtype=np.int64)
+            inverse[placement] = np.arange(n)
         focused_tasks = bottleneck_tasks(focused_candidate_count > 0)
         bottleneck_stage = (int(np.argmax(evaluator.stage_costs))
                             if evaluator is not None else None)
         for candidate_index in range(candidate_count):
             move_size = min(n, 2) if candidate_index < small_candidate_count else n_perturb
-            if candidate_index < structured_count:
+            attracted = None
+            if candidate_index < attraction_count:
+                attracted = attraction_neighbor(placement, attraction_pairs, attraction_nearby,
+                    inverse, free_pool, proxy_latencies, proposal_rng)
+                attraction_generated[0 if attracted is None else attracted[3]] += 1
+            attraction_kinds.append(0 if attracted is None else attracted[3])
+            if attracted is not None:
+                candidate, changed, relocation, _ = attracted
+            elif candidate_index < structured_count:
                 candidate, changed, relocation = flow_axis_neighbor(
                     placement, structured_groups, structured_ranks, proposal_rng)
             else:
@@ -3443,7 +3471,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             relocations.append(relocation)
             features.append(candidate_features(
                 candidate, changed, relocation, n_perturb, bottleneck_stage))
-        return candidates, changed_sets, relocations, np.stack(features)
+        return candidates, changed_sets, relocations, np.stack(features), attraction_kinds
 
     latest_metrics = None
     pending = []
@@ -3701,7 +3729,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         pool = None
 
     while evaluations < n_iter:
-        candidates, changed_sets, relocations, features = pool
+        candidates, changed_sets, relocations, features, attraction_kinds = pool
         global_state = make_global_state(
             current_progress(), last_delta, last_accepted,
             recent_acceptance)
@@ -3813,6 +3841,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         selected = int(action.item())
         selected_small_move_count += int(selected < small_candidate_count)
         selected_structured_count += int(selected < structured_count)
+        if selected < attraction_count:
+            attraction_selected[attraction_kinds[selected]] += 1
         candidate = candidates[selected]
         changed = changed_sets[selected]
         relocation = relocations[selected]
@@ -4254,6 +4284,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "pool_focus_fraction": effective_pool_focus,
             "pool_small_move_fraction": pool_small_move_fraction,
             "pool_structured_fraction": pool_structured_fraction,
+            "pool_attraction_fraction": pool_attraction_fraction,
             "restart_interval": restart_interval,
             "update_at_chain_end": update_at_chain_end,
             "independent_chains": chain_count,
@@ -4319,9 +4350,14 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "pool_focus_fraction": effective_pool_focus,
             "pool_small_move_fraction": pool_small_move_fraction,
             "pool_structured_fraction": pool_structured_fraction,
+            "pool_attraction_fraction": pool_attraction_fraction,
             "calibration_focus_fraction": focus_fraction,
             "small_move_candidates_per_pool": small_candidate_count,
             "selected_small_move_proposals": selected_small_move_count,
+            "attraction_candidates_per_pool": attraction_count,
+            "attraction_pair_count": len(attraction_pairs),
+            "attraction_generated": dict(zip(('fallback','relocation','swap'), attraction_generated)),
+            "attraction_selected": dict(zip(('fallback','relocation','swap'), attraction_selected)),
             "structured_candidates_per_pool": structured_count,
             "structured_group_count": len(structured_groups),
             "selected_structured_proposals": selected_structured_count,
@@ -5934,6 +5970,8 @@ def main():
         choices=["shared_gae", "reference_separate"], default="shared_gae",
         help="PPO update implementation: historical shared actor/critic or "
              "RL-Based-SA-compatible separate actor and critic")
+    parser.add_argument("--ppo_asa_pool_attraction_fraction", type=float, default=0.0,
+                        help="Fraction of communication-aware relocation/swap candidates")
     parser.add_argument("--ppo_asa_pool_structured_fraction", type=float, default=0.0,
                         help="Fraction of connected-group spatial reorder candidates (up to8 tasks)")
     parser.add_argument("--ppo_asa_pool_small_move_fraction", type=float, default=0.0,
@@ -6533,6 +6571,7 @@ def main():
             pool_focus_fraction=args.ppo_asa_pool_focus_fraction,
             pool_small_move_fraction=args.ppo_asa_pool_small_move_fraction,
             pool_structured_fraction=args.ppo_asa_pool_structured_fraction,
+            pool_attraction_fraction=args.ppo_asa_pool_attraction_fraction,
             restart_interval=args.ppo_asa_restart_interval,
             update_at_chain_end=args.ppo_asa_update_at_chain_end,
             seed=args.seed,

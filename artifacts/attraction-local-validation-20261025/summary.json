@@ -1,0 +1,77 @@
+{
+  "seed": 24,
+  "reference_method": "train_more",
+  "best_cost_microseconds": {
+    "train_more": 1382000000.0,
+    "attraction": 1355000000.0,
+    "attraction_uniform": 1359000000.0,
+    "fixed_sa": 1389000000.0
+  },
+  "selected_challenger": "attraction",
+  "gain_over_reference_percent": {
+    "train_more": 0.0,
+    "attraction": 1.953690303907385,
+    "attraction_uniform": 1.664254703328505,
+    "fixed_sa": -0.5065123010130179
+  },
+  "workload": {
+    "model": "vgg16",
+    "workload_region": "all"
+  },
+  "gain_over_fixed_sa_percent": {
+    "train_more": 0.5039596832253412,
+    "attraction": 2.4478041756659463,
+    "attraction_uniform": 2.1598272138228958,
+    "fixed_sa": 0.0
+  },
+  "gain_over_structured_uniform_percent": null,
+  "gain_over_attraction_uniform_percent": {
+    "train_more": -1.6924208977189048,
+    "attraction": 0.29433406916851146,
+    "attraction_uniform": 0.0,
+    "fixed_sa": -2.207505518763786
+  },
+  "attraction_selected": {
+    "train_more": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "attraction": {
+      "fallback": 1,
+      "relocation": 0,
+      "swap": 277
+    },
+    "attraction_uniform": {
+      "fallback": 1,
+      "relocation": 0,
+      "swap": 277
+    },
+    "fixed_sa": null
+  },
+  "structured_selected_proposals": {
+    "train_more": 0,
+    "attraction": 0,
+    "attraction_uniform": 0,
+    "fixed_sa": 0
+  },
+  "optimizer_steps": {
+    "train_more": 16,
+    "attraction": 16,
+    "attraction_uniform": 0,
+    "fixed_sa": null
+  },
+  "runtime_seconds": {
+    "train_more": 11.061991300994123,
+    "attraction": 8.467047149999416,
+    "attraction_uniform": 11.30759659800242,
+    "fixed_sa": 5.0071586899939575
+  },
+  "updates": {
+    "train_more": 1,
+    "attraction": 1,
+    "attraction_uniform": 0,
+    "fixed_sa": 0
+  },
+  "note": "Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison."
+}

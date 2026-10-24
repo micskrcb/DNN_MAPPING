@@ -10,9 +10,7 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**24 October:** 16-step online RL+SA improved over the previous learner on both tested FC workloads. It beats fixed SA by **3.11% on VGG16** and **0.073% on AlexNet** (one development seed). [Results and next run](docs/LEARNING_INTENSITY.md).
-
-**Current priority:** algorithm development with communication-group spatial proposals selected by the working16-step bandit. Next: VGG16-FC seed23, four arms,100001 evaluations each, including uniform selection from the same structured pool. [Implementation and Kaggle run](docs/STRUCTURED_BANDIT.md). No new improvement is claimed before this run.
+**25 October:** structured group reordering lost1.02% to the existing16-step RL+SA on seed23. Existing RL+SA remains the reference. Next: communication-aware relocation/swap proposals selected by the learner, with the same-pool uniform control and fixedSA. [Results, implementation and run instructions](docs/ATTRACTION_BANDIT.md). No new gain is claimed before testing.
 
 | Paper feature | Current status |
 | --- | --- |

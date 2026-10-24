@@ -1,3 +1,11 @@
+## 25 October: structured result recorded; develop communication-aware relocation
+
+Seed23 VGG16-FC completed revision57a65ef with100001 evaluations per arm. Working16-step RL+SA4.35504µs; structured4.39952µs; uniform structured4.51040µs; fixedSA4.42480µs. Structured beats uniform2.45832% andSA0.57133%, but loses1.02135% to the working mapper. Both trained arms389 updates/6224 optimizer steps. Keep the existing learner; do not promote structured reordering. Archive and SHA256: `artifacts/structured-bandit-seed23-20261025/`.
+
+Next algorithm change: half the candidate pool proposes bringing strongly communicating task pairs closer, using free cores when available or legal swaps otherwise. Existing learning, exact objective, calibration and fixedSA acceptance remain unchanged. Bounded attempts and cached nearby slots keep proposal generation inexpensive; generated/selected relocation, swap and fallback counts are recorded. This tests a plausible limitation of occupied-slot-only group reordering, not a proven explanation. Default behavior and prior experiments remain available.
+
+Next run: seed24 VGG16-FC,100001 evaluations each, working16-step RL+SA versus attraction RL+SA, uniform selection from the same attraction pool and fixedSA. One full development experiment; no additional seed-only confirmation loop. The5% improvement over publishedDDPG remains unproven. See `docs/ATTRACTION_BANDIT.md`. No external code copied.
+
 ## 24 October: structured candidate development instead of more confirmation
 
 No new result beyond seed21 has arrived. Recorded seed21 gains remain3.11114% versusSA on VGG16-FC and0.07294% on AlexNet-FC. The5% improvement over publishedDDPG is still unproven; local reconstruction gains must not be described as published-method gains.

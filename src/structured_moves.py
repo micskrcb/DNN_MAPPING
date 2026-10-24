@@ -57,3 +57,54 @@ def flow_axis_neighbor(placement, groups, ranks, rng):
     candidate[group] = ordered
     changed = group[ordered != old]
     return candidate, changed.tolist(), None
+
+
+def nearby_allowed_cores(allowed, rows, cols, torus=False):
+    """Cache at most eight same-chip neighbor slots; respect placement masks."""
+    allowed = set(map(int, allowed))
+    result = {}
+    for core in sorted(allowed):
+        chip, local = divmod(core, rows * cols)
+        row, col = divmod(local, cols)
+        near = set()
+        for dr, dc in ((-1,0),(1,0),(0,-1),(0,1),(-1,-1),(-1,1),(1,-1),(1,1)):
+            r, c = row + dr, col + dc
+            if torus:
+                r, c = r % rows, c % cols
+            if 0 <= r < rows and 0 <= c < cols:
+                other = chip * rows * cols + r * cols + c
+                if other in allowed and other != core:
+                    near.add(other)
+        result[core] = np.asarray(sorted(near), dtype=np.int64)
+    return result
+
+
+def attraction_neighbor(placement, pairs, nearby, inverse, free_pool, distance, rng):
+    """Try up to four communicating pairs; prefer a closer free slot, else swap.
+
+    Only the selected pair's distance proxy is improved. The full exact cost
+    can worsen, so learning and Metropolis acceptance remain necessary.
+    Free-pool state changes only when the caller accepts the returned move.
+    """
+    for _ in range(4):
+        pair = pairs[rng.randrange(len(pairs))]
+        source, target = map(int, pair)
+        if rng.randrange(2):
+            source, target = target, source
+        old, anchor = int(placement[source]), int(placement[target])
+        slots = nearby[anchor]
+        closer = slots[distance(slots, anchor) < float(distance(old, anchor))]
+        if not len(closer):
+            continue
+        free = [int(c) for c in closer if int(c) in free_pool.positions]
+        destination = free[rng.randrange(len(free))] if free else int(closer[rng.randrange(len(closer))])
+        candidate = placement.copy()
+        candidate[source] = destination
+        if destination in free_pool.positions:
+            return candidate, [source], (destination, old), 1
+        displaced = int(inverse[destination])
+        if displaced < 0:
+            raise ValueError('occupancy and free-pool state disagree')
+        candidate[displaced] = old
+        return candidate, [source, displaced], None, 2
+    return None

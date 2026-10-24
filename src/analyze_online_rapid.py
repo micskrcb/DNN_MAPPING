@@ -20,9 +20,9 @@ def summarize(root,seed,methods):
         assert meta['bandit_scoring']=='direct' and meta['state_encoding']=='legacy_clipped'
         assert meta['bandit_exploration']=='epsilon_all' and not meta['bandit_shuffle_labels']
         assert meta['bandit_replay_capacity']==50000 and meta['proposal_candidates_per_step']==16
-        assert meta['learning_enabled']==(m!='structured_uniform')
-        assert (meta['update_count']==0 if m=='structured_uniform' else meta['update_count']>0)
-        assert meta['bandit_epsilon_final']==(.02 if m in ('exploit','fast_exploit','train_more','structured','structured_uniform') else .1)
+        assert meta['learning_enabled']==(m not in ('structured_uniform','attraction_uniform'))
+        assert (meta['update_count']==0 if m in ('structured_uniform','attraction_uniform') else meta['update_count']>0)
+        assert meta['bandit_epsilon_final']==(.02 if m in ('exploit','fast_exploit','train_more','structured','structured_uniform','attraction','attraction_uniform') else .1)
         assert meta['bandit_epsilon_decay_fraction']==(.5 if m=='fast_exploit' else 1)
         assert meta['bandit_feature_set']==('topology16' if m=='topology' else 'legacy9')
         assert meta['bandit_pool_supervision_stride']==(64 if m in ('ranking','pool_regression') else 0)
@@ -33,14 +33,18 @@ def summarize(root,seed,methods):
         if m in ('structured','structured_uniform'):
             assert meta['structured_candidates_per_pool']==8 and meta['structured_group_count']>0
             assert meta['selected_structured_proposals']>0
-        assert cfg['ppo_update_epochs']==(16 if m in ('train_more','structured','structured_uniform') else 4)
+        assert meta.get('pool_attraction_fraction',0)==(.5 if m in ('attraction','attraction_uniform') else 0)
+        if m in ('attraction','attraction_uniform'):
+            assert meta['attraction_candidates_per_pool']==8 and meta['attraction_pair_count']>0
+            assert sum(meta['attraction_generated'][k] for k in ('relocation','swap'))>0
+        assert cfg['ppo_update_epochs']==(16 if m in ('train_more','structured','structured_uniform','attraction','attraction_uniform') else 4)
         if m=='train_more':
             assert meta['bandit_update_epochs']==16
         if 'bandit_optimizer_steps_this_invocation' in meta:
             assert meta['bandit_optimizer_steps_this_invocation']==meta['update_count']*cfg['ppo_update_epochs']
         temperatures.append(meta['initial_temperature'])
     assert len(set(temperatures))==1
-    candidates=[m for m in methods if m not in (reference,'fixed_sa','structured_uniform')]
+    candidates=[m for m in methods if m not in (reference,'fixed_sa','structured_uniform','attraction_uniform')]
     winner=min(candidates,key=lambda m:reports[m]['best_cost']) if candidates else None
     costs={m:r['best_cost']*1e6 for m,r in reports.items()}
     return {'seed':seed,'reference_method':reference,'best_cost_microseconds':costs,'selected_challenger':winner,
@@ -48,6 +52,8 @@ def summarize(root,seed,methods):
         'workload':{k:reports[reference]['config'][k] for k in ('model','workload_region')},
         'gain_over_fixed_sa_percent':({m:100*(1-r['best_cost']/reports['fixed_sa']['best_cost']) for m,r in reports.items()} if 'fixed_sa' in reports else None),
         'gain_over_structured_uniform_percent':({m:100*(1-r['best_cost']/reports['structured_uniform']['best_cost']) for m,r in reports.items()} if 'structured_uniform' in reports else None),
+        'gain_over_attraction_uniform_percent':({m:100*(1-r['best_cost']/reports['attraction_uniform']['best_cost']) for m,r in reports.items()} if 'attraction_uniform' in reports else None),
+        'attraction_selected':{m:r['algorithm_metadata'].get('attraction_selected') for m,r in reports.items()},
         'structured_selected_proposals':{m:r['algorithm_metadata'].get('selected_structured_proposals',0) for m,r in reports.items()},
         'optimizer_steps':{m:r['algorithm_metadata'].get('bandit_optimizer_steps_this_invocation') for m,r in reports.items()},
         'runtime_seconds':{m:r['seconds_elapsed'] for m,r in reports.items()},

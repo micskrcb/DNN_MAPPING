@@ -1,3 +1,7 @@
+## Latest experiment: communication-aware relocation (25 October)
+
+Read [ATTRACTION_BANDIT.md](ATTRACTION_BANDIT.md). The new helper is in `src/structured_moves.py`; pool/learning/SA integration is in `src/run_multi_chip.py`; tests are in `src/test_attraction_moves.py`. Run from repository root: `bash scripts/run_kaggle_attraction_bandit.sh runs/attraction-bandit-UNIQUE`. CPU, estimated4–6h. This supersedes the structured reordering experiment as the next run, not as a proven better mapper.
+
 ## Latest algorithm experiment (24 October)
 
 For the structured online RL+SA change, read [STRUCTURED_BANDIT.md](STRUCTURED_BANDIT.md). The main files are `src/structured_moves.py` (new moves), `src/run_multi_chip.py` (learning and SA integration), `src/analyze_online_rapid.py` (comparisons) and `src/test_structured_moves.py` (correctness). Run from the repository root: `bash scripts/run_kaggle_structured_bandit.sh runs/structured-bandit-UNIQUE`. This uses CPU and takes an estimated4–6h. Previous experiments below are historical context; do not assume they are the active default.

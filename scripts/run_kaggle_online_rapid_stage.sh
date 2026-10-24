@@ -27,7 +27,7 @@ git rev-parse HEAD > "$out/commit.txt"
 git status --short > "$out/git-status.txt"
 
 python tests/run_all_tests.py > "$out/tests.log" 2>&1
-PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}" python -m unittest test_ranking_repair test_online_followup test_online_pool test_online_pool_summary test_recent_replay test_online_exploration test_online_ranking test_learning_intensity test_structured_moves >> "$out/tests.log" 2>&1
+PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}" python -m unittest test_ranking_repair test_online_followup test_online_pool test_online_pool_summary test_recent_replay test_online_exploration test_online_ranking test_learning_intensity test_structured_moves test_attraction_moves >> "$out/tests.log" 2>&1
 model="${MODEL_OVERRIDE:-vgg16}"
 region="${WORKLOAD_REGION_OVERRIDE:-fc}"
 budget="${BUDGET_OVERRIDE:-25000}"
@@ -57,6 +57,8 @@ for seed in "${seeds[@]}"; do
   case "$method" in
    reference) ;;
    fast_exploit) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_asa_bandit_epsilon_decay .5);;
+   attraction) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_pool_attraction_fraction .5);;
+   attraction_uniform) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_pool_attraction_fraction .5 --ppo_asa_disable_learning);;
    structured) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_pool_structured_fraction .5);;
    structured_uniform) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_pool_structured_fraction .5 --ppo_asa_disable_learning);;
    train_more) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16);;
