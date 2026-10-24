@@ -1,3 +1,11 @@
+## 24 October: learning follow-up received; test learning intensity across workloads
+
+Archived results and SHA256: `artifacts/learning-followup-20261024/`. Existing RL+SA (epsilon endpoint.02, decay1) gives4.34080µs versus faster decay4.34352µs and fixedSA4.42912µs on VGG16-FC seed19,100001 evaluations each. Existing method wins over SA1.99408%; faster decay loses0.06266%. Retain existing schedule. Both learners completed389 update events. DDPG clipping improves final numerical diagnostics but both bests remain random baseline6.07168µs; no convergence or published-DDPG claim.
+
+Next: AlexNet-FC and VGG16-FC seed21,100001 evaluations per arm, existing RL+SA versus16 minibatch optimizer steps per update instead of4, and fixedSA. Same feature set, reward, epsilon, replay, candidate pool, annealing and hardware. This targets learner fitting, not SA changes or extra objective queries. Record actual optimizer-step counts and runtime; the higher-training arm spends extra training compute. Exploratory workload-specific results, no guaranteed improvement or promotion from one seed. No additional DDPG run in this workflow.
+
+Reviewed Wang etal DOS paper DOI10.1109/TCAD.2025.3640508. It combines dimensional ordering with time-sharing communication; its routing-time results are not directly our pipeline objective or mapping-program runtime. No author implementation located in targeted search. See `docs/DOS_PAPER_ASSESSMENT.md`. Our next experiment is not a DOS implementation; future structured moves require explicit partition coordinates and a matched unlearned structured control.
+
 ## 24 October: horizon result and independently supplied historical300k run
 
 Horizon seed18 completed;76 tests passed. Matched1186 candidates: SA5.43232µs, RL+SA5.55344µs, both trained DDPG variants/frozen/random5.81808µs. Bandit beats reconstructed DDPG4.54858% but loses to SA2.23%. All DDPG bests remained random baseline. Gamma.999 final deterministic6.3616µs versus.98 at9.696 and frozen7.856; this improves the final actor output but not retained best. Long-gamma final logged critic loss≈106million,97.2% repairs; default98.8% repairs. Do not promote gamma as a solved fix. Evidence in `artifacts/ddpg-horizon-20261024/`.

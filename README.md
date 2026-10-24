@@ -10,13 +10,9 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**24 October:** gamma-only DDPG test did not beat its random baseline. Next: full-budget RL+SA exploration-schedule test, followed by short DDPG clipping/value diagnostics. Historical AlexNet300k evidence is archived separately. [Protocol](docs/LEARNING_FOLLOWUP.md).
+**24 October:** existing RL+SA beats fixed SA **1.99%** on the latest seed; faster exploration decay did not help. Next: equal-placement-budget learning-intensity comparison on AlexNet-FC and VGG16-FC. [Run protocol](docs/LEARNING_INTENSITY.md) · [DOS paper assessment](docs/DOS_PAPER_ASSESSMENT.md).
 
-**Current priority:** improve online bandit + SA through mixed move sizes.
-The unfocused pool nearly tied the original on seed 9 while beating its
-non-learning controls. The new opt-in experiment mixes two-task moves with
-ordinary 1% perturbations; both previous mappers remain references.
-See [mixed-size experiment](docs/ONLINE_MULTISCALE.md).
+**Current priority:** improve the working online contextual bandit + fixed SA by testing more training per collected move across AlexNet-FC and VGG16-FC. Earlier move-size, replay and exploration experiments remain documented; failed variants are not the active default.
 
 | Paper feature | Current status |
 | --- | --- |
@@ -32,7 +28,7 @@ See [mixed-size experiment](docs/ONLINE_MULTISCALE.md).
 | PPO-guided ASA | Implemented as an experimental legal-neighbor proposal policy with fixed Metropolis acceptance, the existing ASA temperature controller, and a uniform frozen control |
 | Contextual-Bandit Fixed SA | Primary active method; shows positive matched-control evidence on tested workloads (further held-out and longer-budget confirmation is required) |
 | Proxy-guided fixed SA | Training-free first-class `--algo proxy_sa`; ranks legal neighbors by a communication-distance proxy and keeps exact SA acceptance |
-| Operator-bandit fixed SA | Active RL+SA method: online LinUCB selects among proxy, bottleneck, swap, and relocation moves while fixed SA retains acceptance control |
+| Operator-bandit fixed SA | Earlier experimental RL+SA method: online LinUCB selects among proxy, bottleneck, swap, and relocation moves while fixed SA retains acceptance control |
 | Objective sensitivity preflight | Implemented; flat paper-mode objectives stop before long optimization |
 | 30 placements/epoch and paper search budgets | Explicitly accounted for by the paper runner |
 | XY routing and link contention | Reconstructed and implemented |

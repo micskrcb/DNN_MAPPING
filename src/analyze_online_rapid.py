@@ -21,20 +21,28 @@ def summarize(root,seed,methods):
         assert meta['bandit_exploration']=='epsilon_all' and not meta['bandit_shuffle_labels']
         assert meta['bandit_replay_capacity']==50000 and meta['proposal_candidates_per_step']==16
         assert meta['learning_enabled'] and meta['update_count']>0
-        assert meta['bandit_epsilon_final']==(.02 if m in ('exploit','fast_exploit') else .1)
+        assert meta['bandit_epsilon_final']==(.02 if m in ('exploit','fast_exploit','train_more') else .1)
         assert meta['bandit_epsilon_decay_fraction']==(.5 if m=='fast_exploit' else 1)
         assert meta['bandit_feature_set']==('topology16' if m=='topology' else 'legacy9')
         assert meta['bandit_pool_supervision_stride']==(64 if m in ('ranking','pool_regression') else 0)
         assert meta['bandit_ranking_weight']==(.25 if m=='ranking' else 0)
         assert meta['pool_focus_fraction']==0 and meta['pool_small_move_fraction']==0
         assert meta['bandit_recent_fraction']==0 and meta['reward_mode']=='proposed_delta'
+        assert cfg['ppo_update_epochs']==(16 if m=='train_more' else 4)
+        if m=='train_more':
+            assert meta['bandit_update_epochs']==16
+        if 'bandit_optimizer_steps_this_invocation' in meta:
+            assert meta['bandit_optimizer_steps_this_invocation']==meta['update_count']*cfg['ppo_update_epochs']
         temperatures.append(meta['initial_temperature'])
     assert len(set(temperatures))==1
     candidates=[m for m in methods if m not in (reference,'fixed_sa')]
-    winner=min(candidates,key=lambda m:reports[m]['best_cost'])
+    winner=min(candidates,key=lambda m:reports[m]['best_cost']) if candidates else None
     costs={m:r['best_cost']*1e6 for m,r in reports.items()}
     return {'seed':seed,'reference_method':reference,'best_cost_microseconds':costs,'selected_challenger':winner,
         'gain_over_reference_percent':{m:100*(1-r['best_cost']/reports[reference]['best_cost']) for m,r in reports.items()},
+        'workload':{k:reports[reference]['config'][k] for k in ('model','workload_region')},
+        'gain_over_fixed_sa_percent':({m:100*(1-r['best_cost']/reports['fixed_sa']['best_cost']) for m,r in reports.items()} if 'fixed_sa' in reports else None),
+        'optimizer_steps':{m:r['algorithm_metadata'].get('bandit_optimizer_steps_this_invocation') for m,r in reports.items()},
         'runtime_seconds':{m:r['seconds_elapsed'] for m,r in reports.items()},
         'updates':{m:r['algorithm_metadata'].get('update_count',0) for m,r in reports.items()},
         'note':'Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison.'}

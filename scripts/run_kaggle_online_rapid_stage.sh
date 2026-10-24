@@ -29,6 +29,7 @@ git status --short > "$out/git-status.txt"
 python tests/run_all_tests.py > "$out/tests.log" 2>&1
 PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}" python -m unittest test_ranking_repair test_online_followup test_online_pool test_online_pool_summary test_recent_replay test_online_exploration test_online_ranking >> "$out/tests.log" 2>&1
 model="${MODEL_OVERRIDE:-vgg16}"
+region="${WORKLOAD_REGION_OVERRIDE:-fc}"
 budget="${BUDGET_OVERRIDE:-25000}"
 read -r -a seeds <<< "${SEEDS_OVERRIDE:-15}"
 python - "$out" "${seeds[@]}" <<'PYENV'
@@ -56,6 +57,7 @@ for seed in "${seeds[@]}"; do
   case "$method" in
    reference) ;;
    fast_exploit) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_asa_bandit_epsilon_decay .5);;
+   train_more) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16);;
    exploit) extra+=(--ppo_asa_bandit_epsilon_final .02);;
    topology) extra+=(--ppo_asa_bandit_feature_set topology16);;
    pool_regression) extra+=(--ppo_asa_bandit_pool_supervision_stride 64);;
@@ -65,7 +67,7 @@ for seed in "${seeds[@]}"; do
   esac
   echo "Rapid development: seed $seed, $method, $budget proposals"
   python -u src/run_multi_chip.py "${extra[@]}" --device cpu --cpu_threads 2 \
-   --use_cnn --model "$model" --workload_region fc --partition_mode paper_targets \
+   --use_cnn --model "$model" --workload_region "$region" --partition_mode paper_targets \
    --logic_task_order output_group_interleaved --timing_model paper_pipeline \
    --routing_model paper_xy --chips_x 4 --chips_y 4 --rows 16 --cols 16 \
    --vva_ops_per_cycle 16 --partition_vva_ops_per_cycle 1 --sensitivity_trials 256 \

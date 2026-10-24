@@ -3434,10 +3434,11 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     ranking_replay = []
     bandit_steps_since_update = 0
     bandit_observations = 0
+    bandit_optimizer_steps = 0
     epsilon = 1.0
 
     def update_bandit():
-        nonlocal update_count, bandit_steps_since_update
+        nonlocal update_count, bandit_steps_since_update, bandit_optimizer_steps
         if (disable_learning or len(bandit_replay) < bandit_warmup or
                 bandit_steps_since_update < rollout_steps):
             return None
@@ -3483,6 +3484,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             gradient_norm = torch.nn.utils.clip_grad_norm_(
                 bandit.parameters(), max_grad_norm)
             bandit_optimizer.step()
+            bandit_optimizer_steps += 1
             metrics.append({
                 "bandit_loss": float(loss.detach().cpu()),
                 "ranking_loss": float(ranking_loss.detach().cpu()),
@@ -4379,6 +4381,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "bandit_shuffle_labels": (
                 bandit_shuffle_labels
                 if proposal_learner == "bandit" else None),
+            "bandit_optimizer_steps_this_invocation": bandit_optimizer_steps,
+            "bandit_update_epochs": update_epochs,
             "bandit_observations": (
                 bandit_observations if proposal_learner == "bandit" else None),
             "final_exploration_epsilon": (

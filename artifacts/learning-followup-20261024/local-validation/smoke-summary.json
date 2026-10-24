@@ -1,0 +1,40 @@
+{
+  "seed": 21,
+  "reference_method": "exploit",
+  "best_cost_microseconds": {
+    "exploit": 5.315680000000007,
+    "train_more": 5.315680000000007,
+    "fixed_sa": 5.840000000000015
+  },
+  "selected_challenger": "train_more",
+  "gain_over_reference_percent": {
+    "exploit": 0.0,
+    "train_more": 0.0,
+    "fixed_sa": -9.863648677121418
+  },
+  "workload": {
+    "model": "vgg16",
+    "workload_region": "fc"
+  },
+  "gain_over_fixed_sa_percent": {
+    "exploit": 8.978082191780945,
+    "train_more": 8.978082191780945,
+    "fixed_sa": 0.0
+  },
+  "optimizer_steps": {
+    "exploit": 8,
+    "train_more": 32,
+    "fixed_sa": null
+  },
+  "runtime_seconds": {
+    "exploit": 63.790776566000204,
+    "train_more": 76.45994162200077,
+    "fixed_sa": 50.1650838580008
+  },
+  "updates": {
+    "exploit": 2,
+    "train_more": 2,
+    "fixed_sa": 0
+  },
+  "note": "Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison."
+}

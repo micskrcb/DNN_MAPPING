@@ -80,6 +80,15 @@ class PoolTests(unittest.TestCase):
             self.assertEqual(candidate[key],reference[key])
         self.assertEqual(candidate['bandit_recent_fraction'],0)
 
+    def test_more_training_uses_same_objective_budget(self):
+        _,base=self.run_arm(pool_focus_fraction=0,update_epochs=4)
+        _,more=self.run_arm(pool_focus_fraction=0,update_epochs=16)
+        for key in ('total_objective_evaluations','update_count','initial_cost','initial_temperature'):
+            self.assertEqual(base[key],more[key])
+        self.assertEqual(more['bandit_optimizer_steps_this_invocation'],
+                         4*base['bandit_optimizer_steps_this_invocation'])
+        self.assertEqual(more['bandit_optimizer_steps_this_invocation'],16*more['update_count'])
+
     def test_checkpoint_rejects_changed_pool(self):
         with tempfile.TemporaryDirectory() as directory:
             path=str(Path(directory)/'model.pt')

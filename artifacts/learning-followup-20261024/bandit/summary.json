@@ -1,0 +1,26 @@
+{
+  "seed": 19,
+  "reference_method": "exploit",
+  "best_cost_microseconds": {
+    "exploit": 4.340799999999999,
+    "fast_exploit": 4.34352,
+    "fixed_sa": 4.429119999999999
+  },
+  "selected_challenger": "fast_exploit",
+  "gain_over_reference_percent": {
+    "exploit": 0.0,
+    "fast_exploit": -0.06266126059712995,
+    "fixed_sa": -2.034647991153715
+  },
+  "runtime_seconds": {
+    "exploit": 3262.45006836,
+    "fast_exploit": 3282.6919255,
+    "fixed_sa": 2897.691520145001
+  },
+  "updates": {
+    "exploit": 389,
+    "fast_exploit": 389,
+    "fixed_sa": 0
+  },
+  "note": "Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison."
+}
