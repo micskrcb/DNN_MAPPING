@@ -1,3 +1,11 @@
+## 25 October: attraction rejected; three-seed target experiment
+
+Latest received seed24: working16-step RL+SA4.38496µs, attraction4.56144µs, uniform attraction4.47360µs, fixedSA4.43072µs.100001 evaluations each. Attraction loses4.02467% to reference and1.96352% to uniform. Keep the working mapper. High final acceptance and over-selection of attraction are suggestive, not proof, of a low-impact-move preference. It was still improving; one seed cannot establish convergence. Archive: `artifacts/attraction-bandit-seed24-20261025/`.
+
+User preference: new algorithm experiments run three seeds in one Kaggle workflow. Next uses seeds25–27, VGG16-FC,100001 evaluations per method, working16-step learner versus improvement_priority target versus fixedSA. Same original candidate pool; no attraction/structured proposals or new objective queries. New bounded asymmetric target adds an improvement bonus, neutral0, capped harm penalty; it is experimental and distinct from earlier positive_delta trials. Track selected improving/neutral/worsening outcomes and progress at four budgets.
+
+Save/aggregate after each seed; report mean paired gains, variation and3-seed wins/losses without omitting failures. Completed seeds can be validated and skipped on rerun; interrupted seed training restarts, with partial output preserved. No exact training resume is claimed. Estimated9–12h CPU. See `docs/IMPROVEMENT_PRIORITY.md`. The5% improvement over publishedDDPG remains unproven.
+
 ## 25 October: structured result recorded; develop communication-aware relocation
 
 Seed23 VGG16-FC completed revision57a65ef with100001 evaluations per arm. Working16-step RL+SA4.35504µs; structured4.39952µs; uniform structured4.51040µs; fixedSA4.42480µs. Structured beats uniform2.45832% andSA0.57133%, but loses1.02135% to the working mapper. Both trained arms389 updates/6224 optimizer steps. Keep the existing learner; do not promote structured reordering. Archive and SHA256: `artifacts/structured-bandit-seed23-20261025/`.

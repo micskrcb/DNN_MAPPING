@@ -120,6 +120,11 @@ def proposal_training_reward(mode, proposed_reward, realized_reward,
         return float(planted_proxy)
     if mode == "proposed_delta":
         return float(proposed_reward)
+    if mode == "improvement_priority":
+        gain = float(proposed_reward)
+        if abs(gain) <= 1e-9:
+            return 0.0
+        return 1.0 + min(gain, 1.0) if gain > 0 else -0.1 * min(-gain, 1.0)
     if mode == "positive_delta":
         return float(max(proposed_reward, 0.0))
     if mode == "realized":
@@ -2938,7 +2943,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("unknown PPO-ASA update style")
     if reward_mode not in {
             "realized", "proposed_delta", "positive_delta",
-            "planted_proxy"}:
+            "improvement_priority", "planted_proxy"}:
         raise ValueError("unknown PPO-ASA reward mode")
     if annealing_schedule not in {"adaptive", "fixed"}:
         raise ValueError("unknown PPO-ASA annealing schedule")
@@ -3320,6 +3325,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "ppo_asa_reference_separate_v2"
             if update_style == "reference_separate" else
             "ppo_asa_proposal_v1")
+        if (reward_mode == "improvement_priority" or loaded_checkpoint.get("reward_mode") == "improvement_priority") and loaded_checkpoint.get("reward_mode") != reward_mode:
+            raise ValueError("checkpoint priority reward target does not match this run")
         if loaded_checkpoint.get("algorithm") != expected_algorithm:
             raise ValueError("checkpoint is not a PPO-ASA proposal model")
         if loaded_checkpoint.get("candidate_count") != candidate_count:
@@ -3715,6 +3722,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
     recent_acceptance = target_acceptance
     policy_budget = max(0, n_iter - calibration)
     proposal_steps = 0
+    selected_move_outcomes = dict(improving=0, neutral=0, worsening=0)
     supervised_pools = 0
     supervised_candidate_evaluations = 0
     chain_evaluations = calibration
@@ -3911,6 +3919,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             (before_cost - new_cost) / reward_scale, -10.0, 10.0))
         realized_reward = float(np.clip(
             (before_cost - current_cost) / reward_scale, -10.0, 10.0))
+        outcome = "neutral" if abs(proposed_reward) <= 1e-9 else "improving" if proposed_reward > 0 else "worsening"
+        selected_move_outcomes[outcome] += 1
         training_reward = proposal_training_reward(
             reward_mode, proposed_reward, realized_reward,
             features[selected, 7])
@@ -4054,6 +4064,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
 
         if write_record:
             record = {
+                "selected_move_outcomes": selected_move_outcomes.copy(),
                 "evaluations": evaluations,
                 "temperature": temperature,
                 "acceptance_ratio": recent_acceptance,
@@ -4467,6 +4478,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "policy_steps": proposal_steps,
             "accepted_moves": accepted,
             "improving_moves": improving,
+            "selected_move_outcomes": selected_move_outcomes,
+            "selected_move_outcome_scope": "selected policy proposals, excludes calibration; normalized gain tolerance 1e-9",
             "neutral_proposals": neutral_proposals,
             "reheats": reheats,
             "initial_temperature": initial_temperature,
@@ -5980,7 +5993,7 @@ def main():
                         help="Override candidate-pool focus only; keep calibration focus unchanged")
     parser.add_argument(
         "--ppo_asa_reward_mode",
-        choices=["realized", "proposed_delta", "positive_delta",
+        choices=["realized", "proposed_delta", "positive_delta", "improvement_priority",
                  "planted_proxy"],
         default="realized",
         help="PPO-ASA training reward: post-acceptance realized improvement, "

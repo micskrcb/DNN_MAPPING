@@ -22,13 +22,13 @@ def summarize(root,seed,methods):
         assert meta['bandit_replay_capacity']==50000 and meta['proposal_candidates_per_step']==16
         assert meta['learning_enabled']==(m not in ('structured_uniform','attraction_uniform'))
         assert (meta['update_count']==0 if m in ('structured_uniform','attraction_uniform') else meta['update_count']>0)
-        assert meta['bandit_epsilon_final']==(.02 if m in ('exploit','fast_exploit','train_more','structured','structured_uniform','attraction','attraction_uniform') else .1)
+        assert meta['bandit_epsilon_final']==(.02 if m in ('exploit','fast_exploit','train_more','structured','structured_uniform','attraction','attraction_uniform','priority') else .1)
         assert meta['bandit_epsilon_decay_fraction']==(.5 if m=='fast_exploit' else 1)
         assert meta['bandit_feature_set']==('topology16' if m=='topology' else 'legacy9')
         assert meta['bandit_pool_supervision_stride']==(64 if m in ('ranking','pool_regression') else 0)
         assert meta['bandit_ranking_weight']==(.25 if m=='ranking' else 0)
         assert meta['pool_focus_fraction']==0 and meta['pool_small_move_fraction']==0
-        assert meta['bandit_recent_fraction']==0 and meta['reward_mode']=='proposed_delta'
+        assert meta['bandit_recent_fraction']==0 and meta['reward_mode']==('improvement_priority' if m=='priority' else 'proposed_delta')
         assert meta.get('pool_structured_fraction',0)==(.5 if m in ('structured','structured_uniform') else 0)
         if m in ('structured','structured_uniform'):
             assert meta['structured_candidates_per_pool']==8 and meta['structured_group_count']>0
@@ -37,7 +37,7 @@ def summarize(root,seed,methods):
         if m in ('attraction','attraction_uniform'):
             assert meta['attraction_candidates_per_pool']==8 and meta['attraction_pair_count']>0
             assert sum(meta['attraction_generated'][k] for k in ('relocation','swap'))>0
-        assert cfg['ppo_update_epochs']==(16 if m in ('train_more','structured','structured_uniform','attraction','attraction_uniform') else 4)
+        assert cfg['ppo_update_epochs']==(16 if m in ('train_more','structured','structured_uniform','attraction','attraction_uniform','priority') else 4)
         if m=='train_more':
             assert meta['bandit_update_epochs']==16
         if 'bandit_optimizer_steps_this_invocation' in meta:
@@ -53,6 +53,7 @@ def summarize(root,seed,methods):
         'gain_over_fixed_sa_percent':({m:100*(1-r['best_cost']/reports['fixed_sa']['best_cost']) for m,r in reports.items()} if 'fixed_sa' in reports else None),
         'gain_over_structured_uniform_percent':({m:100*(1-r['best_cost']/reports['structured_uniform']['best_cost']) for m,r in reports.items()} if 'structured_uniform' in reports else None),
         'gain_over_attraction_uniform_percent':({m:100*(1-r['best_cost']/reports['attraction_uniform']['best_cost']) for m,r in reports.items()} if 'attraction_uniform' in reports else None),
+        'selected_move_outcomes':{m:r['algorithm_metadata'].get('selected_move_outcomes') for m,r in reports.items()},
         'attraction_selected':{m:r['algorithm_metadata'].get('attraction_selected') for m,r in reports.items()},
         'structured_selected_proposals':{m:r['algorithm_metadata'].get('selected_structured_proposals',0) for m,r in reports.items()},
         'optimizer_steps':{m:r['algorithm_metadata'].get('bandit_optimizer_steps_this_invocation') for m,r in reports.items()},

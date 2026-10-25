@@ -10,7 +10,7 @@ The `cpu` branch (and this `cleaned-up` continuation) is the CPU-oriented contin
 
 ## Present state
 
-**25 October:** structured group reordering lost1.02% to the existing16-step RL+SA on seed23. Existing RL+SA remains the reference. Next: communication-aware relocation/swap proposals selected by the learner, with the same-pool uniform control and fixedSA. [Results, implementation and run instructions](docs/ATTRACTION_BANDIT.md). No new gain is claimed before testing.
+**25 October:** attraction proposals lost4.02% to the working16-step RL+SA. Keep the working mapper. Next: a bounded improvement-priority training target, evaluated on **three seeds (25–27)** against the working learner and fixedSA,100001 evaluations each. [Implementation, results and recovery instructions](docs/IMPROVEMENT_PRIORITY.md). No new gain is claimed before testing.
 
 | Paper feature | Current status |
 | --- | --- |

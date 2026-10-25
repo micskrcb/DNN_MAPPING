@@ -1,0 +1,83 @@
+{
+  "seed": 24,
+  "reference_method": "train_more",
+  "best_cost_microseconds": {
+    "train_more": 4.3849599999999995,
+    "attraction": 4.561439999999998,
+    "attraction_uniform": 4.473599999999999,
+    "fixed_sa": 4.430719999999999
+  },
+  "selected_challenger": "attraction",
+  "gain_over_reference_percent": {
+    "train_more": 0.0,
+    "attraction": -4.024666131504029,
+    "attraction_uniform": -2.0214551558052962,
+    "fixed_sa": -1.0435671020944337
+  },
+  "workload": {
+    "model": "vgg16",
+    "workload_region": "fc"
+  },
+  "gain_over_fixed_sa_percent": {
+    "train_more": 1.0327892532139282,
+    "attraction": -2.950310559006186,
+    "attraction_uniform": -0.9677885309836709,
+    "fixed_sa": 0.0
+  },
+  "gain_over_structured_uniform_percent": null,
+  "gain_over_attraction_uniform_percent": {
+    "train_more": 1.9814020028612211,
+    "attraction": -1.963519313304718,
+    "attraction_uniform": 0.0,
+    "fixed_sa": 0.958512160228886
+  },
+  "selected_move_outcomes": {
+    "train_more": null,
+    "attraction": null,
+    "attraction_uniform": null,
+    "fixed_sa": null
+  },
+  "attraction_selected": {
+    "train_more": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "attraction": {
+      "fallback": 0,
+      "relocation": 7005,
+      "swap": 66336
+    },
+    "attraction_uniform": {
+      "fallback": 0,
+      "relocation": 10805,
+      "swap": 39078
+    },
+    "fixed_sa": null
+  },
+  "structured_selected_proposals": {
+    "train_more": 0,
+    "attraction": 0,
+    "attraction_uniform": 0,
+    "fixed_sa": 0
+  },
+  "optimizer_steps": {
+    "train_more": 6224,
+    "attraction": 6224,
+    "attraction_uniform": 0,
+    "fixed_sa": null
+  },
+  "runtime_seconds": {
+    "train_more": 3967.71273926,
+    "attraction": 3160.1633211709996,
+    "attraction_uniform": 3346.1971277449993,
+    "fixed_sa": 3139.4637650759996
+  },
+  "updates": {
+    "train_more": 389,
+    "attraction": 389,
+    "attraction_uniform": 0,
+    "fixed_sa": 0
+  },
+  "note": "Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison."
+}

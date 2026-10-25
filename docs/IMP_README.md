@@ -1,3 +1,7 @@
+## Current workflow: three seeds per algorithm experiment
+
+Read [IMPROVEMENT_PRIORITY.md](IMPROVEMENT_PRIORITY.md). Edit `src/run_multi_chip.py` for the local target and outcome diagnostics; `src/analyze_priority_seeds.py` for aggregate/progress reports. Tests: `src/test_improvement_priority.py`. Run from the repository root: `bash scripts/run_kaggle_priority_three_seed.sh runs/priority-three-seed`. Seeds25–27, three methods, estimated9–12h CPU. Completed seeds can be skipped on recovery; interrupted seed training restarts. Historical experiment entries follow.
+
 ## Latest experiment: communication-aware relocation (25 October)
 
 Read [ATTRACTION_BANDIT.md](ATTRACTION_BANDIT.md). The new helper is in `src/structured_moves.py`; pool/learning/SA integration is in `src/run_multi_chip.py`; tests are in `src/test_attraction_moves.py`. Run from repository root: `bash scripts/run_kaggle_attraction_bandit.sh runs/attraction-bandit-UNIQUE`. CPU, estimated4–6h. This supersedes the structured reordering experiment as the next run, not as a proven better mapper.
