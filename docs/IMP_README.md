@@ -1,3 +1,5 @@
+Latest experiment: [200k learning attribution](LEARNING_HORIZON.md). Existing learner retained; priority target showed no benefit. Runner: `bash scripts/run_kaggle_learning_horizon.sh runs/learning-horizon`.
+
 ## Current workflow: three seeds per algorithm experiment
 
 Read [IMPROVEMENT_PRIORITY.md](IMPROVEMENT_PRIORITY.md). Edit `src/run_multi_chip.py` for the local target and outcome diagnostics; `src/analyze_priority_seeds.py` for aggregate/progress reports. Tests: `src/test_improvement_priority.py`. Run from the repository root: `bash scripts/run_kaggle_priority_three_seed.sh runs/priority-three-seed`. Seeds25–27, three methods, estimated9–12h CPU. Completed seeds can be skipped on recovery; interrupted seed training restarts. Historical experiment entries follow.

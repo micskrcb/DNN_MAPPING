@@ -1,3 +1,5 @@
+Latest experiment: [200k learning attribution](docs/LEARNING_HORIZON.md). Existing learner retained; priority target showed no benefit. Runner: `bash scripts/run_kaggle_learning_horizon.sh runs/learning-horizon`.
+
 # DNN Mapping with Reinforcement Learning
 
 If you are starting work on the current branch, read

@@ -7,24 +7,27 @@ from analyze_online_rapid import summarize
 
 METHODS=['train_more','priority','fixed_sa']
 
-def analyze(root,seeds):
+def analyze(root,seeds,methods=None,challenger="priority",controls=None,allowed_changes=None):
+    methods = methods or METHODS
+    controls = controls or ["train_more", "fixed_sa"]
+    allowed_changes = set(allowed_changes or ["ppo_asa_reward_mode", "report", "asa_diagnostics"])
     if len(set(seeds))!=len(seeds):raise ValueError('Duplicate seed')
     pairs=[];signature=None
     for seed in seeds:
         folder=Path(root)/f'seed{seed}'
         if not (folder/'run-status.txt').exists():continue
         if (folder/'run-status.txt').read_text().strip()!='complete':continue
-        s=summarize(folder,seed,METHODS)
-        reports={m:json.loads((folder/f'seed{seed}-{m}.json').read_text()) for m in METHODS}
-        configs=[reports[m]['config'] for m in METHODS[:2]]
+        s=summarize(folder,seed,methods)
+        reports={m:json.loads((folder/f'seed{seed}-{m}.json').read_text()) for m in methods}
+        configs=[reports[m]['config'] for m in methods[:2]]
         changed={k for k in configs[0].keys()|configs[1].keys() if configs[0].get(k)!=configs[1].get(k)}
-        if changed-{'ppo_asa_reward_mode','report','asa_diagnostics'}:raise ValueError('Learning arms differ beyond target')
+        if changed-allowed_changes:raise ValueError('Learning arms differ beyond permitted ablation')
         cfg=configs[0]
         sig=tuple(cfg.get(k) for k in ('model','workload_region','partition_mode','timing_model','routing_model','logic_task_order','chips_x','chips_y','rows','cols','vva_ops_per_cycle','partition_vva_ops_per_cycle','iters'))
         if signature is not None and signature!=sig:raise ValueError('Seed workloads/budgets differ')
         signature=sig
         s['checkpoints']={}
-        for method in METHODS:
+        for method in methods:
             path=folder/f'seed{seed}-{method}.jsonl'
             rows=[json.loads(l) for l in path.read_text().splitlines() if l.strip()] if path.exists() else []
             points=[]
@@ -38,8 +41,8 @@ def analyze(root,seeds):
             s['checkpoints'][method]=points
         pairs.append(s)
     aggregate={}
-    for control,field in [('train_more','gain_over_reference_percent'),('fixed_sa','gain_over_fixed_sa_percent')]:
-        gains=[p[field]['priority'] for p in pairs]
+    for control in controls:
+        gains=[100*(1-p['best_cost_microseconds'][challenger]/p['best_cost_microseconds'][control]) for p in pairs]
         aggregate[control]={'mean_paired_gain_percent':statistics.mean(gains) if gains else None,
             'sample_std_gain_percent':statistics.stdev(gains) if len(gains)>1 else None,
             'wins':sum(g>0 for g in gains),'ties':sum(g==0 for g in gains),'losses':sum(g<0 for g in gains),

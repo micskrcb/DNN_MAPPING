@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 out="${1:-runs/kaggle-online-rapid-stage}"
-[[ ! -e "$out" ]] || { echo 'Use a fresh output directory'; exit 2; }
+if [[ -e "$out" ]]; then
+ [[ "${RESUME_STAGE:-0}" == 1 && -f "$out/commit.txt" ]] || { echo 'Use a fresh output directory'; exit 2; }
+ [[ "$(cat "$out/commit.txt")" == "$(git rev-parse HEAD)" ]] || { echo 'Commit mismatch'; exit 2; }
+fi
 mkdir -p "$out"
 printf "running\n" > "$out/run-status.txt"
 archive_results() {
@@ -62,6 +65,7 @@ for seed in "${seeds[@]}"; do
    structured) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_pool_structured_fraction .5);;
    structured_uniform) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_pool_structured_fraction .5 --ppo_asa_disable_learning);;
    priority) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_reward_mode improvement_priority);;
+   frozen) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_disable_learning);;
    train_more) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16);;
    exploit) extra+=(--ppo_asa_bandit_epsilon_final .02);;
    topology) extra+=(--ppo_asa_bandit_feature_set topology16);;
@@ -71,14 +75,32 @@ for seed in "${seeds[@]}"; do
    *) echo "Unknown method: $method"; exit 2;;
   esac
   echo "Rapid development: seed $seed, $method, $budget proposals"
-  python -u src/run_multi_chip.py "${extra[@]}" --device cpu --cpu_threads 2 \
+  command=(python -u src/run_multi_chip.py "${extra[@]}" --device cpu --cpu_threads 2 \
    --use_cnn --model "$model" --workload_region "$region" --partition_mode paper_targets \
    --logic_task_order output_group_interleaved --timing_model paper_pipeline \
    --routing_model paper_xy --chips_x 4 --chips_y 4 --rows 16 --cols 16 \
    --vva_ops_per_cycle 16 --partition_vva_ops_per_cycle 1 --sensitivity_trials 256 \
    --seed "$seed" --iters "$budget" \
    --asa_diagnostics "$out/seed${seed}-${method}.jsonl" \
-   --report "$out/seed${seed}-${method}.json" > "$out/seed${seed}-${method}.log" 2>&1
+   --report "$out/seed${seed}-${method}.json")
+  manifest="$out/seed${seed}-${method}.command"
+  printf '%q ' "${command[@]}" > "${manifest}.pending"
+  if [[ -f "$manifest" ]]; then
+   cmp -s "$manifest" "${manifest}.pending" || { echo 'Saved command differs; use fresh output'; exit 2; }
+  fi
+  mv "${manifest}.pending" "$manifest"
+  if [[ -f "$out/seed${seed}-${method}.done" ]]; then
+   python - "$out/seed${seed}-${method}.json" "$budget" <<'PYVALID'
+import json,sys,math
+r=json.load(open(sys.argv[1]))
+assert r['complete_placement_evaluations']==int(sys.argv[2])+1
+assert math.isfinite(r['best_cost']) and r['best_cost']>0
+PYVALID
+   echo "Skipping completed seed $seed method $method"
+   continue
+  fi
+  "${command[@]}" > "$out/seed${seed}-${method}.log" 2>&1
+  touch "$out/seed${seed}-${method}.done"
   printf 'running; completed seed %s method %s\n' "$seed" "$method" > "$out/run-status.txt"
   archive_results
  done

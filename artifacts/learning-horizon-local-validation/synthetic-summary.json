@@ -1,0 +1,597 @@
+{
+  "requested_seeds": [
+    25,
+    26,
+    27
+  ],
+  "completed_seeds": [
+    25,
+    26,
+    27
+  ],
+  "provisional": false,
+  "comparisons": {
+    "frozen": {
+      "mean_paired_gain_percent": -0.9234750587812091,
+      "sample_std_gain_percent": 1.0218009328516682,
+      "wins": 0,
+      "ties": 0,
+      "losses": 3,
+      "individual_gains_percent": [
+        -0.6392045454545414,
+        -0.07390983000739038,
+        -2.0573108008816954
+      ]
+    },
+    "fixed_sa": {
+      "mean_paired_gain_percent": -0.4270172312806723,
+      "sample_std_gain_percent": 0.9468643019402272,
+      "wins": 1,
+      "ties": 0,
+      "losses": 2,
+      "individual_gains_percent": [
+        -1.0699001426533572,
+        0.6603081438004366,
+        -0.8714596949890963
+      ]
+    }
+  },
+  "pairs": [
+    {
+      "seed": 25,
+      "reference_method": "train_more",
+      "best_cost_microseconds": {
+        "train_more": 1417000000.0,
+        "frozen": 1408000000.0,
+        "fixed_sa": 1402000000.0
+      },
+      "selected_challenger": null,
+      "gain_over_reference_percent": {
+        "train_more": 0.0,
+        "frozen": 0.635144671841914,
+        "fixed_sa": 1.0585744530698604
+      },
+      "workload": {
+        "model": "vgg16",
+        "workload_region": "all"
+      },
+      "gain_over_fixed_sa_percent": {
+        "train_more": -1.0699001426533572,
+        "frozen": -0.42796005706133844,
+        "fixed_sa": 0.0
+      },
+      "gain_over_structured_uniform_percent": null,
+      "gain_over_attraction_uniform_percent": null,
+      "selected_move_outcomes": {
+        "train_more": {
+          "improving": 146,
+          "neutral": 64,
+          "worsening": 358
+        },
+        "frozen": {
+          "improving": 149,
+          "neutral": 65,
+          "worsening": 354
+        },
+        "fixed_sa": null
+      },
+      "attraction_selected": {
+        "train_more": {
+          "fallback": 0,
+          "relocation": 0,
+          "swap": 0
+        },
+        "frozen": {
+          "fallback": 0,
+          "relocation": 0,
+          "swap": 0
+        },
+        "fixed_sa": null
+      },
+      "structured_selected_proposals": {
+        "train_more": 0,
+        "frozen": 0,
+        "fixed_sa": 0
+      },
+      "optimizer_steps": {
+        "train_more": 16,
+        "frozen": 0,
+        "fixed_sa": null
+      },
+      "runtime_seconds": {
+        "train_more": 4.6168620320022455,
+        "frozen": 6.535091755999019,
+        "fixed_sa": 3.3754281399997126
+      },
+      "updates": {
+        "train_more": 1,
+        "frozen": 0,
+        "fixed_sa": 0
+      },
+      "note": "Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison.",
+      "checkpoints": {
+        "train_more": [
+          {
+            "requested_evaluations": 150,
+            "logged_evaluations": 132,
+            "best_cost_microseconds": 1544000000.0,
+            "selected_move_outcomes": {
+              "improving": 32,
+              "neutral": 13,
+              "worsening": 55
+            }
+          },
+          {
+            "requested_evaluations": 300,
+            "logged_evaluations": 232,
+            "best_cost_microseconds": 1522000000.0,
+            "selected_move_outcomes": {
+              "improving": 72,
+              "neutral": 28,
+              "worsening": 100
+            }
+          },
+          {
+            "requested_evaluations": 450,
+            "logged_evaluations": 432,
+            "best_cost_microseconds": 1497000000.0,
+            "selected_move_outcomes": {
+              "improving": 125,
+              "neutral": 49,
+              "worsening": 226
+            }
+          },
+          {
+            "requested_evaluations": 600,
+            "logged_evaluations": 600,
+            "best_cost_microseconds": 1417000000.0,
+            "selected_move_outcomes": {
+              "improving": 146,
+              "neutral": 64,
+              "worsening": 358
+            }
+          }
+        ],
+        "frozen": [
+          {
+            "requested_evaluations": 150,
+            "logged_evaluations": 132,
+            "best_cost_microseconds": 1544000000.0,
+            "selected_move_outcomes": {
+              "improving": 32,
+              "neutral": 13,
+              "worsening": 55
+            }
+          },
+          {
+            "requested_evaluations": 300,
+            "logged_evaluations": 232,
+            "best_cost_microseconds": 1522000000.0,
+            "selected_move_outcomes": {
+              "improving": 72,
+              "neutral": 28,
+              "worsening": 100
+            }
+          },
+          {
+            "requested_evaluations": 450,
+            "logged_evaluations": 432,
+            "best_cost_microseconds": 1497000000.0,
+            "selected_move_outcomes": {
+              "improving": 125,
+              "neutral": 49,
+              "worsening": 226
+            }
+          },
+          {
+            "requested_evaluations": 600,
+            "logged_evaluations": 600,
+            "best_cost_microseconds": 1408000000.0,
+            "selected_move_outcomes": {
+              "improving": 149,
+              "neutral": 65,
+              "worsening": 354
+            }
+          }
+        ],
+        "fixed_sa": [
+          {
+            "requested_evaluations": 150,
+            "logged_evaluations": null,
+            "best_cost_microseconds": null,
+            "selected_move_outcomes": null
+          },
+          {
+            "requested_evaluations": 300,
+            "logged_evaluations": null,
+            "best_cost_microseconds": null,
+            "selected_move_outcomes": null
+          },
+          {
+            "requested_evaluations": 450,
+            "logged_evaluations": null,
+            "best_cost_microseconds": null,
+            "selected_move_outcomes": null
+          },
+          {
+            "requested_evaluations": 600,
+            "logged_evaluations": null,
+            "best_cost_microseconds": null,
+            "selected_move_outcomes": null
+          }
+        ]
+      }
+    },
+    {
+      "seed": 26,
+      "reference_method": "train_more",
+      "best_cost_microseconds": {
+        "train_more": 1354000000.0,
+        "frozen": 1353000000.0,
+        "fixed_sa": 1363000000.0
+      },
+      "selected_challenger": null,
+      "gain_over_reference_percent": {
+        "train_more": 0.0,
+        "frozen": 0.07385524372230945,
+        "fixed_sa": -0.6646971935007295
+      },
+      "workload": {
+        "model": "vgg16",
+        "workload_region": "all"
+      },
+      "gain_over_fixed_sa_percent": {
+        "train_more": 0.6603081438004366,
+        "frozen": 0.7336757153338258,
+        "fixed_sa": 0.0
+      },
+      "gain_over_structured_uniform_percent": null,
+      "gain_over_attraction_uniform_percent": null,
+      "selected_move_outcomes": {
+        "train_more": {
+          "improving": 151,
+          "neutral": 68,
+          "worsening": 349
+        },
+        "frozen": {
+          "improving": 152,
+          "neutral": 72,
+          "worsening": 344
+        },
+        "fixed_sa": null
+      },
+      "attraction_selected": {
+        "train_more": {
+          "fallback": 0,
+          "relocation": 0,
+          "swap": 0
+        },
+        "frozen": {
+          "fallback": 0,
+          "relocation": 0,
+          "swap": 0
+        },
+        "fixed_sa": null
+      },
+      "structured_selected_proposals": {
+        "train_more": 0,
+        "frozen": 0,
+        "fixed_sa": 0
+      },
+      "optimizer_steps": {
+        "train_more": 16,
+        "frozen": 0,
+        "fixed_sa": null
+      },
+      "runtime_seconds": {
+        "train_more": 4.80444781299957,
+        "frozen": 4.708754840998154,
+        "fixed_sa": 2.4570796090010845
+      },
+      "updates": {
+        "train_more": 1,
+        "frozen": 0,
+        "fixed_sa": 0
+      },
+      "note": "Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison.",
+      "checkpoints": {
+        "train_more": [
+          {
+            "requested_evaluations": 150,
+            "logged_evaluations": 132,
+            "best_cost_microseconds": 1404000000.0,
+            "selected_move_outcomes": {
+              "improving": 31,
+              "neutral": 22,
+              "worsening": 47
+            }
+          },
+          {
+            "requested_evaluations": 300,
+            "logged_evaluations": 232,
+            "best_cost_microseconds": 1404000000.0,
+            "selected_move_outcomes": {
+              "improving": 66,
+              "neutral": 41,
+              "worsening": 93
+            }
+          },
+          {
+            "requested_evaluations": 450,
+            "logged_evaluations": 432,
+            "best_cost_microseconds": 1404000000.0,
+            "selected_move_outcomes": {
+              "improving": 125,
+              "neutral": 57,
+              "worsening": 218
+            }
+          },
+          {
+            "requested_evaluations": 600,
+            "logged_evaluations": 600,
+            "best_cost_microseconds": 1354000000.0,
+            "selected_move_outcomes": {
+              "improving": 151,
+              "neutral": 68,
+              "worsening": 349
+            }
+          }
+        ],
+        "frozen": [
+          {
+            "requested_evaluations": 150,
+            "logged_evaluations": 132,
+            "best_cost_microseconds": 1404000000.0,
+            "selected_move_outcomes": {
+              "improving": 31,
+              "neutral": 22,
+              "worsening": 47
+            }
+          },
+          {
+            "requested_evaluations": 300,
+            "logged_evaluations": 232,
+            "best_cost_microseconds": 1404000000.0,
+            "selected_move_outcomes": {
+              "improving": 66,
+              "neutral": 41,
+              "worsening": 93
+            }
+          },
+          {
+            "requested_evaluations": 450,
+            "logged_evaluations": 432,
+            "best_cost_microseconds": 1404000000.0,
+            "selected_move_outcomes": {
+              "improving": 125,
+              "neutral": 57,
+              "worsening": 218
+            }
+          },
+          {
+            "requested_evaluations": 600,
+            "logged_evaluations": 600,
+            "best_cost_microseconds": 1353000000.0,
+            "selected_move_outcomes": {
+              "improving": 152,
+              "neutral": 72,
+              "worsening": 344
+            }
+          }
+        ],
+        "fixed_sa": [
+          {
+            "requested_evaluations": 150,
+            "logged_evaluations": null,
+            "best_cost_microseconds": null,
+            "selected_move_outcomes": null
+          },
+          {
+            "requested_evaluations": 300,
+            "logged_evaluations": null,
+            "best_cost_microseconds": null,
+            "selected_move_outcomes": null
+          },
+          {
+            "requested_evaluations": 450,
+            "logged_evaluations": null,
+            "best_cost_microseconds": null,
+            "selected_move_outcomes": null
+          },
+          {
+            "requested_evaluations": 600,
+            "logged_evaluations": null,
+            "best_cost_microseconds": null,
+            "selected_move_outcomes": null
+          }
+        ]
+      }
+    },
+    {
+      "seed": 27,
+      "reference_method": "train_more",
+      "best_cost_microseconds": {
+        "train_more": 1389000000.0,
+        "frozen": 1361000000.0,
+        "fixed_sa": 1377000000.0
+      },
+      "selected_challenger": null,
+      "gain_over_reference_percent": {
+        "train_more": 0.0,
+        "frozen": 2.015838732901365,
+        "fixed_sa": 0.8639308855291628
+      },
+      "workload": {
+        "model": "vgg16",
+        "workload_region": "all"
+      },
+      "gain_over_fixed_sa_percent": {
+        "train_more": -0.8714596949890963,
+        "frozen": 1.1619462599854802,
+        "fixed_sa": 0.0
+      },
+      "gain_over_structured_uniform_percent": null,
+      "gain_over_attraction_uniform_percent": null,
+      "selected_move_outcomes": {
+        "train_more": {
+          "improving": 151,
+          "neutral": 59,
+          "worsening": 358
+        },
+        "frozen": {
+          "improving": 157,
+          "neutral": 59,
+          "worsening": 352
+        },
+        "fixed_sa": null
+      },
+      "attraction_selected": {
+        "train_more": {
+          "fallback": 0,
+          "relocation": 0,
+          "swap": 0
+        },
+        "frozen": {
+          "fallback": 0,
+          "relocation": 0,
+          "swap": 0
+        },
+        "fixed_sa": null
+      },
+      "structured_selected_proposals": {
+        "train_more": 0,
+        "frozen": 0,
+        "fixed_sa": 0
+      },
+      "optimizer_steps": {
+        "train_more": 16,
+        "frozen": 0,
+        "fixed_sa": null
+      },
+      "runtime_seconds": {
+        "train_more": 4.749727217000327,
+        "frozen": 5.098356571998011,
+        "fixed_sa": 2.4598346860002493
+      },
+      "updates": {
+        "train_more": 1,
+        "frozen": 0,
+        "fixed_sa": 0
+      },
+      "note": "Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison.",
+      "checkpoints": {
+        "train_more": [
+          {
+            "requested_evaluations": 150,
+            "logged_evaluations": 132,
+            "best_cost_microseconds": 1430000000.0,
+            "selected_move_outcomes": {
+              "improving": 43,
+              "neutral": 15,
+              "worsening": 42
+            }
+          },
+          {
+            "requested_evaluations": 300,
+            "logged_evaluations": 232,
+            "best_cost_microseconds": 1430000000.0,
+            "selected_move_outcomes": {
+              "improving": 82,
+              "neutral": 22,
+              "worsening": 96
+            }
+          },
+          {
+            "requested_evaluations": 450,
+            "logged_evaluations": 432,
+            "best_cost_microseconds": 1430000000.0,
+            "selected_move_outcomes": {
+              "improving": 135,
+              "neutral": 47,
+              "worsening": 218
+            }
+          },
+          {
+            "requested_evaluations": 600,
+            "logged_evaluations": 600,
+            "best_cost_microseconds": 1389000000.0,
+            "selected_move_outcomes": {
+              "improving": 151,
+              "neutral": 59,
+              "worsening": 358
+            }
+          }
+        ],
+        "frozen": [
+          {
+            "requested_evaluations": 150,
+            "logged_evaluations": 132,
+            "best_cost_microseconds": 1430000000.0,
+            "selected_move_outcomes": {
+              "improving": 43,
+              "neutral": 15,
+              "worsening": 42
+            }
+          },
+          {
+            "requested_evaluations": 300,
+            "logged_evaluations": 232,
+            "best_cost_microseconds": 1430000000.0,
+            "selected_move_outcomes": {
+              "improving": 82,
+              "neutral": 22,
+              "worsening": 96
+            }
+          },
+          {
+            "requested_evaluations": 450,
+            "logged_evaluations": 432,
+            "best_cost_microseconds": 1430000000.0,
+            "selected_move_outcomes": {
+              "improving": 135,
+              "neutral": 47,
+              "worsening": 218
+            }
+          },
+          {
+            "requested_evaluations": 600,
+            "logged_evaluations": 600,
+            "best_cost_microseconds": 1361000000.0,
+            "selected_move_outcomes": {
+              "improving": 157,
+              "neutral": 59,
+              "worsening": 352
+            }
+          }
+        ],
+        "fixed_sa": [
+          {
+            "requested_evaluations": 150,
+            "logged_evaluations": null,
+            "best_cost_microseconds": null,
+            "selected_move_outcomes": null
+          },
+          {
+            "requested_evaluations": 300,
+            "logged_evaluations": null,
+            "best_cost_microseconds": null,
+            "selected_move_outcomes": null
+          },
+          {
+            "requested_evaluations": 450,
+            "logged_evaluations": null,
+            "best_cost_microseconds": null,
+            "selected_move_outcomes": null
+          },
+          {
+            "requested_evaluations": 600,
+            "logged_evaluations": null,
+            "best_cost_microseconds": null,
+            "selected_move_outcomes": null
+          }
+        ]
+      }
+    }
+  ],
+  "note": "Three-seed development evidence; no significance or published-DDPG claim. Missing checkpoints are null; logged budgets are explicit."
+}

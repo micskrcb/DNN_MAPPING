@@ -1,0 +1,73 @@
+{
+  "seed": 27,
+  "reference_method": "train_more",
+  "best_cost_microseconds": {
+    "train_more": 4.409279999999999,
+    "priority": 4.427199999999999,
+    "fixed_sa": 4.4364799999999995
+  },
+  "selected_challenger": "priority",
+  "gain_over_reference_percent": {
+    "train_more": 0.0,
+    "priority": -0.40641555991001166,
+    "fixed_sa": -0.6168807605777094
+  },
+  "workload": {
+    "model": "vgg16",
+    "workload_region": "fc"
+  },
+  "gain_over_fixed_sa_percent": {
+    "train_more": 0.6130986728216992,
+    "priority": 0.20917484131564024,
+    "fixed_sa": 0.0
+  },
+  "gain_over_structured_uniform_percent": null,
+  "gain_over_attraction_uniform_percent": null,
+  "selected_move_outcomes": {
+    "train_more": {
+      "improving": 4016,
+      "neutral": 46124,
+      "worsening": 49828
+    },
+    "priority": {
+      "improving": 4131,
+      "neutral": 44254,
+      "worsening": 51583
+    },
+    "fixed_sa": null
+  },
+  "attraction_selected": {
+    "train_more": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "priority": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "fixed_sa": null
+  },
+  "structured_selected_proposals": {
+    "train_more": 0,
+    "priority": 0,
+    "fixed_sa": 0
+  },
+  "optimizer_steps": {
+    "train_more": 6224,
+    "priority": 6224,
+    "fixed_sa": null
+  },
+  "runtime_seconds": {
+    "train_more": 3340.6597977899983,
+    "priority": 3298.7584826130005,
+    "fixed_sa": 2439.352195006999
+  },
+  "updates": {
+    "train_more": 389,
+    "priority": 389,
+    "fixed_sa": 0
+  },
+  "note": "Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison."
+}

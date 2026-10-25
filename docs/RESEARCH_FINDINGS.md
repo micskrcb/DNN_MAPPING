@@ -1,3 +1,9 @@
+## 2026-10-25: three-seed priority result and learning attribution
+
+Completed seeds 25–27 at 100001 evaluations/arm: existing RL+SA 4.38176 us, priority 4.38304 us, fixed SA 4.45803 us (means). Paired gains versus fixed SA: 1.71% existing, 1.68% priority, both 3/3 wins. Priority loses to existing in 2/3, mean -0.029%; retain existing proposed_delta target. Evidence: `artifacts/priority-three-seed-20261025/`. No 5% published-DDPG claim.
+
+Next: three paired seeds at 200001 evaluations, existing train_more vs identical frozen learner vs fixed SA. This tests longer-horizon learning attribution, not another reward change. See `docs/LEARNING_HORIZON.md`. Reusing seeds is longitudinal development evidence, not held-out confirmation.
+
 ## 25 October: attraction rejected; three-seed target experiment
 
 Latest received seed24: working16-step RL+SA4.38496µs, attraction4.56144µs, uniform attraction4.47360µs, fixedSA4.43072µs.100001 evaluations each. Attraction loses4.02467% to reference and1.96352% to uniform. Keep the working mapper. High final acceptance and over-selection of attraction are suggestive, not proof, of a low-impact-move preference. It was still improving; one seed cannot establish convergence. Archive: `artifacts/attraction-bandit-seed24-20261025/`.
