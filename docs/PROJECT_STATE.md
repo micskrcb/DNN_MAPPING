@@ -1426,3 +1426,8 @@ passed with no skips. A 36-second four-method CLI smoke passed matching
 65-call budgets and archive checks. These validate mechanics, not real gains.
 Next: VGG16-CONV seeds 3--5 at 20,001 calls/method against proxy-greedy,
 fixed SA and random. See [RESIDUAL_BANDIT.md](RESIDUAL_BANDIT.md).
+## 2026-10-26: two-seed 200k learning attribution passes
+
+Completed VGG16-FC seeds 25 and 26 at commit `acabd3c`, each with 200001 exact placement evaluations per arm. Learning enabled beat its matched frozen, zero-update policy on both seeds: 1.45093% and 2.14211%, mean 1.79652%. It also beat fixed SA by 2.32990% and 3.07108%, mean 2.70049%. The learned arms made 780 update events and 12480 optimizer steps; frozen made zero. Seed 27 was not run and is not assumed in any stored result. This supports the development decision that online learning helps this mapper, but does not establish statistical significance, convergence, or a 5% gain over published TODAES DDPG. Evidence: `artifacts/learning-horizon-two-seed-20261026/`.
+
+Next screen: fresh seed 28 at the same 200k budget, 16 versus 32 optimizer steps per update plus fixed SA. See `docs/TRAIN32_HORIZON.md`.

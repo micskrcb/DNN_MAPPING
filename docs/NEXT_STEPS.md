@@ -532,3 +532,8 @@ The first PPO-guided ASA implementation now follows the verified RL-Based-SA
 structure: PPO learns the neighbor proposal while simulated annealing retains
 its accept/reject rule and schedule. Sequence-pair and B*-tree floorplanning
 representations are not applicable to this fixed-grid core-mapping problem.
+## 2026-10-26: retain learned proposal policy; test 32-step fitting
+
+Two completed 200k VGG16-FC seeds establish a repeated positive learned-versus-frozen result: mean 1.79652% improvement over the zero-update control and 2.70049% over fixed SA. Do not fill in seed 27 or call the result a paper baseline comparison. Archive: `artifacts/learning-horizon-two-seed-20261026/`.
+
+The next bounded algorithm change is `train_32`: double minibatch optimizer steps from 16 to 32 at the same update events. It is not a candidate-pool, reward, evaluator, SA, or budget change. Run fresh seed 28, VGG16-FC, 200001 evaluations/arm, comparing 16-step learner, 32-step learner, and fixed SA. The run is described in `docs/TRAIN32_HORIZON.md`; reject hidden configuration changes and require a twofold optimizer-step count.

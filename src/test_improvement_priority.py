@@ -40,4 +40,13 @@ class PriorityTests(unittest.TestCase):
             self.assertIsNone(r['comparisons']['fixed_sa']['mean_paired_gain_percent'])
             with self.assertRaises(ValueError):analyze(d,[25,25])
 
+    def test_32_step_bandit_preserves_update_events_and_doubles_steps(self):
+        standard = self.arm('proposed_delta', update_epochs=16)
+        candidate = self.arm('proposed_delta', update_epochs=32)
+        self.assertEqual(standard['update_count'], candidate['update_count'])
+        self.assertEqual(candidate['bandit_optimizer_steps_this_invocation'],
+                         2 * standard['bandit_optimizer_steps_this_invocation'])
+        self.assertEqual(standard['total_objective_evaluations'],
+                         candidate['total_objective_evaluations'])
+
 if __name__=='__main__':unittest.main()

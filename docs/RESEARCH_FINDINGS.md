@@ -1130,3 +1130,8 @@ ranker with proxy score as an explicit prior, or a bandit choosing among
 distinct move operators, is a better next hypothesis than more epochs for the
 rejected package. Any such method must be paired against proxy-greedy and
 fixed SA under the same objective-call budget.
+## 26 October: two completed 200k learning-attribution seeds are positive
+
+Seed25: learned 4.29264us, frozen 4.35584us, fixedSA 4.39504us; learned gains 1.45093% over frozen and 2.32990% over SA. Seed26: learned 4.28736us, frozen 4.37920us, fixedSA 4.42320us; gains 2.14211% and 3.07108%. Mean paired gains: **1.79652% over frozen** and **2.70049% over fixed SA**. Both learned arms made780 update events/12480 optimizer steps; frozen made zero. The frozen policy shares the same candidate-pool and SA process but not the learned score updates, so it is a learning-attribution control, not random search. These are two development seeds at one workload; seed27 was not run and is not inferred. No published-DDPG comparison or5% claim follows. Evidence: `artifacts/learning-horizon-two-seed-20261026/`.
+
+The learner still reduced retained best cost through200k in both runs. Next, change only training intensity from16 to32 optimizer steps/update on fresh seed28 while retaining16-step and fixedSA controls. Details: `docs/TRAIN32_HORIZON.md`.

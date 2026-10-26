@@ -1294,3 +1294,4 @@ but the fix removes a definite source of target noise. Old DDPG checkpoints are
 intentionally incompatible; start a new checkpoint after pulling this revision.
 The reports and exact command are in
 [runs/local-cpu-batchnorm-2026-09-30/STUDY.md](runs/local-cpu-batchnorm-2026-09-30/STUDY.md).
+Current evidence: the learned 16-step proposal policy beat a frozen zero-update control on two VGG16-FC, 200k-evaluation seeds (mean 1.80%), and fixed SA (mean 2.70%). See [two-seed evidence](artifacts/learning-horizon-two-seed-20261026/README.md) and [the next 32-step screen](docs/TRAIN32_HORIZON.md).

@@ -67,6 +67,7 @@ for seed in "${seeds[@]}"; do
    priority) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_reward_mode improvement_priority);;
    frozen) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_disable_learning);;
    train_more) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16);;
+   train_32) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 32);;
    exploit) extra+=(--ppo_asa_bandit_epsilon_final .02);;
    topology) extra+=(--ppo_asa_bandit_feature_set topology16);;
    pool_regression) extra+=(--ppo_asa_bandit_pool_supervision_stride 64);;

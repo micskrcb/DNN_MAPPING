@@ -278,3 +278,4 @@ check its license and record the source and exact commit in
 
 Do not tune the method using completed seeds 0--5. New method ideas must be
 developed separately from the frozen validation results.
+Current development result: two completed 200k VGG16-FC seeds show learned RL+SA beats the matched frozen policy by 1.80% mean and fixed SA by 2.70% mean. The next controlled screen is `TRAIN32_HORIZON.md`; run `bash scripts/run_kaggle_train32_horizon.sh runs/kaggle-train32-horizon`.
