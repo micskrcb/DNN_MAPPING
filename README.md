@@ -1,4 +1,4 @@
-Latest experiment: [200k learning attribution](docs/LEARNING_HORIZON.md). Existing learner retained; priority target showed no benefit. Runner: `bash scripts/run_kaggle_learning_horizon.sh runs/learning-horizon`.
+Latest (27 October): 32-step fitting gained only 0.094% over the established learner on seed 28. Keep 16 steps; test [pool-context descriptors](docs/POOL_CONTEXT.md) with `bash scripts/run_kaggle_pool_context.sh runs/kaggle-pool-context`. Historical protocols below remain available.
 
 # DNN Mapping with Reinforcement Learning
 
@@ -1294,4 +1294,4 @@ but the fix removes a definite source of target noise. Old DDPG checkpoints are
 intentionally incompatible; start a new checkpoint after pulling this revision.
 The reports and exact command are in
 [runs/local-cpu-batchnorm-2026-09-30/STUDY.md](runs/local-cpu-batchnorm-2026-09-30/STUDY.md).
-Current evidence: the learned 16-step proposal policy beat a frozen zero-update control on two VGG16-FC, 200k-evaluation seeds (mean 1.80%), and fixed SA (mean 2.70%). See [two-seed evidence](artifacts/learning-horizon-two-seed-20261026/README.md) and [the next 32-step screen](docs/TRAIN32_HORIZON.md).
+Current evidence: the learned 16-step proposal policy beat a frozen zero-update control on two VGG16-FC, 200k-evaluation seeds (mean 1.77%), and fixed SA (mean 2.70%). See [two-seed evidence](artifacts/learning-horizon-two-seed-20261026/README.md) and [the next 32-step screen](docs/TRAIN32_HORIZON.md).

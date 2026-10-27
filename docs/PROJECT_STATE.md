@@ -1,3 +1,9 @@
+## 2026-10-27: training-intensity result; pool-context screen
+
+Seed 28 completed ea00c34: 16-step RL+SA 4.27584 us, 32-step RL+SA 4.27184 us, fixed SA 4.36672 us at 200001 evaluations each. The new gain is only 0.09355% over the established learner; keep 16 steps. Gains versus SA are 2.08120% and 2.17280%. Both trained arms made 780 updates, with 12480 and 24960 optimizer steps. Total runtime 5.88689 hours. Source reports: `artifacts/train32-horizon-20261027/`.
+
+Next: pool18 descriptors add context relative to the current candidate pool without new exact-cost calls. Fresh seed 29, 200k proposals, established learner vs pool-context learner vs fixed SA. See `docs/POOL_CONTEXT.md`. This is a new unproven feature experiment, not a published-DDPG win.
+
 ## 2026-10-25: three-seed priority result and learning attribution
 
 Completed seeds 25–27 at 100001 evaluations/arm: existing RL+SA 4.38176 us, priority 4.38304 us, fixed SA 4.45803 us (means). Paired gains versus fixed SA: 1.71% existing, 1.68% priority, both 3/3 wins. Priority loses to existing in 2/3, mean -0.029%; retain existing proposed_delta target. Evidence: `artifacts/priority-three-seed-20261025/`. No 5% published-DDPG claim.
@@ -1428,6 +1434,6 @@ Next: VGG16-CONV seeds 3--5 at 20,001 calls/method against proxy-greedy,
 fixed SA and random. See [RESIDUAL_BANDIT.md](RESIDUAL_BANDIT.md).
 ## 2026-10-26: two-seed 200k learning attribution passes
 
-Completed VGG16-FC seeds 25 and 26 at commit `acabd3c`, each with 200001 exact placement evaluations per arm. Learning enabled beat its matched frozen, zero-update policy on both seeds: 1.45093% and 2.14211%, mean 1.79652%. It also beat fixed SA by 2.32990% and 3.07108%, mean 2.70049%. The learned arms made 780 update events and 12480 optimizer steps; frozen made zero. Seed 27 was not run and is not assumed in any stored result. This supports the development decision that online learning helps this mapper, but does not establish statistical significance, convergence, or a 5% gain over published TODAES DDPG. Evidence: `artifacts/learning-horizon-two-seed-20261026/`.
+Completed VGG16-FC seeds 25 and 26 at commit `acabd3c`, each with 200001 exact placement evaluations per arm. Learning enabled beat its matched frozen, zero-update policy on both seeds: 1.45093% and 2.09719%, mean 1.77406%. It also beat fixed SA by 2.32990% and 3.07108%, mean 2.70049%. The learned arms made 780 update events and 12480 optimizer steps; frozen made zero. Seed 27 was not run and is not assumed in any stored result. This supports the development decision that online learning helps this mapper, but does not establish statistical significance, convergence, or a 5% gain over published TODAES DDPG. Evidence: `artifacts/learning-horizon-two-seed-20261026/`.
 
 Next screen: fresh seed 28 at the same 200k budget, 16 versus 32 optimizer steps per update plus fixed SA. See `docs/TRAIN32_HORIZON.md`.

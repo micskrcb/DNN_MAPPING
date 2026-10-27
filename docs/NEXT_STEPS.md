@@ -1,3 +1,9 @@
+## 2026-10-27: add context to the learned move scores
+
+The 32-step candidate finished 0.09355% better than 16-step RL+SA on seed 28 (4.27184 vs 4.27584 us); retain 16 as the default. Both beat fixed SA (4.36672 us). All arms completed 200001 evaluations. Archive: `artifacts/train32-horizon-20261027/`.
+
+Run `scripts/run_kaggle_pool_context.sh`: seed 29, 200000 proposals per arm, pool18 versus established legacy9 learner and fixed SA. Extra descriptors summarize pre-evaluation features relative to the candidate pool. Test inference, replay, training-budget and checkpoint consistency locally; judge placement performance only after Kaggle results. See `docs/POOL_CONTEXT.md`.
+
 ## 2026-10-25: three-seed priority result and learning attribution
 
 Completed seeds 25–27 at 100001 evaluations/arm: existing RL+SA 4.38176 us, priority 4.38304 us, fixed SA 4.45803 us (means). Paired gains versus fixed SA: 1.71% existing, 1.68% priority, both 3/3 wins. Priority loses to existing in 2/3, mean -0.029%; retain existing proposed_delta target. Evidence: `artifacts/priority-three-seed-20261025/`. No 5% published-DDPG claim.
@@ -534,6 +540,6 @@ its accept/reject rule and schedule. Sequence-pair and B*-tree floorplanning
 representations are not applicable to this fixed-grid core-mapping problem.
 ## 2026-10-26: retain learned proposal policy; test 32-step fitting
 
-Two completed 200k VGG16-FC seeds establish a repeated positive learned-versus-frozen result: mean 1.79652% improvement over the zero-update control and 2.70049% over fixed SA. Do not fill in seed 27 or call the result a paper baseline comparison. Archive: `artifacts/learning-horizon-two-seed-20261026/`.
+Two completed 200k VGG16-FC seeds establish a repeated positive learned-versus-frozen result: mean 1.77406% improvement over the zero-update control and 2.70049% over fixed SA. Do not fill in seed 27 or call the result a paper baseline comparison. Archive: `artifacts/learning-horizon-two-seed-20261026/`.
 
 The next bounded algorithm change is `train_32`: double minibatch optimizer steps from 16 to 32 at the same update events. It is not a candidate-pool, reward, evaluator, SA, or budget change. Run fresh seed 28, VGG16-FC, 200001 evaluations/arm, comparing 16-step learner, 32-step learner, and fixed SA. The run is described in `docs/TRAIN32_HORIZON.md`; reject hidden configuration changes and require a twofold optimizer-step count.

@@ -146,6 +146,19 @@ def proposal_focus_label(focus_fraction, focus_stage_slack):
             f"slack_{focus_stage_slack:.3f}")
 
 
+def pool_relative_features(features):
+    """Keep raw features and append bounded deviations within this proposal pool.
+
+    Uses only pre-evaluation descriptors; replay stores these values as observed,
+    never recomputes them from unrelated sampled replay rows.
+    """
+    features = np.asarray(features, dtype=np.float32)
+    centered = features - features.mean(axis=0, keepdims=True)
+    scale = np.maximum(features.std(axis=0, keepdims=True), 1e-6)
+    relative = np.clip(centered / scale, -3.0, 3.0) / 3.0
+    return np.concatenate((features, relative), axis=1)
+
+
 def proposal_cost_state(initial_cost, current_cost, best_cost, encoding):
     """Encode search progress without early clipping in the opt-in mode."""
     if encoding == "relative_cost":
@@ -2905,7 +2918,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("bandit top-m must be in [1, candidate_count]")
     if not 0.0 <= bandit_global_epsilon <= 1.0:
         raise ValueError("bandit global epsilon must be in [0, 1]")
-    if bandit_feature_set not in {"legacy9", "contention12", "topology16"}:
+    if bandit_feature_set not in {"legacy9", "pool18", "contention12", "topology16"}:
         raise ValueError("unknown bandit candidate feature set")
     if bandit_scoring not in {"direct", "proxy_residual"}:
         raise ValueError("unknown bandit scoring mode")
@@ -3043,6 +3056,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "offchip_latency_share", "normalized_chip_count",
             "placement_load", "is_torus",
         ])
+    if bandit_feature_set == "pool18":
+        oracle_feature_names.extend(["pool_relative_" + name for name in oracle_feature_names[:9]])
     oracle_feature_rows = []
     oracle_global_rows = []
     oracle_gain_rows = []
@@ -3478,7 +3493,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             relocations.append(relocation)
             features.append(candidate_features(
                 candidate, changed, relocation, n_perturb, bottleneck_stage))
-        return candidates, changed_sets, relocations, np.stack(features), attraction_kinds
+        feature_matrix = np.stack(features)
+        if bandit_feature_set == "pool18":
+            feature_matrix = pool_relative_features(feature_matrix)
+        return candidates, changed_sets, relocations, feature_matrix, attraction_kinds
 
     latest_metrics = None
     pending = []
@@ -5955,7 +5973,7 @@ def main():
         help="Global-uniform probability retained by epsilon_top_m")
     parser.add_argument(
         "--ppo_asa_bandit_feature_set",
-        choices=["legacy9", "contention12", "topology16"], default="legacy9",
+        choices=["legacy9", "pool18", "contention12", "topology16"], default="legacy9",
         help=("Candidate features: historical hop proxies or those features "
               "plus contention deltas and optional portable topology context"))
     parser.add_argument(

@@ -1,4 +1,4 @@
-Latest experiment: [200k learning attribution](LEARNING_HORIZON.md). Existing learner retained; priority target showed no benefit. Runner: `bash scripts/run_kaggle_learning_horizon.sh runs/learning-horizon`.
+Latest (27 October): run `bash scripts/run_kaggle_pool_context.sh runs/kaggle-pool-context`. See [POOL_CONTEXT.md](POOL_CONTEXT.md) for theory, files and protocol. The 32-step candidate won by only 0.094%; 16 steps remains the default. This is one fresh-seed feature screen; older experiment instructions below are historical.
 
 ## Current workflow: three seeds per algorithm experiment
 
@@ -278,4 +278,4 @@ check its license and record the source and exact commit in
 
 Do not tune the method using completed seeds 0--5. New method ideas must be
 developed separately from the frozen validation results.
-Current development result: two completed 200k VGG16-FC seeds show learned RL+SA beats the matched frozen policy by 1.80% mean and fixed SA by 2.70% mean. The next controlled screen is `TRAIN32_HORIZON.md`; run `bash scripts/run_kaggle_train32_horizon.sh runs/kaggle-train32-horizon`.
+Current development result: two completed 200k VGG16-FC seeds show learned RL+SA beats the matched frozen policy by 1.77% mean and fixed SA by 2.70% mean. The next controlled screen is `TRAIN32_HORIZON.md`; run `bash scripts/run_kaggle_train32_horizon.sh runs/kaggle-train32-horizon`.
