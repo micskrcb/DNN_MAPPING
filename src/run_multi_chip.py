@@ -146,6 +146,14 @@ def proposal_focus_label(focus_fraction, focus_stage_slack):
             f"slack_{focus_stage_slack:.3f}")
 
 
+def neutral_weighted_regression_loss(predictions, targets, neutral_weight=1.0):
+    """Reduce neutral-label influence without changing labels or replay sampling."""
+    if neutral_weight == 1.0:
+        return F.smooth_l1_loss(predictions, targets)
+    weights = torch.where(targets.abs() <= 1e-9, neutral_weight, 1.0)
+    return (F.smooth_l1_loss(predictions, targets, reduction='none') * weights).sum() / weights.sum()
+
+
 def cached_stage_features(stage_costs, affected):
     """Pre-move slack and coverage from already evaluated stage costs."""
     costs = np.asarray(stage_costs, dtype=np.float64)
@@ -2842,6 +2850,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 state_encoding: str = "legacy_clipped",
                 bandit_pool_supervision_stride: int = 0,
                 bandit_ranking_weight: float = 0.0,
+                bandit_neutral_weight: float = 1.0,
                 update_style: str = "shared_gae",
                 reward_mode: str = "realized",
                 focus_bottleneck: bool = False,
@@ -2939,6 +2948,13 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("proxy residual scoring requires the bandit learner")
     if state_encoding not in {"legacy_clipped", "relative_cost"}:
         raise ValueError("unknown proposal state encoding")
+    if not math.isfinite(bandit_neutral_weight) or not 0 < bandit_neutral_weight <= 1:
+        raise ValueError("neutral weight must be finite and in (0, 1]")
+    if bandit_neutral_weight != 1 and (
+            proposal_learner != "bandit" or reward_mode != "proposed_delta" or
+            bandit_scoring != "direct" or bandit_shuffle_labels or
+            bandit_pool_supervision_stride or bandit_ranking_weight):
+        raise ValueError("neutral weighting requires direct signed selected-label bandit regression")
     if not math.isfinite(bandit_ranking_weight) or bandit_ranking_weight < 0:
         raise ValueError("ranking weight must be finite and nonnegative")
     if bandit_ranking_weight and (not bandit_pool_supervision_stride or bandit_shuffle_labels):
@@ -3376,6 +3392,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                     bandit_pool_supervision_stride:
                 raise ValueError(
                     "checkpoint pool-supervision stride does not match this run")
+        if loaded_checkpoint.get("bandit_neutral_weight", 1.0) != bandit_neutral_weight:
+            raise ValueError("checkpoint neutral weight differs")
         if loaded_checkpoint.get("bandit_ranking_weight", 0.0) != bandit_ranking_weight:
             raise ValueError("checkpoint ranking weight does not match this run")
         if loaded_checkpoint.get("annealing_schedule", "adaptive") != \
@@ -3556,7 +3574,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 # claim that byte-hop reduction equals true latency reduction.
                 targets = torch.tanh(targets)
             predictions = bandit(global_states, candidate_rows).squeeze(1)
-            loss = F.smooth_l1_loss(predictions, targets)
+            loss = neutral_weighted_regression_loss(predictions, targets, bandit_neutral_weight)
             ranking_loss = predictions.sum() * 0.0
             if bandit_ranking_weight and ranking_replay:
                 rows = bandit_rng.sample(ranking_replay, min(8, len(ranking_replay)))
@@ -3581,6 +3599,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 "sampled_recent_fraction": float(np.mean([i >= len(bandit_replay)-bandit_recent_window for i in chosen])),
                 "mean_prediction": float(predictions.detach().mean().cpu()),
                 "mean_target": float(targets.detach().mean().cpu()),
+                "sampled_neutral_fraction": float((targets.abs() <= 1e-9).float().mean().cpu()),
                 "positive_replay_fraction": (
                     len(positive_indices) / len(bandit_replay)),
             })
@@ -4145,7 +4164,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                         "value_head_gradient_norm",
                         "score_head_weight_norm", "bandit_loss", "ranking_loss",
                         "mean_prediction", "mean_target", "mean_replay_age", "sampled_recent_fraction",
-                        "positive_replay_fraction"):
+                        "positive_replay_fraction", "sampled_neutral_fraction"):
                 record[key] = (latest_metrics.get(key)
                                if latest_metrics is not None else None)
             if diagnostics is not None:
@@ -4347,6 +4366,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "bandit_residual_limit": bandit_residual_limit,
             "state_encoding": state_encoding,
             "bandit_ranking_weight": bandit_ranking_weight,
+            "bandit_neutral_weight": bandit_neutral_weight,
             "bandit_pool_supervision_stride": (
                 bandit_pool_supervision_stride),
             "reward_mode": reward_mode,
@@ -4436,6 +4456,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 "tanh_selected_reward" if bandit_scoring == "proxy_residual"
                 else "selected_reward"),
             "bandit_ranking_weight": bandit_ranking_weight,
+            "bandit_neutral_weight": bandit_neutral_weight,
             "bandit_pool_supervision_stride": (
                 bandit_pool_supervision_stride),
             "supervised_pools": supervised_pools,
@@ -6008,6 +6029,8 @@ def main():
         "--ppo_asa_bandit_pool_supervision_stride", type=int, default=0,
         help="Evaluate and train on a whole candidate pool every N proposal steps")
     parser.add_argument("--ppo_asa_bandit_ranking_weight", type=float, default=0.0)
+    parser.add_argument("--ppo_asa_bandit_neutral_weight", type=float, default=1.0,
+                        help="Neutral-target regression weight; 1 preserves historical loss")
     parser.add_argument("--ppo_asa_rollout_steps", type=int, default=256,
                         help="Accepted/rejected proposal transitions per PPO-ASA update")
     parser.add_argument("--ppo_asa_weight_decay", type=float, default=0.0,
@@ -6608,6 +6631,7 @@ def main():
             bandit_residual_limit=args.ppo_asa_bandit_residual_limit,
             state_encoding=args.ppo_asa_state_encoding,
             bandit_ranking_weight=args.ppo_asa_bandit_ranking_weight,
+            bandit_neutral_weight=args.ppo_asa_bandit_neutral_weight,
             bandit_pool_supervision_stride=(
                 args.ppo_asa_bandit_pool_supervision_stride),
             update_style=args.ppo_asa_update_style,

@@ -1,0 +1,73 @@
+{
+  "seed": 31,
+  "reference_method": "pool_context",
+  "best_cost_microseconds": {
+    "pool_context": 4.280479999999999,
+    "stage_context": 4.3387199999999995,
+    "fixed_sa": 4.37616
+  },
+  "selected_challenger": "stage_context",
+  "gain_over_reference_percent": {
+    "pool_context": 0.0,
+    "stage_context": -1.3605950734496997,
+    "fixed_sa": -2.235263334953097
+  },
+  "workload": {
+    "model": "vgg16",
+    "workload_region": "fc"
+  },
+  "gain_over_fixed_sa_percent": {
+    "pool_context": 2.1863917224233087,
+    "stage_context": 0.8555445870352063,
+    "fixed_sa": 0.0
+  },
+  "gain_over_structured_uniform_percent": null,
+  "gain_over_attraction_uniform_percent": null,
+  "selected_move_outcomes": {
+    "pool_context": {
+      "improving": 2913,
+      "neutral": 77296,
+      "worsening": 119759
+    },
+    "stage_context": {
+      "improving": 2770,
+      "neutral": 103477,
+      "worsening": 93721
+    },
+    "fixed_sa": null
+  },
+  "attraction_selected": {
+    "pool_context": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "stage_context": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "fixed_sa": null
+  },
+  "structured_selected_proposals": {
+    "pool_context": 0,
+    "stage_context": 0,
+    "fixed_sa": 0
+  },
+  "optimizer_steps": {
+    "pool_context": 12480,
+    "stage_context": 12480,
+    "fixed_sa": null
+  },
+  "runtime_seconds": {
+    "pool_context": 8475.876146877,
+    "stage_context": 8412.989733493001,
+    "fixed_sa": 6644.4250883429995
+  },
+  "updates": {
+    "pool_context": 780,
+    "stage_context": 780,
+    "fixed_sa": 0
+  },
+  "note": "Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison."
+}

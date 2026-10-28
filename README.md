@@ -1,4 +1,4 @@
-Latest: combined32 lost to context16. Test [cached stage-context features](docs/STAGE_CONTEXT.md) via `bash scripts/run_kaggle_stage_context.sh runs/kaggle-stage-context`. Fresh seed31, 200k proposals, context16 vs stage24/16 vs fixed SA.
+Latest: stage-context lost 1.36% to pool-context. Test [neutral-example loss weighting](docs/NEUTRAL_WEIGHT.md) with `bash scripts/run_kaggle_neutral_weight.sh runs/kaggle-neutral-weight`. Seed32, 200k proposals, weighted vs unweighted pool18/16 vs fixed SA.
 
 # DNN Mapping with Reinforcement Learning
 

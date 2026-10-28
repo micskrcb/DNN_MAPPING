@@ -1,3 +1,9 @@
+## 2026-10-29: stage context rejected; test neutral-example weighting
+
+Seed31 completed: pool18/16 4.28048 us, stage24/16 4.33872 us, fixedSA 4.37616 us at 200001 evaluations each. Stage loses1.36060% to pool; pool beatsSA2.18639%. Both learners780 updates/12480 optimizer steps; runtime6.53703 hours total. Stage selected103477 neutral moves vs77296 for pool, with fewer improving moves. Association is not causation. Archive: artifacts/stage-context-seed31-20261029. Keep pool18/16.
+
+Next seed32: weight neutral regression observations .25 versus default1, retaining signed labels, uniform replay, pool18 and16-step updates; compare both with fixedSA at200k proposals. See docs/NEUTRAL_WEIGHT.md. This differs from the failed priority-label trial but may still harm calibration. No performance claim until results arrive; no published-DDPG win.
+
 ## 2026-10-28: combined learner rejected; cached stage context next
 
 Seed30 completed 200001 evaluations each: legacy9/16 4.29152 us, pool18/16 4.28928 us, pool18/32 4.29808 us. Combined32 lost 0.20516% to context16 and 0.15286% to legacy. Context16 won 0.05220%; mean gain over legacy across seeds29–30 is 0.08010%. Source: artifacts/pool-combined-seed30-20261028. No fresh SA-relative or published-DDPG gain is established.

@@ -1,4 +1,4 @@
-Latest: see [STAGE_CONTEXT.md](STAGE_CONTEXT.md). Run `bash scripts/run_kaggle_stage_context.sh runs/kaggle-stage-context`. Prior combined32 was rejected; context16 remains the development candidate. Older protocols below are historical.
+Latest: see [NEUTRAL_WEIGHT.md](NEUTRAL_WEIGHT.md). Run `bash scripts/run_kaggle_neutral_weight.sh runs/kaggle-neutral-weight`. Stage24 rejected; pool18/16 retained. The new loss weighting is experimental; older protocols below are historical.
 
 ## Current workflow: three seeds per algorithm experiment
 
