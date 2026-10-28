@@ -1,3 +1,9 @@
+## 2026-10-28: combined learner rejected; cached stage context next
+
+Seed30 completed 200001 evaluations each: legacy9/16 4.29152 us, pool18/16 4.28928 us, pool18/32 4.29808 us. Combined32 lost 0.20516% to context16 and 0.15286% to legacy. Context16 won 0.05220%; mean gain over legacy across seeds29–30 is 0.08010%. Source: artifacts/pool-combined-seed30-20261028. No fresh SA-relative or published-DDPG gain is established.
+
+Next: stage24 adds cached pre-move affected-stage slack/coverage to pool context. Seed31, 200k proposals, pool18/16 vs stage24/16 vs fixed SA. Same exact evaluation budget and training schedule. See docs/STAGE_CONTEXT.md. This is a single-seed development test of an unproven feature change; the established and prior candidate paths remain available.
+
 ## 2026-10-28: pool-context result and combined learner
 
 Seed29 completed 200001 evaluations per arm at 2f98bc1: existing learner 4.29648 us, pool-context 4.29184 us, fixed SA 4.39248 us. Context gains 0.10800% over existing and 2.29119% over SA; existing gains 2.18555% over SA. Both learners made 780 update events and 12480 optimizer steps, with identical initial cost 8.144 us. Context was ahead at all five inspected checkpoints from 50k through 200k. Total runtime 6.39405 hours. This is a small one-seed win, not a confirmed improvement. Source reports: artifacts/pool-context-seed29-20261028.

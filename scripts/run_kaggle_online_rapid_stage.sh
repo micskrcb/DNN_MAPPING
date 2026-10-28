@@ -70,6 +70,7 @@ for seed in "${seeds[@]}"; do
    train_32) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 32);;
    pool_context) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_bandit_feature_set pool18);;
    pool_context32) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 32 --ppo_asa_bandit_feature_set pool18);;
+   stage_context) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_bandit_feature_set stage24);;
    exploit) extra+=(--ppo_asa_bandit_epsilon_final .02);;
    topology) extra+=(--ppo_asa_bandit_feature_set topology16);;
    pool_regression) extra+=(--ppo_asa_bandit_pool_supervision_stride 64);;

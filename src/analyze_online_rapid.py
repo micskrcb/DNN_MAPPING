@@ -3,7 +3,7 @@ import argparse,json,math
 from pathlib import Path
 
 def summarize(root,seed,methods):
-    reference='reference' if 'reference' in methods else 'exploit' if 'exploit' in methods else 'train_more'
+    reference=next((m for m in ('reference','exploit','train_more','pool_context') if m in methods), None)
     assert reference in methods and len(set(methods))==len(methods)
     reports={m:json.loads((root/f'seed{seed}-{m}.json').read_text()) for m in methods}
     assert len({r['complete_placement_evaluations'] for r in reports.values()})==1
@@ -23,9 +23,9 @@ def summarize(root,seed,methods):
         assert meta['bandit_replay_capacity']==50000 and meta['proposal_candidates_per_step']==16
         assert meta['learning_enabled']==(m not in ('structured_uniform','attraction_uniform','frozen'))
         assert (meta['update_count']==0 if m in ('structured_uniform','attraction_uniform','frozen') else meta['update_count']>0)
-        assert meta['bandit_epsilon_final']==(.02 if combined or m in ('exploit','fast_exploit','train_more','train_32','pool_context','structured','structured_uniform','attraction','attraction_uniform','priority','frozen') else .1)
+        assert meta['bandit_epsilon_final']==(.02 if combined or m in ('stage_context','exploit','fast_exploit','train_more','train_32','pool_context','structured','structured_uniform','attraction','attraction_uniform','priority','frozen') else .1)
         assert meta['bandit_epsilon_decay_fraction']==(.5 if m=='fast_exploit' else 1)
-        assert meta['bandit_feature_set']==('pool18' if combined or m=='pool_context' else 'topology16' if m=='topology' else 'legacy9')
+        assert meta['bandit_feature_set']==('stage24' if m=='stage_context' else 'pool18' if combined or m=='pool_context' else 'topology16' if m=='topology' else 'legacy9')
         assert meta['bandit_pool_supervision_stride']==(64 if m in ('ranking','pool_regression') else 0)
         assert meta['bandit_ranking_weight']==(.25 if m=='ranking' else 0)
         assert meta['pool_focus_fraction']==0 and meta['pool_small_move_fraction']==0
@@ -38,7 +38,7 @@ def summarize(root,seed,methods):
         if m in ('attraction','attraction_uniform'):
             assert meta['attraction_candidates_per_pool']==8 and meta['attraction_pair_count']>0
             assert sum(meta['attraction_generated'][k] for k in ('relocation','swap'))>0
-        assert cfg['ppo_update_epochs']==(32 if combined or m == 'train_32' else 16 if m in ('train_more','pool_context','structured','structured_uniform','attraction','attraction_uniform','priority','frozen') else 4)
+        assert cfg['ppo_update_epochs']==(32 if combined or m == 'train_32' else 16 if m in ('stage_context','train_more','pool_context','structured','structured_uniform','attraction','attraction_uniform','priority','frozen') else 4)
         if m=='train_more':
             assert meta['bandit_update_epochs']==16
         if combined or m == 'train_32':

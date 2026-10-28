@@ -1,0 +1,77 @@
+{
+  "seed": 30,
+  "reference_method": "train_more",
+  "best_cost_microseconds": {
+    "train_more": 4.291519999999999,
+    "pool_context": 4.289279999999999,
+    "pool_context32": 4.29808
+  },
+  "selected_challenger": "pool_context",
+  "gain_over_reference_percent": {
+    "train_more": 0.0,
+    "pool_context": 0.05219595854150105,
+    "pool_context32": -0.15285959287154594
+  },
+  "workload": {
+    "model": "vgg16",
+    "workload_region": "fc"
+  },
+  "gain_over_fixed_sa_percent": null,
+  "gain_over_structured_uniform_percent": null,
+  "gain_over_attraction_uniform_percent": null,
+  "selected_move_outcomes": {
+    "train_more": {
+      "improving": 4972,
+      "neutral": 90689,
+      "worsening": 104307
+    },
+    "pool_context": {
+      "improving": 5078,
+      "neutral": 92971,
+      "worsening": 101919
+    },
+    "pool_context32": {
+      "improving": 5081,
+      "neutral": 95440,
+      "worsening": 99447
+    }
+  },
+  "attraction_selected": {
+    "train_more": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "pool_context": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "pool_context32": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    }
+  },
+  "structured_selected_proposals": {
+    "train_more": 0,
+    "pool_context": 0,
+    "pool_context32": 0
+  },
+  "optimizer_steps": {
+    "train_more": 12480,
+    "pool_context": 12480,
+    "pool_context32": 24960
+  },
+  "runtime_seconds": {
+    "train_more": 8750.211449649,
+    "pool_context": 8638.249355241,
+    "pool_context32": 8735.101697546
+  },
+  "updates": {
+    "train_more": 780,
+    "pool_context": 780,
+    "pool_context32": 780
+  },
+  "note": "Exploratory selection. Full-budget rerun uses a fresh seed. Pool labels consume objective budget; update counts and search steps may differ. No published-DDPG comparison."
+}

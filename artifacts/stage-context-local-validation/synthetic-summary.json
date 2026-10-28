@@ -1,0 +1,73 @@
+{
+  "seed": 31,
+  "reference_method": "pool_context",
+  "best_cost_microseconds": {
+    "pool_context": 1416000000.0,
+    "stage_context": 1416000000.0,
+    "fixed_sa": 1315000000.0
+  },
+  "selected_challenger": "stage_context",
+  "gain_over_reference_percent": {
+    "pool_context": 0.0,
+    "stage_context": 0.0,
+    "fixed_sa": 7.13276836158192
+  },
+  "workload": {
+    "model": "vgg16",
+    "workload_region": "all"
+  },
+  "gain_over_fixed_sa_percent": {
+    "pool_context": -7.680608365019004,
+    "stage_context": -7.680608365019004,
+    "fixed_sa": 0.0
+  },
+  "gain_over_structured_uniform_percent": null,
+  "gain_over_attraction_uniform_percent": null,
+  "selected_move_outcomes": {
+    "pool_context": {
+      "improving": 156,
+      "neutral": 53,
+      "worsening": 359
+    },
+    "stage_context": {
+      "improving": 156,
+      "neutral": 54,
+      "worsening": 358
+    },
+    "fixed_sa": null
+  },
+  "attraction_selected": {
+    "pool_context": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "stage_context": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "fixed_sa": null
+  },
+  "structured_selected_proposals": {
+    "pool_context": 0,
+    "stage_context": 0,
+    "fixed_sa": 0
+  },
+  "optimizer_steps": {
+    "pool_context": 16,
+    "stage_context": 16,
+    "fixed_sa": null
+  },
+  "runtime_seconds": {
+    "pool_context": 4.871500010000091,
+    "stage_context": 7.68270499800019,
+    "fixed_sa": 2.598859061999974
+  },
+  "updates": {
+    "pool_context": 1,
+    "stage_context": 1,
+    "fixed_sa": 0
+  },
+  "note": "Single-seed feature screen. Extra descriptors contain no exact candidate costs. More inputs also add encoder parameters; this is not a capacity-matched representation test."
+}

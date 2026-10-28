@@ -1,4 +1,4 @@
-Latest (28 October): pool-context gained 0.108% over the existing learner on seed29. Next: [combined feature/training test](docs/POOL_COMBINED.md), using `bash scripts/run_kaggle_pool_combined.sh runs/kaggle-pool-combined`.
+Latest: combined32 lost to context16. Test [cached stage-context features](docs/STAGE_CONTEXT.md) via `bash scripts/run_kaggle_stage_context.sh runs/kaggle-stage-context`. Fresh seed31, 200k proposals, context16 vs stage24/16 vs fixed SA.
 
 # DNN Mapping with Reinforcement Learning
 

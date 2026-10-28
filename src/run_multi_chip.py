@@ -146,6 +146,17 @@ def proposal_focus_label(focus_fraction, focus_stage_slack):
             f"slack_{focus_stage_slack:.3f}")
 
 
+def cached_stage_features(stage_costs, affected):
+    """Pre-move slack and coverage from already evaluated stage costs."""
+    costs = np.asarray(stage_costs, dtype=np.float64)
+    indices = sorted(set(affected))
+    if not indices:
+        return [1.0, 1.0, 0.0]
+    maximum = float(costs.max(initial=0.0))
+    slack = np.clip((maximum - costs[indices]) / max(maximum, np.finfo(float).eps), 0.0, 1.0)
+    return [float(slack.min()), float(slack.mean()), len(indices) / len(costs)]
+
+
 def pool_relative_features(features):
     """Keep raw features and append bounded deviations within this proposal pool.
 
@@ -2918,7 +2929,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("bandit top-m must be in [1, candidate_count]")
     if not 0.0 <= bandit_global_epsilon <= 1.0:
         raise ValueError("bandit global epsilon must be in [0, 1]")
-    if bandit_feature_set not in {"legacy9", "pool18", "contention12", "topology16"}:
+    if bandit_feature_set not in {"legacy9", "pool18", "stage24", "contention12", "topology16"}:
         raise ValueError("unknown bandit candidate feature set")
     if bandit_scoring not in {"direct", "proxy_residual"}:
         raise ValueError("unknown bandit scoring mode")
@@ -3028,7 +3039,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         except (TypeError, AttributeError):
             evaluator = None
     if (focus_fraction > 0 or bandit_feature_set in {
-            "contention12", "topology16"}) and \
+            "stage24", "contention12", "topology16"}) and \
             evaluator is None:
         raise ValueError(
             "focused/contention-aware PPO-ASA requires the incremental "
@@ -3056,8 +3067,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "offchip_latency_share", "normalized_chip_count",
             "placement_load", "is_torus",
         ])
-    if bandit_feature_set == "pool18":
-        oracle_feature_names.extend(["pool_relative_" + name for name in oracle_feature_names[:9]])
+    if bandit_feature_set == "stage24":
+        oracle_feature_names.extend(["affected_min_slack", "affected_mean_slack", "affected_stage_fraction"])
+    if bandit_feature_set in {"pool18", "stage24"}:
+        oracle_feature_names.extend(["pool_relative_" + name for name in oracle_feature_names[:]])
     oracle_feature_rows = []
     oracle_global_rows = []
     oracle_gain_rows = []
@@ -3214,6 +3227,9 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             float(proxy_gain),
             float(min(1.0, affected_volume)),
         ]
+        if bandit_feature_set == "stage24":
+            feature_values.extend(cached_stage_features(
+                evaluator.stage_costs, evaluator._affected_stages(changed)))
         if bandit_feature_set in {"contention12", "topology16"}:
             feature_values.extend(
                 evaluator.candidate_contention_features(candidate, changed))
@@ -3494,7 +3510,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             features.append(candidate_features(
                 candidate, changed, relocation, n_perturb, bottleneck_stage))
         feature_matrix = np.stack(features)
-        if bandit_feature_set == "pool18":
+        if bandit_feature_set in {"pool18", "stage24"}:
             feature_matrix = pool_relative_features(feature_matrix)
         return candidates, changed_sets, relocations, feature_matrix, attraction_kinds
 
@@ -5973,7 +5989,7 @@ def main():
         help="Global-uniform probability retained by epsilon_top_m")
     parser.add_argument(
         "--ppo_asa_bandit_feature_set",
-        choices=["legacy9", "pool18", "contention12", "topology16"], default="legacy9",
+        choices=["legacy9", "pool18", "stage24", "contention12", "topology16"], default="legacy9",
         help=("Candidate features: historical hop proxies or those features "
               "plus contention deltas and optional portable topology context"))
     parser.add_argument(

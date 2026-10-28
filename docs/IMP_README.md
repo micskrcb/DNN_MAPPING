@@ -1,4 +1,4 @@
-Latest (28 October): see [POOL_COMBINED.md](POOL_COMBINED.md). Run `bash scripts/run_kaggle_pool_combined.sh runs/kaggle-pool-combined`. Three learned arms, fresh seed30, 200k proposals; historical protocols below remain available.
+Latest: see [STAGE_CONTEXT.md](STAGE_CONTEXT.md). Run `bash scripts/run_kaggle_stage_context.sh runs/kaggle-stage-context`. Prior combined32 was rejected; context16 remains the development candidate. Older protocols below are historical.
 
 ## Current workflow: three seeds per algorithm experiment
 
