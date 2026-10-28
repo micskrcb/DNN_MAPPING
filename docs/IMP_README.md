@@ -1,4 +1,4 @@
-Latest (27 October): run `bash scripts/run_kaggle_pool_context.sh runs/kaggle-pool-context`. See [POOL_CONTEXT.md](POOL_CONTEXT.md) for theory, files and protocol. The 32-step candidate won by only 0.094%; 16 steps remains the default. This is one fresh-seed feature screen; older experiment instructions below are historical.
+Latest (28 October): see [POOL_COMBINED.md](POOL_COMBINED.md). Run `bash scripts/run_kaggle_pool_combined.sh runs/kaggle-pool-combined`. Three learned arms, fresh seed30, 200k proposals; historical protocols below remain available.
 
 ## Current workflow: three seeds per algorithm experiment
 

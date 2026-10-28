@@ -1,0 +1,73 @@
+{
+  "seed": 29,
+  "reference_method": "train_more",
+  "best_cost_microseconds": {
+    "train_more": 4.29648,
+    "pool_context": 4.29184,
+    "fixed_sa": 4.392479999999999
+  },
+  "selected_challenger": "pool_context",
+  "gain_over_reference_percent": {
+    "train_more": 0.0,
+    "pool_context": 0.10799538226641259,
+    "fixed_sa": -2.2343872193050895
+  },
+  "workload": {
+    "model": "vgg16",
+    "workload_region": "fc"
+  },
+  "gain_over_fixed_sa_percent": {
+    "train_more": 2.185553491421699,
+    "pool_context": 2.2911885768404083,
+    "fixed_sa": 0.0
+  },
+  "gain_over_structured_uniform_percent": null,
+  "gain_over_attraction_uniform_percent": null,
+  "selected_move_outcomes": {
+    "train_more": {
+      "improving": 3324,
+      "neutral": 75536,
+      "worsening": 121108
+    },
+    "pool_context": {
+      "improving": 3435,
+      "neutral": 83642,
+      "worsening": 112891
+    },
+    "fixed_sa": null
+  },
+  "attraction_selected": {
+    "train_more": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "pool_context": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "fixed_sa": null
+  },
+  "structured_selected_proposals": {
+    "train_more": 0,
+    "pool_context": 0,
+    "fixed_sa": 0
+  },
+  "optimizer_steps": {
+    "train_more": 12480,
+    "pool_context": 12480,
+    "fixed_sa": null
+  },
+  "runtime_seconds": {
+    "train_more": 8282.301974472999,
+    "pool_context": 8168.653355255001,
+    "fixed_sa": 6567.624507681001
+  },
+  "updates": {
+    "train_more": 780,
+    "pool_context": 780,
+    "fixed_sa": 0
+  },
+  "note": "Single-seed feature screen. Extra descriptors contain no exact candidate costs. More inputs also add encoder parameters; this is not a capacity-matched representation test."
+}

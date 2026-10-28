@@ -1,3 +1,9 @@
+## 2026-10-28: pool-context result and combined learner
+
+Seed29 completed 200001 evaluations per arm at 2f98bc1: existing learner 4.29648 us, pool-context 4.29184 us, fixed SA 4.39248 us. Context gains 0.10800% over existing and 2.29119% over SA; existing gains 2.18555% over SA. Both learners made 780 update events and 12480 optimizer steps, with identical initial cost 8.144 us. Context was ahead at all five inspected checkpoints from 50k through 200k. Total runtime 6.39405 hours. This is a small one-seed win, not a confirmed improvement. Source reports: artifacts/pool-context-seed29-20261028.
+
+Next: fresh seed30, 200k proposals each, established legacy9/16 versus pool18/16 versus pool18/32. This measures the combined candidate against both constituent baselines without adding past percentages. See docs/POOL_COMBINED.md. No fixed-SA arm this time; no fresh SA-relative percentage or published-DDPG claim.
+
 ## 27 October: diminishing gain from more fitting
 
 VGG16-FC seed28: 32-step 4.27184 us vs 16-step 4.27584 us, a 4 ns (0.09355%) gain. Fixed SA 4.36672 us; gains vs SA 2.17280% and 2.08120%. The 32-step arm was behind at logged checkpoints near 50k/100k/150k/180k and overtook only late. No convergence or general 32-step superiority is established. Each arm used 200001 exact evaluations and matching initialization; learner configurations differ only in update epochs and output paths. Source: `artifacts/train32-horizon-20261027/`.

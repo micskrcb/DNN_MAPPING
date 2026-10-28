@@ -1,0 +1,82 @@
+{
+  "seed": 30,
+  "reference_method": "train_more",
+  "best_cost_microseconds": {
+    "train_more": 1277000000.0,
+    "pool_context": 1280000000.0,
+    "pool_context32": 1280000000.0
+  },
+  "selected_challenger": "pool_context",
+  "gain_over_reference_percent": {
+    "train_more": 0.0,
+    "pool_context": -0.2349256068911565,
+    "pool_context32": -0.2349256068911565
+  },
+  "workload": {
+    "model": "vgg16",
+    "workload_region": "all"
+  },
+  "gain_over_fixed_sa_percent": null,
+  "gain_over_structured_uniform_percent": null,
+  "gain_over_attraction_uniform_percent": null,
+  "selected_move_outcomes": {
+    "train_more": {
+      "improving": 123,
+      "neutral": 75,
+      "worsening": 370
+    },
+    "pool_context": {
+      "improving": 122,
+      "neutral": 73,
+      "worsening": 373
+    },
+    "pool_context32": {
+      "improving": 122,
+      "neutral": 73,
+      "worsening": 373
+    }
+  },
+  "attraction_selected": {
+    "train_more": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "pool_context": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "pool_context32": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    }
+  },
+  "structured_selected_proposals": {
+    "train_more": 0,
+    "pool_context": 0,
+    "pool_context32": 0
+  },
+  "optimizer_steps": {
+    "train_more": 16,
+    "pool_context": 16,
+    "pool_context32": 32
+  },
+  "runtime_seconds": {
+    "train_more": 6.390475412000001,
+    "pool_context": 4.037694099999953,
+    "pool_context32": 4.412692129999982
+  },
+  "updates": {
+    "train_more": 1,
+    "pool_context": 1,
+    "pool_context32": 1
+  },
+  "note": "One-seed development screen; no fixed-SA or DDPG arm. Cannot measure factorial interaction without a legacy9/32 arm. Do not add percentages from separate seeds.",
+  "combined_gain_percent": {
+    "train_more": -0.2349256068911565,
+    "pool_context": 0.0
+  },
+  "beats_both": false
+}

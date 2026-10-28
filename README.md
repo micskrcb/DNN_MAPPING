@@ -1,4 +1,4 @@
-Latest (27 October): 32-step fitting gained only 0.094% over the established learner on seed 28. Keep 16 steps; test [pool-context descriptors](docs/POOL_CONTEXT.md) with `bash scripts/run_kaggle_pool_context.sh runs/kaggle-pool-context`. Historical protocols below remain available.
+Latest (28 October): pool-context gained 0.108% over the existing learner on seed29. Next: [combined feature/training test](docs/POOL_COMBINED.md), using `bash scripts/run_kaggle_pool_combined.sh runs/kaggle-pool-combined`.
 
 # DNN Mapping with Reinforcement Learning
 

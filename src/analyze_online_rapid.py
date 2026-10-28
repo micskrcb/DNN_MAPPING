@@ -13,6 +13,7 @@ def summarize(root,seed,methods):
     temperatures=[]
     for m,r in reports.items():
         meta=r['algorithm_metadata'];cfg=r['config']
+        combined = m == 'pool_context32'
         assert cfg['seed']==seed and r['complete_placement_evaluations']==cfg['iters']+1
         assert math.isfinite(r['best_cost']) and r['best_cost']>0
         if m=='fixed_sa':continue
@@ -22,9 +23,9 @@ def summarize(root,seed,methods):
         assert meta['bandit_replay_capacity']==50000 and meta['proposal_candidates_per_step']==16
         assert meta['learning_enabled']==(m not in ('structured_uniform','attraction_uniform','frozen'))
         assert (meta['update_count']==0 if m in ('structured_uniform','attraction_uniform','frozen') else meta['update_count']>0)
-        assert meta['bandit_epsilon_final']==(.02 if m in ('exploit','fast_exploit','train_more','train_32','pool_context','structured','structured_uniform','attraction','attraction_uniform','priority','frozen') else .1)
+        assert meta['bandit_epsilon_final']==(.02 if combined or m in ('exploit','fast_exploit','train_more','train_32','pool_context','structured','structured_uniform','attraction','attraction_uniform','priority','frozen') else .1)
         assert meta['bandit_epsilon_decay_fraction']==(.5 if m=='fast_exploit' else 1)
-        assert meta['bandit_feature_set']==('pool18' if m=='pool_context' else 'topology16' if m=='topology' else 'legacy9')
+        assert meta['bandit_feature_set']==('pool18' if combined or m=='pool_context' else 'topology16' if m=='topology' else 'legacy9')
         assert meta['bandit_pool_supervision_stride']==(64 if m in ('ranking','pool_regression') else 0)
         assert meta['bandit_ranking_weight']==(.25 if m=='ranking' else 0)
         assert meta['pool_focus_fraction']==0 and meta['pool_small_move_fraction']==0
@@ -37,10 +38,10 @@ def summarize(root,seed,methods):
         if m in ('attraction','attraction_uniform'):
             assert meta['attraction_candidates_per_pool']==8 and meta['attraction_pair_count']>0
             assert sum(meta['attraction_generated'][k] for k in ('relocation','swap'))>0
-        assert cfg['ppo_update_epochs']==(32 if m == 'train_32' else 16 if m in ('train_more','pool_context','structured','structured_uniform','attraction','attraction_uniform','priority','frozen') else 4)
+        assert cfg['ppo_update_epochs']==(32 if combined or m == 'train_32' else 16 if m in ('train_more','pool_context','structured','structured_uniform','attraction','attraction_uniform','priority','frozen') else 4)
         if m=='train_more':
             assert meta['bandit_update_epochs']==16
-        if m == 'train_32':
+        if combined or m == 'train_32':
             assert meta['bandit_update_epochs'] == 32
         if 'bandit_optimizer_steps_this_invocation' in meta:
             assert meta['bandit_optimizer_steps_this_invocation']==meta['update_count']*cfg['ppo_update_epochs']
