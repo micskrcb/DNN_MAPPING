@@ -1,3 +1,11 @@
+## 2026-10-29: neutral-weight replication mixed; AlexNet-FC next
+
+Seed33 completed at81bdccb: pool18/16 4.28208 us, neutral-weight.25 4.29664 us, fixed SA4.36624 us. Each200001 evaluations; both learners780 updates/12480 optimizer steps. Weighted loses0.34002167% to unweighted. Runtime7.092352 hours. Source reports/hash: artifacts/neutral-weight-seed33-20261029.
+
+Across seeds32/33, weighting gains+0.28440985% and-0.34002167%, mean-0.02780591%. Do not promote weighting. Unweighted beats fixedSA2.16380478% and1.92751658%, mean2.04566068%. These are paired percentage means, not published-DDPG improvements. Keep pool18/16, weight1.
+
+Next: AlexNet-FC seed34, 200k proposals per arm. Compare retained pool18 learner, identical pool18 with learning disabled, and fixedSA. The previous frozen arm used legacy9; the new pool_frozen arm matches the current architecture/features exactly. Analyzer rejects hidden learner/control config differences and nonzero frozen optimizer steps. This tests the same training recipe on another workload from scratch, not pretrained transfer. Success requires beating both controls at the same objective budget. Report ties/losses unchanged; one seed is exploratory. See docs/ALEXNET_POOL_TRANSFER.md.
+
 ## 2026-10-29: neutral weighting positive on seed32; repeat on fresh seed33
 
 VGG16-FC, 200001 evaluations per arm: pool18/16 4.27552 us, neutral-weight .25 4.26336 us, fixed SA 4.37008 us. Weighted beats unweighted by 0.28440985%, and fixed SA by 2.44206056%; unweighted beats SA by 2.16380478%. Both learners completed 780 updates / 12480 optimizer steps. Total runtime 6.148448 hours. Source revision e4da482; complete exit0. Original reports and ZIP hash: artifacts/neutral-weight-seed32-20261029.

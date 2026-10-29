@@ -1,0 +1,80 @@
+{
+  "seed": 34,
+  "reference_method": "pool_context",
+  "best_cost_microseconds": {
+    "pool_context": 3.5006400000000113,
+    "pool_frozen": 3.5260800000000114,
+    "fixed_sa": 3.143520000000014
+  },
+  "selected_challenger": null,
+  "gain_over_reference_percent": {
+    "pool_context": 0.0,
+    "pool_frozen": -0.7267242561360243,
+    "fixed_sa": 10.201563142739511
+  },
+  "workload": {
+    "model": "alexnet",
+    "workload_region": "fc"
+  },
+  "gain_over_fixed_sa_percent": {
+    "pool_context": -11.360513055428179,
+    "pool_frozen": -12.169796915559505,
+    "fixed_sa": 0.0
+  },
+  "gain_over_structured_uniform_percent": null,
+  "gain_over_attraction_uniform_percent": null,
+  "selected_move_outcomes": {
+    "pool_context": {
+      "improving": 53,
+      "neutral": 407,
+      "worsening": 108
+    },
+    "pool_frozen": {
+      "improving": 49,
+      "neutral": 419,
+      "worsening": 100
+    },
+    "fixed_sa": null
+  },
+  "attraction_selected": {
+    "pool_context": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "pool_frozen": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "fixed_sa": null
+  },
+  "structured_selected_proposals": {
+    "pool_context": 0,
+    "pool_frozen": 0,
+    "fixed_sa": 0
+  },
+  "optimizer_steps": {
+    "pool_context": 16,
+    "pool_frozen": 0,
+    "fixed_sa": null
+  },
+  "runtime_seconds": {
+    "pool_context": 15.531099967000046,
+    "pool_frozen": 15.004731581997476,
+    "fixed_sa": 11.694615270000213
+  },
+  "updates": {
+    "pool_context": 1,
+    "pool_frozen": 0,
+    "fixed_sa": 0
+  },
+  "note": "Fresh training on this workload, not transfer of pretrained weights. One-seed development screen; no published-DDPG comparison.",
+  "gain_over_matched_frozen_percent": 0.7214810781377645,
+  "comparison_outcome": "no_win_over_both_controls",
+  "complete_placement_evaluations": {
+    "pool_context": 601,
+    "pool_frozen": 601,
+    "fixed_sa": 601
+  }
+}

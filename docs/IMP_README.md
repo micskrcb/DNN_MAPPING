@@ -1,4 +1,4 @@
-Latest: neutral-weight RL+SA beat unweighted by 0.284% and fixed SA by 2.442% on seed32. Repeat unchanged on seed33: `bash scripts/run_kaggle_neutral_weight.sh runs/kaggle-neutral-weight-seed33 33`. See [protocol](NEUTRAL_WEIGHT.md). One-seed evidence; older protocols below are historical.
+Latest: neutral weighting did not repeat (two-seed mean -0.028%). Keep unweighted pool18 RL+SA. Next: [AlexNet-FC with matched frozen and SA controls](ALEXNET_POOL_TRANSFER.md). Run `bash scripts/run_kaggle_alexnet_pool_transfer.sh runs/kaggle-alexnet-pool-transfer 34`. Older entries below are historical.
 
 ## Current workflow: three seeds per algorithm experiment
 

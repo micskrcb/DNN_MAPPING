@@ -1,3 +1,7 @@
+# Replication outcome
+
+Seed33 weighted4.29664 us versus unweighted4.28208 us: 0.34002% worse. Across seeds32/33 mean paired gain is -0.02781%. Keep weight1; weighting remains experimental. Historical protocol and initial result below.
+
 # Neutral-example regression weighting
 
 ## Latest result and next run
