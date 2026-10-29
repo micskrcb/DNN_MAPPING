@@ -1,3 +1,11 @@
+## 2026-10-29: prioritize joint operator/candidate learning
+
+No new full experiment result has arrived since neutral-weight seed33. Its mixed two-seed outcome remains recorded; retain unweighted pool18. The AlexNet portability runner remains available but is not evidence of a gain.
+
+User prioritizes faster algorithm improvement. Reviewed prior failed operator/multiscale/structured trials rather than restarting the old four-operator family. New opt-in operator22 retains the working pool-relative scorer, keeps8 original candidates and adds3 relocation/3 swap/2 group candidates with explicit actual operator identity. Same signed reward,16-step updates, uniform replay and fixed SA; no extra objective labels. Defaults unchanged.
+
+Next seed35:200k proposals each, current pool18 learner vs joint operator22 learner vs matched frozen operator22 pool. The frozen control randomizes candidates (allocation8/3/3/2), not just operators; it tests combined learning, not operator-only attribution. Must beat both controls to motivate follow-up. No fresh SA/random or published-DDPG comparison. Prior operator failures make this an uncertain hypothesis. Details/run command: docs/JOINT_OPERATOR_BANDIT.md.
+
 ## 2026-10-29: neutral-weight replication mixed; AlexNet-FC next
 
 Seed33 completed at81bdccb: pool18/16 4.28208 us, neutral-weight.25 4.29664 us, fixed SA4.36624 us. Each200001 evaluations; both learners780 updates/12480 optimizer steps. Weighted loses0.34002167% to unweighted. Runtime7.092352 hours. Source reports/hash: artifacts/neutral-weight-seed33-20261029.

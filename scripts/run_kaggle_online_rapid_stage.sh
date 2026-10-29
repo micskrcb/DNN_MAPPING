@@ -68,6 +68,8 @@ for seed in "${seeds[@]}"; do
    frozen) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_disable_learning);;
    train_more) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16);;
    train_32) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 32);;
+   operator_joint) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_bandit_feature_set operator22);;
+   operator_frozen) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_bandit_feature_set operator22 --ppo_asa_disable_learning);;
    pool_frozen) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_bandit_feature_set pool18 --ppo_asa_disable_learning);;
    pool_context) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 16 --ppo_asa_bandit_feature_set pool18);;
    pool_context32) extra+=(--ppo_asa_bandit_epsilon_final .02 --ppo_update_epochs 32 --ppo_asa_bandit_feature_set pool18);;

@@ -11,6 +11,8 @@ Quick start:
     python run_multi_chip.py --algo ddpg --use_cnn
 """
 
+from operator_candidates import operator_neighbor, append_operator_features, OPERATOR_NAMES
+
 import argparse
 import math
 import random
@@ -2938,8 +2940,13 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("bandit top-m must be in [1, candidate_count]")
     if not 0.0 <= bandit_global_epsilon <= 1.0:
         raise ValueError("bandit global epsilon must be in [0, 1]")
-    if bandit_feature_set not in {"legacy9", "pool18", "stage24", "contention12", "topology16"}:
+    if bandit_feature_set not in {"legacy9", "pool18", "operator22", "stage24", "contention12", "topology16"}:
         raise ValueError("unknown bandit candidate feature set")
+    if bandit_feature_set == "operator22" and (
+            proposal_learner != "bandit" or pool_small_move_fraction or
+            pool_structured_fraction or pool_attraction_fraction or
+            (pool_focus_fraction is None and focus_fraction) or pool_focus_fraction):
+        raise ValueError("operator22 requires bandit and an unfocused, unmixed pool")
     if bandit_scoring not in {"direct", "proxy_residual"}:
         raise ValueError("unknown bandit scoring mode")
     if not 0 < bandit_residual_limit <= 1:
@@ -3085,8 +3092,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         ])
     if bandit_feature_set == "stage24":
         oracle_feature_names.extend(["affected_min_slack", "affected_mean_slack", "affected_stage_fraction"])
-    if bandit_feature_set in {"pool18", "stage24"}:
+    if bandit_feature_set in {"pool18", "stage24", "operator22"}:
         oracle_feature_names.extend(["pool_relative_" + name for name in oracle_feature_names[:]])
+    if bandit_feature_set == "operator22":
+        oracle_feature_names.extend(["operator_" + name for name in OPERATOR_NAMES])
     oracle_feature_rows = []
     oracle_global_rows = []
     oracle_gain_rows = []
@@ -3480,12 +3489,13 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
         raise ValueError("pool focus fraction must be in [0, 1]")
     focused_candidate_count = round(candidate_count * effective_pool_focus)
     small_candidate_count = round(candidate_count * pool_small_move_fraction)
+    operator_selected = [0, 0, 0, 0]
     selected_small_move_count = 0
     selected_structured_count = 0
     structured_groups = (flow_groups(n, edge_sources, edge_destinations, edge_volumes)
-                         if pool_structured_fraction else [])
+                         if pool_structured_fraction or bandit_feature_set == "operator22" else [])
     structured_count = round(candidate_count * pool_structured_fraction) if structured_groups else 0
-    structured_ranks = axis_ranks(chip_x, chip_y, core_rows, core_cols) if structured_count else []
+    structured_ranks = axis_ranks(chip_x, chip_y, core_rows, core_cols) if structured_groups else []
 
     attraction_pairs = (flow_groups(n, edge_sources, edge_destinations, edge_volumes, limit=2)
                         if pool_attraction_fraction else [])
@@ -3497,6 +3507,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
 
     def make_proposal_pool(n_perturb):
         candidates, changed_sets, relocations, features, attraction_kinds = [], [], [], [], []
+        operator_kinds = []
         inverse = None
         if attraction_count:
             inverse = np.full(env.total_cores, -1, dtype=np.int64)
@@ -3512,7 +3523,12 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                     inverse, free_pool, proxy_latencies, proposal_rng)
                 attraction_generated[0 if attracted is None else attracted[3]] += 1
             attraction_kinds.append(0 if attracted is None else attracted[3])
-            if attracted is not None:
+            if bandit_feature_set == "operator22":
+                candidate, changed, relocation, kind = operator_neighbor(
+                    placement, n_perturb, free_pool, proposal_rng, candidate_index,
+                    candidate_count, structured_groups, structured_ranks, _placement_neighbor)
+                operator_kinds.append(kind)
+            elif attracted is not None:
                 candidate, changed, relocation, _ = attracted
             elif candidate_index < structured_count:
                 candidate, changed, relocation = flow_axis_neighbor(
@@ -3528,8 +3544,10 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             features.append(candidate_features(
                 candidate, changed, relocation, n_perturb, bottleneck_stage))
         feature_matrix = np.stack(features)
-        if bandit_feature_set in {"pool18", "stage24"}:
+        if bandit_feature_set in {"pool18", "stage24", "operator22"}:
             feature_matrix = pool_relative_features(feature_matrix)
+        if bandit_feature_set == "operator22":
+            feature_matrix = append_operator_features(feature_matrix, operator_kinds)
         return candidates, changed_sets, relocations, feature_matrix, attraction_kinds
 
     latest_metrics = None
@@ -3900,6 +3918,8 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
                 sample.squeeze(-1) * candidate_count).long().clamp(
                     max=candidate_count - 1)
         selected = int(action.item())
+        if bandit_feature_set == "operator22":
+            operator_selected[int(np.argmax(features[selected, -4:]))] += 1
         selected_small_move_count += int(selected < small_candidate_count)
         selected_structured_count += int(selected < structured_count)
         if selected < attraction_count:
@@ -4419,6 +4439,7 @@ def run_ppo_asa(env: MultiChipEnvironment, n_iter: int = 100000,
             "calibration_focus_fraction": focus_fraction,
             "small_move_candidates_per_pool": small_candidate_count,
             "selected_small_move_proposals": selected_small_move_count,
+            "operator_selected": dict(zip(OPERATOR_NAMES, operator_selected)),
             "attraction_candidates_per_pool": attraction_count,
             "attraction_pair_count": len(attraction_pairs),
             "attraction_generated": dict(zip(('fallback','relocation','swap'), attraction_generated)),
@@ -6010,7 +6031,7 @@ def main():
         help="Global-uniform probability retained by epsilon_top_m")
     parser.add_argument(
         "--ppo_asa_bandit_feature_set",
-        choices=["legacy9", "pool18", "stage24", "contention12", "topology16"], default="legacy9",
+        choices=["legacy9", "pool18", "operator22", "stage24", "contention12", "topology16"], default="legacy9",
         help=("Candidate features: historical hop proxies or those features "
               "plus contention deltas and optional portable topology context"))
     parser.add_argument(

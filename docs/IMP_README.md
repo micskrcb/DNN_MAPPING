@@ -1,4 +1,4 @@
-Latest: neutral weighting did not repeat (two-seed mean -0.028%). Keep unweighted pool18 RL+SA. Next: [AlexNet-FC with matched frozen and SA controls](ALEXNET_POOL_TRANSFER.md). Run `bash scripts/run_kaggle_alexnet_pool_transfer.sh runs/kaggle-alexnet-pool-transfer 34`. Older entries below are historical.
+Latest: [joint operator/candidate RL+SA experiment](JOINT_OPERATOR_BANDIT.md). Run `bash scripts/run_kaggle_operator_joint.sh runs/kaggle-operator-joint 35`. Retained learner vs new operator-labelled learner vs identical frozen pool;200k proposals each. Experimental, no new gain claimed.
 
 ## Current workflow: three seeds per algorithm experiment
 

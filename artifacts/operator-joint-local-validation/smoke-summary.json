@@ -1,0 +1,99 @@
+{
+  "seed": 35,
+  "reference_method": "pool_context",
+  "best_cost_microseconds": {
+    "pool_context": 6.03488000000001,
+    "operator_joint": 5.862560000000015,
+    "operator_frozen": 5.862560000000015
+  },
+  "selected_challenger": "operator_joint",
+  "gain_over_reference_percent": {
+    "pool_context": 0.0,
+    "operator_joint": 2.855400604485825,
+    "operator_frozen": 2.855400604485825
+  },
+  "workload": {
+    "model": "vgg16",
+    "workload_region": "fc"
+  },
+  "gain_over_fixed_sa_percent": null,
+  "gain_over_structured_uniform_percent": null,
+  "gain_over_attraction_uniform_percent": null,
+  "selected_move_outcomes": {
+    "pool_context": {
+      "improving": 66,
+      "neutral": 410,
+      "worsening": 92
+    },
+    "operator_joint": {
+      "improving": 47,
+      "neutral": 453,
+      "worsening": 68
+    },
+    "operator_frozen": {
+      "improving": 47,
+      "neutral": 452,
+      "worsening": 69
+    }
+  },
+  "attraction_selected": {
+    "pool_context": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "operator_joint": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "operator_frozen": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    }
+  },
+  "structured_selected_proposals": {
+    "pool_context": 0,
+    "operator_joint": 0,
+    "operator_frozen": 0
+  },
+  "optimizer_steps": {
+    "pool_context": 16,
+    "operator_joint": 16,
+    "operator_frozen": 0
+  },
+  "runtime_seconds": {
+    "pool_context": 29.373633763003454,
+    "operator_joint": 26.3396213049964,
+    "operator_frozen": 24.295280206002644
+  },
+  "updates": {
+    "pool_context": 1,
+    "operator_joint": 1,
+    "operator_frozen": 0
+  },
+  "note": "One-seed development screen of joint operator/candidate selection. Frozen control randomizes candidates, not just operator choice. No separate operator-only attribution, new SA-relative estimate or published-DDPG comparison.",
+  "gain_over_matched_frozen_percent": 0.0,
+  "comparison_outcome": "no_win_over_both_controls",
+  "operator_selected": {
+    "pool_context": {
+      "original": 0,
+      "relocation": 0,
+      "swap": 0,
+      "group": 0
+    },
+    "operator_joint": {
+      "original": 310,
+      "relocation": 98,
+      "swap": 98,
+      "group": 62
+    },
+    "operator_frozen": {
+      "original": 310,
+      "relocation": 102,
+      "swap": 93,
+      "group": 63
+    }
+  }
+}
