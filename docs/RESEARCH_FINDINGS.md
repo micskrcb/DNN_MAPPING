@@ -1,3 +1,11 @@
+## 2026-10-29: neutral weighting positive on seed32; repeat on fresh seed33
+
+VGG16-FC, 200001 evaluations per arm: pool18/16 4.27552 us, neutral-weight .25 4.26336 us, fixed SA 4.37008 us. Weighted beats unweighted by 0.28440985%, and fixed SA by 2.44206056%; unweighted beats SA by 2.16380478%. Both learners completed 780 updates / 12480 optimizer steps. Total runtime 6.148448 hours. Source revision e4da482; complete exit0. Original reports and ZIP hash: artifacts/neutral-weight-seed32-20261029.
+
+Selected improving/neutral/worsening proposals: unweighted 3115/80283/116570, weighted 3140/76453/120375. These are proposed outcomes, not accepted moves or proof of the causal mechanism. One small positive seed does not establish reliability or the 5% target against published DDPG.
+
+Next: repeat the unchanged three-arm protocol on fresh seed33, 200k proposals each. The runner now accepts an explicit seed and the analyzer reports a win/loss/tie and exact evaluation counts. Do not introduce another algorithm change before observing whether this gain repeats. Keep weight1 as the default and .25 as a candidate. If seed33 wins, report both paired percentages and their mean, then test transfer; if it loses, report the mixed evidence without tuning this seed away. This is a development replication, not statistical significance.
+
 ## 2026-10-29: stage context rejected; test neutral-example weighting
 
 Seed31 completed: pool18/16 4.28048 us, stage24/16 4.33872 us, fixedSA 4.37616 us at 200001 evaluations each. Stage loses1.36060% to pool; pool beatsSA2.18639%. Both learners780 updates/12480 optimizer steps; runtime6.53703 hours total. Stage selected103477 neutral moves vs77296 for pool, with fewer improving moves. Association is not causation. Archive: artifacts/stage-context-seed31-20261029. Keep pool18/16.

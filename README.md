@@ -1,4 +1,4 @@
-Latest: stage-context lost 1.36% to pool-context. Test [neutral-example loss weighting](docs/NEUTRAL_WEIGHT.md) with `bash scripts/run_kaggle_neutral_weight.sh runs/kaggle-neutral-weight`. Seed32, 200k proposals, weighted vs unweighted pool18/16 vs fixed SA.
+Latest: neutral-weight RL+SA beat unweighted by 0.284% and fixed SA by 2.442% on seed32. Repeat unchanged on seed33: `bash scripts/run_kaggle_neutral_weight.sh runs/kaggle-neutral-weight-seed33 33`. See [protocol](docs/NEUTRAL_WEIGHT.md). One-seed evidence; older protocols below are historical.
 
 # DNN Mapping with Reinforcement Learning
 

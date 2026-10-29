@@ -1,4 +1,4 @@
-Latest: see [NEUTRAL_WEIGHT.md](NEUTRAL_WEIGHT.md). Run `bash scripts/run_kaggle_neutral_weight.sh runs/kaggle-neutral-weight`. Stage24 rejected; pool18/16 retained. The new loss weighting is experimental; older protocols below are historical.
+Latest: neutral-weight RL+SA beat unweighted by 0.284% and fixed SA by 2.442% on seed32. Repeat unchanged on seed33: `bash scripts/run_kaggle_neutral_weight.sh runs/kaggle-neutral-weight-seed33 33`. See [protocol](NEUTRAL_WEIGHT.md). One-seed evidence; older protocols below are historical.
 
 ## Current workflow: three seeds per algorithm experiment
 

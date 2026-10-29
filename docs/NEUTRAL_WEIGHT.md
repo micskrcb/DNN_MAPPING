@@ -1,6 +1,18 @@
 # Neutral-example regression weighting
 
-## Received result
+## Latest result and next run
+
+Seed32: weighted 4.26336 us, unweighted 4.27552 us, fixed SA 4.37008 us. Improvement: 0.28441% over unweighted and 2.44206% over SA. All 200001 evaluations; learners each 12480 optimizer steps. Total 6.15 hours. Source: artifacts/neutral-weight-seed32-20261029. This is a small single-seed win; the default stays unweighted.
+
+Fresh-seed replication (same algorithm and budget):
+
+```bash
+bash scripts/run_kaggle_neutral_weight.sh runs/kaggle-neutral-weight-seed33 33
+```
+
+The optional second argument is the seed (default32 preserves the original run). Use a separate output directory for each seed. Plan roughly 6–8 hours CPU, allowing up to 10 hours for slower machines. No uploaded dataset/checkpoint needed. Compare both seed outcomes without discarding an unfavorable one. A second win is encouraging, not proof of statistical significance or superiority over published DDPG.
+
+## Historical starting result
 
 Stage24 failed on VGG16-FC seed31: 4.33872 us versus pool18/16 at 4.28048 us and fixed SA at 4.37616 us. All completed 200001 evaluations at revision e562ee6. Stage24 lost 1.36060% to pool18, while pool18 beat SA 2.18639%. Stage24 selected 103477 neutral proposals versus 77296 for pool18; improving proposals were 2770 versus 2913. This association does not prove why stage24 lost. Reject stage24 and retain pool18/16. Source: artifacts/stage-context-seed31-20261029.
 

@@ -18,6 +18,13 @@ def analyze(root, seed):
     for key in ('update_count', 'bandit_optimizer_steps_this_invocation'):
         if a[key] != b[key]:
             raise ValueError('Training budgets differ: ' + key)
+    gain = result['gain_over_reference_percent']['neutral_weight']
+    result['comparison_outcome'] = ('weighted_better' if gain > 0 else
+                                    'unweighted_better' if gain < 0 else 'tie')
+    result['complete_placement_evaluations'] = {
+        m: json.loads((root / f'seed{seed}-{m}.json').read_text())[
+            'complete_placement_evaluations']
+        for m in ('pool_context', 'neutral_weight', 'fixed_sa')}
     result['note'] = ('Single-seed neutral-loss-weight screen with unchanged signed targets. '
                       'Loss magnitudes across arms are not directly comparable; '
                       'no published-DDPG comparison.')

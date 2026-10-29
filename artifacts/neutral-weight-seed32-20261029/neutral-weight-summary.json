@@ -1,0 +1,73 @@
+{
+  "seed": 32,
+  "reference_method": "pool_context",
+  "best_cost_microseconds": {
+    "pool_context": 4.275519999999999,
+    "neutral_weight": 4.26336,
+    "fixed_sa": 4.37008
+  },
+  "selected_challenger": "neutral_weight",
+  "gain_over_reference_percent": {
+    "pool_context": 0.0,
+    "neutral_weight": 0.28440984956216164,
+    "fixed_sa": -2.2116608038320384
+  },
+  "workload": {
+    "model": "vgg16",
+    "workload_region": "fc"
+  },
+  "gain_over_fixed_sa_percent": {
+    "pool_context": 2.163804781605816,
+    "neutral_weight": 2.442060557243797,
+    "fixed_sa": 0.0
+  },
+  "gain_over_structured_uniform_percent": null,
+  "gain_over_attraction_uniform_percent": null,
+  "selected_move_outcomes": {
+    "pool_context": {
+      "improving": 3115,
+      "neutral": 80283,
+      "worsening": 116570
+    },
+    "neutral_weight": {
+      "improving": 3140,
+      "neutral": 76453,
+      "worsening": 120375
+    },
+    "fixed_sa": null
+  },
+  "attraction_selected": {
+    "pool_context": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "neutral_weight": {
+      "fallback": 0,
+      "relocation": 0,
+      "swap": 0
+    },
+    "fixed_sa": null
+  },
+  "structured_selected_proposals": {
+    "pool_context": 0,
+    "neutral_weight": 0,
+    "fixed_sa": 0
+  },
+  "optimizer_steps": {
+    "pool_context": 12480,
+    "neutral_weight": 12480,
+    "fixed_sa": null
+  },
+  "runtime_seconds": {
+    "pool_context": 7847.296059787001,
+    "neutral_weight": 7813.173398237001,
+    "fixed_sa": 6473.943697048999
+  },
+  "updates": {
+    "pool_context": 780,
+    "neutral_weight": 780,
+    "fixed_sa": 0
+  },
+  "note": "Single-seed neutral-loss-weight screen with unchanged signed targets. Loss magnitudes across arms are not directly comparable; no published-DDPG comparison."
+}
