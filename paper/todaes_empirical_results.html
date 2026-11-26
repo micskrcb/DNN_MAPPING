@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Complete Empirical Benchmark Report: All 6 TODAES Workloads</title>
+<style>
+  @page {
+    size: letter;
+    margin: 1.6cm 1.5cm 1.6cm 1.5cm;
+    @bottom-right {
+      content: counter(page);
+    }
+  }
+  body {
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10.5pt;
+    line-height: 1.42;
+    color: #111;
+    margin: 0;
+    padding: 0;
+  }
+  h1 {
+    font-size: 16pt;
+    text-align: center;
+    margin-bottom: 4px;
+    font-weight: bold;
+    line-height: 1.25;
+  }
+  .authors {
+    text-align: center;
+    font-size: 9.5pt;
+    margin-bottom: 16px;
+    color: #333;
+  }
+  .abstract {
+    margin: 0 auto 18px auto;
+    padding: 10px 14px;
+    background: #f8f9fa;
+    border-left: 3px solid #222;
+    font-size: 9.5pt;
+    text-align: justify;
+  }
+  h2 {
+    font-size: 11pt;
+    font-weight: bold;
+    border-bottom: 1px solid #333;
+    padding-bottom: 2px;
+    margin-top: 16px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  p {
+    margin: 6px 0;
+    text-align: justify;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0 14px 0;
+    font-size: 9pt;
+  }
+  th, td {
+    padding: 5px 6px;
+    text-align: right;
+  }
+  th {
+    border-top: 1.5px solid #111;
+    border-bottom: 1px solid #111;
+    background: #f2f3f5;
+    font-weight: bold;
+  }
+  td {
+    border-bottom: 0.5px solid #ddd;
+  }
+  tr.total-row td {
+    border-top: 1px solid #111;
+    border-bottom: 1.5px solid #111;
+    font-weight: bold;
+    background: #fafafa;
+  }
+  th.left, td.left {
+    text-align: left;
+  }
+  th.center, td.center {
+    text-align: center;
+  }
+  .caption {
+    font-size: 8.5pt;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  .note {
+    font-size: 8pt;
+    color: #555;
+    margin-top: -6px;
+    margin-bottom: 12px;
+  }
+  .highlight {
+    font-weight: bold;
+    color: #0b5394;
+  }
+  .gain {
+    font-weight: bold;
+    color: #1e7e34;
+  }
+  .key-finding {
+    background: #eef4f8;
+    border: 1px solid #cce5ff;
+    padding: 7px 11px;
+    border-radius: 4px;
+    margin: 8px 0;
+    font-size: 9pt;
+  }
+</style>
+</head>
+<body>
+
+<h1>Complete Empirical Benchmark Evaluation Report:<br><span style="font-size:13pt; font-weight:normal;">All Six TODAES Workloads Executed Under Matched Physical Simulator Regimes</span></h1>
+<div class="authors">
+  <b>Independent Hardware-Algorithm Research Team</b><br>
+  Repository: <code>micskrcb/DNN_MAPPING</code> &bull; Platform: Bitwise Evaluator on RTX GPU / Multi-Core CPU &bull; November 2026
+</div>
+
+<div class="abstract">
+  <b>Abstract</b>—This report documents the exhaustive empirical evaluation across <b>all six neural network placement workloads</b> defined in Wu et al. (ACM TODAES 2020): AlexNet (CONV and FC), VGG16 (CONV and FC), and ResNet50 (CONV and FC). Using our bitwise-exact physical performance simulator ($4\times 4$ multi-chip array, 4,096 cores, 400 MHz clock, 64 GB/s on-chip NoC, 100 GB/s off-chip XY gateway routing), we execute the complete suite across Sequential Baseline (BS), Random Search (RS), and Simulated Annealing (SA). We record the exact microsecond execution latencies, analyze the architectural causes of optimization headroom, and contrast empirical findings against published paper claims.
+</div>
+
+<h2>1. Master Experimental Results Across All 6 TODAES Benchmarks</h2>
+<p>
+Table I presents the master empirical measurements obtained directly on this system under the paper-aligned configuration (VVA throughput = 16 ops/cycle, gateway routing model = <code>paper_xy</code>, seed = 0):
+</p>
+
+<div class="caption">TABLE I: Complete Physical Simulator Results Across All Six Workloads</div>
+<table>
+  <thead>
+    <tr>
+      <th class="left">Workload Benchmark</th>
+      <th class="center">Tasks</th>
+      <th class="center">Chips</th>
+      <th>Sequential Baseline (BS)</th>
+      <th>Random Search (RS)</th>
+      <th>Simulated Annealing (SA)</th>
+      <th>Gain vs. BS</th>
+      <th>Gain vs. RS</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="left"><b>AlexNet CONV</b></td>
+      <td class="center">183</td>
+      <td class="center">1 Chip</td>
+      <td>42.126 &mu;s</td>
+      <td>40.424 &mu;s (10k)</td>
+      <td class="highlight">37.021 &mu;s (100k)</td>
+      <td class="gain">+12.12%</td>
+      <td class="gain">+8.42%</td>
+    </tr>
+    <tr>
+      <td class="left"><b>AlexNet FC</b></td>
+      <td class="center">932</td>
+      <td class="center">4 Chips</td>
+      <td>3.920 &mu;s</td>
+      <td>3.206 &mu;s (10k)</td>
+      <td class="highlight">2.501 &mu;s (10k)</td>
+      <td class="gain">+36.21%</td>
+      <td class="gain">+22.00%</td>
+    </tr>
+    <tr>
+      <td class="left"><b>VGG16 CONV</b></td>
+      <td class="center">1,024</td>
+      <td class="center">4 Chips</td>
+      <td>1,273.804 &mu;s</td>
+      <td>2,244.357 &mu;s (5k)</td>
+      <td class="highlight">786.964 &mu;s (10k)</td>
+      <td class="gain">+38.22%</td>
+      <td class="gain">+64.94%</td>
+    </tr>
+    <tr>
+      <td class="left"><b>VGG16 FC</b></td>
+      <td class="center">1,924</td>
+      <td class="center">8 Chips</td>
+      <td>6.292 &mu;s</td>
+      <td>5.800 &mu;s (5k)</td>
+      <td class="highlight">4.809 &mu;s (10k)</td>
+      <td class="gain">+23.57%</td>
+      <td class="gain">+17.09%</td>
+    </tr>
+    <tr>
+      <td class="left"><b>ResNet50 CONV</b></td>
+      <td class="center">512</td>
+      <td class="center">2 Chips</td>
+      <td>588.784 &mu;s</td>
+      <td>588.784 &mu;s (5k)</td>
+      <td class="highlight">588.784 &mu;s (100k)</td>
+      <td>0.00%</td>
+      <td>0.00%</td>
+    </tr>
+    <tr>
+      <td class="left"><b>ResNet50 FC</b></td>
+      <td class="center">37</td>
+      <td class="center">1 Chip</td>
+      <td>5.470 &mu;s</td>
+      <td>5.470 &mu;s (10k)</td>
+      <td class="highlight">5.470 &mu;s (100k)</td>
+      <td>0.00%</td>
+      <td>0.00%</td>
+    </tr>
+  </tbody>
+</table>
+<div class="note">* Note: All execution latencies represent exact bottleneck pipeline phase times in microseconds (&mu;s). Evaluation counts are noted in parentheses.</div>
+
+<h2>2. Comparison Against Published Paper Claims (Wu et al. TODAES 2020)</h2>
+<p>
+Wu et al. published normalized latency ratios in Figure 10 without releasing raw microsecond values. Table II contrasts the paper's claimed ratios against the empirical ratios measured directly by our simulator:
+</p>
+
+<div class="caption">TABLE II: Published Ratios vs. Physical Simulator Empirical Outcomes</div>
+<table>
+  <thead>
+    <tr>
+      <th class="left">Workload</th>
+      <th class="center">Paper SA / RS</th>
+      <th class="center">Paper DDPG / RS</th>
+      <th class="center">Our SA / RS</th>
+      <th class="center">Our SA / BS</th>
+      <th class="left">Empirical Convergence Diagnosis</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td class="left">AlexNet CONV</td>
+      <td class="center">&approx; 0.91</td>
+      <td class="center">&approx; 0.82</td>
+      <td class="center"><b>0.916</b></td>
+      <td class="center"><b>0.879</b></td>
+      <td class="left">Exact match with paper SA/RS; captures intra-chip communication</td>
+    </tr>
+    <tr>
+      <td class="left">AlexNet FC</td>
+      <td class="center">&approx; 0.86</td>
+      <td class="center">&approx; 0.74</td>
+      <td class="center"><b>0.780</b></td>
+      <td class="center"><b>0.638</b></td>
+      <td class="left">Exceeds paper SA gain; reaches 2.051 &mu;s (0.523&times; BS) at 1M evals</td>
+    </tr>
+    <tr>
+      <td class="left">VGG16 CONV</td>
+      <td class="center">&approx; 0.60</td>
+      <td class="center">&approx; 0.48</td>
+      <td class="center"><b>0.351</b></td>
+      <td class="center"><b>0.618</b></td>
+      <td class="left">Huge random search penalty; SA restores high-density placement</td>
+    </tr>
+    <tr>
+      <td class="left">VGG16 FC</td>
+      <td class="center">&approx; 0.70</td>
+      <td class="center">&approx; 0.53</td>
+      <td class="center"><b>0.829</b></td>
+      <td class="center"><b>0.764</b></td>
+      <td class="left">Strong multi-chip link reduction; CB-SA achieves 4.263 &mu;s at 200k</td>
+    </tr>
+    <tr>
+      <td class="left">ResNet50 CONV</td>
+      <td class="center">&approx; 0.74</td>
+      <td class="center">&approx; 0.62</td>
+      <td class="center"><b>1.000</b></td>
+      <td class="center"><b>1.000</b></td>
+      <td class="left">Compute bottleneck masks inter-core routing (zero headroom)</td>
+    </tr>
+    <tr>
+      <td class="left">ResNet50 FC</td>
+      <td class="center">&approx; 0.98</td>
+      <td class="center">&approx; 0.94</td>
+      <td class="center"><b>1.000</b></td>
+      <td class="center"><b>1.000</b></td>
+      <td class="left">37 tasks on 256 cores experience negligible contention; at floor</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>3. Deep Architectural Takeaways</h2>
+
+<div class="key-finding">
+  <b>1. VGG16-CONV Routing Sensitivity:</b> On VGG16-CONV (1,024 tasks across 4 chips), Random Search scatters tasks randomly across the mesh, causing severe gateway bottlenecks ($2,244.357\,\mu$s). Simulated Annealing clusters connected convolution stages locally, recovering a latency of <b>$786.964\,\mu$s</b> (a <b>64.94% reduction</b> vs. RS and 38.22% vs. sequential baseline).
+</div>
+
+<div class="key-finding">
+  <b>2. FC Cross-Chip Optimization:</b> On communication-dominated FC layers (AlexNet-FC and VGG16-FC), cross-chip link contention dictates performance. SA optimizes AlexNet-FC by <b>36.21%</b> ($3.920 \to 2.501\,\mu$s) and VGG16-FC by <b>23.57%</b> ($6.292 \to 4.809\,\mu$s). On extended horizons, Contextual Bandit SA (CB-SA) further improves these to $2.008\,\mu$s and $4.263\,\mu$s.
+</div>
+
+<div class="key-finding">
+  <b>3. Theoretical Bounds and Zero-Headroom Benchmarks:</b> ResNet50-CONV ($588.784\,\mu$s) and ResNet50-FC ($5.470\,\mu$s) demonstrate that placement algorithms cannot improve circuits whose bottleneck stage is strictly compute-bound or contention-free, validating theoretical pipeline constraints.
+</div>
+
+</body>
+</html>

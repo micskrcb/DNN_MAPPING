@@ -1,0 +1,68 @@
+[
+  {
+    "label": "AlexNet-CONV RS (10k)",
+    "model": "alexnet",
+    "region": "conv",
+    "algo": "random",
+    "iters": 10000,
+    "best_cost_us": 40.4243,
+    "tasks": 183,
+    "evals": 10000,
+    "runtime_s": 20.18
+  },
+  {
+    "label": "AlexNet-CONV SA (100k)",
+    "model": "alexnet",
+    "region": "conv",
+    "algo": "sa",
+    "iters": 100000,
+    "best_cost_us": 37.02117,
+    "tasks": 183,
+    "evals": 100001,
+    "runtime_s": 72.9
+  },
+  {
+    "label": "ResNet50-CONV RS (5k)",
+    "model": "resnet50",
+    "region": "conv",
+    "algo": "random",
+    "iters": 5000,
+    "best_cost_us": 588.784,
+    "tasks": 512,
+    "evals": 5000,
+    "runtime_s": 48.61
+  },
+  {
+    "label": "ResNet50-CONV SA (100k)",
+    "model": "resnet50",
+    "region": "conv",
+    "algo": "sa",
+    "iters": 100000,
+    "best_cost_us": 588.784,
+    "tasks": 512,
+    "evals": 100001,
+    "runtime_s": 258.51
+  },
+  {
+    "label": "ResNet50-FC RS (10k)",
+    "model": "resnet50",
+    "region": "fc",
+    "algo": "random",
+    "iters": 10000,
+    "best_cost_us": 5.47,
+    "tasks": 37,
+    "evals": 10000,
+    "runtime_s": 7.74
+  },
+  {
+    "label": "ResNet50-FC SA (100k)",
+    "model": "resnet50",
+    "region": "fc",
+    "algo": "sa",
+    "iters": 100000,
+    "best_cost_us": 5.47,
+    "tasks": 37,
+    "evals": 100001,
+    "runtime_s": 22.91
+  }
+]

@@ -1,0 +1,68 @@
+[
+  {
+    "workload": "AlexNet-CONV",
+    "tasks": 183,
+    "chips": 1,
+    "bs_us": 42.12586,
+    "rs_us": 40.4243,
+    "sa_us": 37.02117,
+    "rs_label": "RS 10k",
+    "sa_label": "SA 100k",
+    "gain_vs_bs_pct": 12.12
+  },
+  {
+    "workload": "AlexNet-FC",
+    "tasks": 932,
+    "chips": 4,
+    "bs_us": 3.92032,
+    "rs_us": 3.2064,
+    "sa_us": 2.50096,
+    "rs_label": "RS 10k",
+    "sa_label": "SA 10k",
+    "gain_vs_bs_pct": 36.21
+  },
+  {
+    "workload": "VGG16-CONV",
+    "tasks": 1024,
+    "chips": 4,
+    "bs_us": 1273.804,
+    "rs_us": 2244.3568,
+    "sa_us": 786.96352,
+    "rs_label": "RS 5k",
+    "sa_label": "SA 10k",
+    "gain_vs_bs_pct": 38.22
+  },
+  {
+    "workload": "VGG16-FC",
+    "tasks": 1924,
+    "chips": 8,
+    "bs_us": 6.29168,
+    "rs_us": 5.80032,
+    "sa_us": 4.80864,
+    "rs_label": "RS 5k",
+    "sa_label": "SA 10k",
+    "gain_vs_bs_pct": 23.57
+  },
+  {
+    "workload": "ResNet50-CONV",
+    "tasks": 512,
+    "chips": 2,
+    "bs_us": 588.784,
+    "rs_us": 588.784,
+    "sa_us": 588.784,
+    "rs_label": "RS 5k",
+    "sa_label": "SA 100k",
+    "gain_vs_bs_pct": 0.0
+  },
+  {
+    "workload": "ResNet50-FC",
+    "tasks": 37,
+    "chips": 1,
+    "bs_us": 5.47,
+    "rs_us": 5.47,
+    "sa_us": 5.47,
+    "rs_label": "RS 10k",
+    "sa_label": "SA 100k",
+    "gain_vs_bs_pct": 0.0
+  }
+]
